@@ -23,8 +23,8 @@
     <i data-lucide="sprout"></i>
   </div>
   <div class="brand-copy">
-    <p class="title-medium">Garden Planner</p>
-    <p class="body-small">Drag beds · Click to edit</p>
+    <p class="title-medium">Baghban</p>
+    <p class="body-small">Garden Management System</p>
   </div>
   <button
     type="button"

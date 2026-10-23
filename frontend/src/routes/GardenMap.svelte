@@ -14,6 +14,7 @@
   import SidebarBrand from '../components/SidebarBrand.svelte';
   import SidebarLists from '../components/SidebarLists.svelte';
   import Toolbar from '../components/Toolbar.svelte';
+  import { api } from '$lib/api/api';
   import { mountPlanner } from '$lib/canvas/planner';
 
   let helpOpen = $state(false);
@@ -49,17 +50,82 @@
   function reviseNotes(value) {
     globalThis.updateProp('notes', value);
   }
+
+  /** @param {HTMLElement} element */
+  function mountGarden(element) {
+    const planner = mountPlanner(element);
+    let saveTimer = 0;
+    let stopped = false;
+    let serverPhotoUrl = null;
+
+    function photoIdFromUrl(url) {
+      const name = (url || '').split('/').pop() || '';
+      return name.replace(/\.(jpg|png|webp)$/i, '') || null;
+    }
+
+    function onPlanChange() {
+      window.clearTimeout(saveTimer);
+      saveTimer = window.setTimeout(() => {
+        api.put('/garden', globalThis.currentPlan()).catch((error) => {
+          console.error(error);
+        });
+      }, 800);
+    }
+
+    async function onPlotPhoto() {
+      try {
+        const source = globalThis.currentPlotPhoto();
+        if (!source) {
+          const photoId = photoIdFromUrl(serverPhotoUrl);
+          if (photoId) await api.delete(`/photos/${photoId}`);
+          serverPhotoUrl = null;
+          globalThis.rememberPhotoUrl(null);
+          return;
+        }
+        const photoId = globalThis.currentPlotId();
+        if (!photoId) return;
+        const blob = await fetch(source).then((response) => response.blob());
+        const saved = await api.put(`/photos/${photoId}`, blob);
+        if (!saved?.url) return;
+        const previousId = photoIdFromUrl(serverPhotoUrl);
+        if (previousId && previousId !== photoId) await api.delete(`/photos/${previousId}`);
+        globalThis.rememberPhotoUrl(saved.url);
+        serverPhotoUrl = saved.url;
+        globalThis.notePlanChanged();
+      } catch (error) {
+        console.error(error);
+      }
+    }
+
+    planner.ready.then(async () => {
+      if (stopped) return;
+      let plan = null;
+      try {
+        plan = await api.get('/garden');
+        if (stopped) return;
+        serverPhotoUrl = plan?.plot?.photoUrl || null;
+      } catch (error) {
+        console.error(error);
+      }
+      if (stopped) return;
+      document.addEventListener('planchange', onPlanChange);
+      document.addEventListener('plotphoto', onPlotPhoto);
+      if (plan) globalThis.applyPlan(plan);
+    }).catch(() => {});
+
+    return () => {
+      stopped = true;
+      window.clearTimeout(saveTimer);
+      document.removeEventListener('planchange', onPlanChange);
+      document.removeEventListener('plotphoto', onPlotPhoto);
+      planner.destroy();
+    };
+  }
 </script>
 
 <svelte:document ontoolchange={noteTool} onselectiondetails={noteDetails} />
 
-<div
-  class="map-host"
-  {@attach (element) => {
-    const planner = mountPlanner(element);
-    return () => planner.destroy();
-  }}
-></div>
+<div class="map-host" {@attach mountGarden}></div>
 
 <Toolbar {activeTool} />
 <SidebarBrand />

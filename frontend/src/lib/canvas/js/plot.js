@@ -75,8 +75,20 @@ function setTool(name) {
   draw();
 }
 
+function currentPlotPhoto() {
+  return plotDataUrl || null;
+}
+
+function currentPlotId() {
+  return plot.plotId || null;
+}
+
+function rememberPhotoUrl(url) {
+  plot.photoUrl = url || null;
+}
+
 function blankPlot() {
-  return { plotId: null, widthPx: 0, heightPx: 0, calibration: null, feetPerPixel: 0 };
+  return { plotId: null, widthPx: 0, heightPx: 0, calibration: null, feetPerPixel: 0, photoUrl: null };
 }
 
 function restorePlotMeta(meta) {
@@ -86,10 +98,13 @@ function restorePlotMeta(meta) {
   plot.heightPx = meta.heightPx || 0;
   plot.calibration = meta.calibration ? { ...meta.calibration } : null;
   plot.feetPerPixel = meta.feetPerPixel || 0;
+  plot.photoUrl = meta.photoUrl || null;
   if (plot.plotId !== prevId) {
     plotImage = null;
     plotDataUrl = null;
-    if (plot.plotId) {
+    if (plot.photoUrl) {
+      adoptPlotDataUrl(plot.photoUrl, { preserveCalibration: true, keepId: true, quiet: true });
+    } else if (plot.plotId) {
       idbGet(plot.plotId).then(url => { if (url) adoptPlotDataUrl(url, { preserveCalibration: true, keepId: true }); });
     }
   }
@@ -284,6 +299,8 @@ function adoptPlotDataUrl(dataUrl, opts = {}) {
     updateCalibReadout();
     fitView();
     draw();
+    notePlanChanged();
+    if (!opts.quiet) document.dispatchEvent(new CustomEvent('plotphoto'));
   };
   img.src = dataUrl;
 }

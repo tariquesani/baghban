@@ -185,6 +185,7 @@ function addPlant() {
     bed.plants.push(p);
     if (bed.type !== 'planter') addPlantToGrid(bed, p);
     renderPlantTags(bed); draw();
+    notePlanChanged();
   }
   sel.value = '';
 }
@@ -203,6 +204,7 @@ function removePlant(plant) {
   removePlantFromGrid(bed, plant);
   bed.plants = bed.plants.filter(p => p !== plant);
   renderPlantTags(bed); draw();
+  notePlanChanged();
 }
 
 // ─── Add / Remove ─────────────────────────────────────────────────────────────
@@ -383,6 +385,7 @@ function applyGardenSize() {
   }
   fitView();
   draw();
+  notePlanChanged();
 }
 
 // ─── Sidebar lists ────────────────────────────────────────────────────────────
@@ -400,4 +403,5 @@ function currentLists() {
 
 function renderLists() {
   document.dispatchEvent(new CustomEvent('listschange', { detail: currentLists() }));
+  notePlanChanged();
 }

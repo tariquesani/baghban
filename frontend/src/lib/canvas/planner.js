@@ -43,8 +43,9 @@ function loadSource(source, scripts, objectUrls) {
 
 /**
  * Insert the frozen planner into a host that is already in the document.
+ * `ready` resolves when the classic scripts have finished.
  * @param {HTMLElement} element
- * @returns {{ destroy: () => void }}
+ * @returns {{ destroy: () => void, ready: Promise<void> }}
  */
 export function mountPlanner(element) {
   element.innerHTML = editorHtml;
@@ -53,7 +54,7 @@ export function mountPlanner(element) {
   const objectUrls = [];
   let cancelled = false;
 
-  const loading = (async () => {
+  const ready = (async () => {
     for (const entry of scriptsToLoad) {
       if (cancelled) return;
       if (entry.url) await loadUrl(entry.url, scripts);
@@ -61,11 +62,12 @@ export function mountPlanner(element) {
     }
   })();
 
-  loading.catch((error) => {
+  ready.catch((error) => {
     console.error(error);
   });
 
   return {
+    ready,
     destroy() {
       cancelled = true;
       for (const script of scripts) script.remove();

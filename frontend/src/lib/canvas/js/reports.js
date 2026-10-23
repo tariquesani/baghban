@@ -68,8 +68,10 @@ function gridNeedsMigration(bed) {
 }
 
 // ─── Save / Load JSON ─────────────────────────────────────────────────────────
-function saveJSON() {
-  const plan = {
+let applyingPlan = false;
+
+function currentPlan() {
+  return {
     version: 2,
     garden: { ...garden },
     beds: beds.map(b => ({
@@ -84,9 +86,87 @@ function saveJSON() {
       heightPx: plot.heightPx,
       calibration: plot.calibration ? { ...plot.calibration } : null,
       feetPerPixel: plot.feetPerPixel || 0,
+      photoUrl: plot.photoUrl || null,
     } : null,
+    nextId,
     savedAt: new Date().toISOString(),
   };
+}
+
+function notePlanChanged() {
+  if (applyingPlan) return;
+  document.dispatchEvent(new CustomEvent('planchange'));
+}
+
+function restoreNextId(plan) {
+  if (Number.isFinite(plan.nextId) && plan.nextId > 0) {
+    nextId = plan.nextId;
+    return;
+  }
+  let highest = 0;
+  for (const item of [...(plan.beds || []), ...(plan.obstacles || [])]) {
+    const match = /(\d+)$/.exec(String(item && item.id || ''));
+    if (match) highest = Math.max(highest, Number(match[1]));
+  }
+  nextId = highest + 1;
+}
+
+function applyPlan(plan) {
+  if (!plan || typeof plan !== 'object') throw new Error('Could not read plan');
+  applyingPlan = true;
+  try {
+    if (plan.garden) {
+      Object.assign(garden, plan.garden);
+      document.getElementById('gardenWidth').value  = garden.width;
+      document.getElementById('gardenHeight').value = garden.height;
+    }
+    if (plan.beds) {
+      beds = plan.beds;
+      beds.forEach(b => {
+        if (gridNeedsMigration(b)) b.plantGrid = null;
+        if (!b.plantGrid && b.plants?.length) initPlantGrid(b);
+      });
+    }
+    if (plan.obstacles) obstacles = plan.obstacles;
+    restoreNextId(plan);
+    if (plan.plot) {
+      plot = {
+        plotId: plan.plot.plotId || null,
+        widthPx: plan.plot.widthPx || 0,
+        heightPx: plan.plot.heightPx || 0,
+        calibration: plan.plot.calibration || null,
+        feetPerPixel: plan.plot.feetPerPixel || 0,
+        photoUrl: plan.plot.photoUrl || null,
+      };
+      if (plan.plot.imageDataUrl) {
+        adoptPlotDataUrl(plan.plot.imageDataUrl, {
+          preserveCalibration: true,
+          keepId: true,
+          quiet: !!plan.plot.photoOnServer,
+        });
+      } else if (plan.plot.photoUrl) {
+        adoptPlotDataUrl(plan.plot.photoUrl, { preserveCalibration: true, keepId: true, quiet: true });
+      } else if (plan.plot.plotId) {
+        idbGet(plan.plot.plotId).then(url => {
+          if (url) adoptPlotDataUrl(url, { preserveCalibration: true, keepId: true });
+          else alert('This plan’s plot photo is not on this computer. Upload the same photo and the saved scale will apply if the image size matches.');
+        });
+      }
+    } else {
+      plot = blankPlot();
+      plotImage = null;
+      plotDataUrl = null;
+    }
+    select(null); renderLists(); initCanvas();
+    updateCalibReadout();
+  } finally {
+    applyingPlan = false;
+  }
+  if (!plan.plot) document.dispatchEvent(new CustomEvent('plotphoto'));
+}
+
+function saveJSON() {
+  const plan = currentPlan();
   const blob = new Blob([JSON.stringify(plan, null, 2)], { type: 'application/json' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
@@ -124,6 +204,7 @@ function confirmNewGarden() {
   renderLists();
   fitView();
   draw();
+  document.dispatchEvent(new CustomEvent('plotphoto'));
 }
 
 function loadJSON() {
@@ -135,43 +216,7 @@ function loadJSON() {
     const reader = new FileReader();
     reader.onload = ev => {
       try {
-        const plan = JSON.parse(ev.target.result);
-        if (plan.garden) {
-          Object.assign(garden, plan.garden);
-          document.getElementById('gardenWidth').value  = garden.width;
-          document.getElementById('gardenHeight').value = garden.height;
-        }
-        if (plan.beds) {
-          beds = plan.beds;
-          beds.forEach(b => {
-            if (gridNeedsMigration(b)) b.plantGrid = null;
-            if (!b.plantGrid && b.plants?.length) initPlantGrid(b);
-          });
-        }
-        if (plan.obstacles) obstacles = plan.obstacles;
-        if (plan.plot) {
-          plot = {
-            plotId: plan.plot.plotId || null,
-            widthPx: plan.plot.widthPx || 0,
-            heightPx: plan.plot.heightPx || 0,
-            calibration: plan.plot.calibration || null,
-            feetPerPixel: plan.plot.feetPerPixel || 0,
-          };
-          if (plan.plot.imageDataUrl) {
-            adoptPlotDataUrl(plan.plot.imageDataUrl, { preserveCalibration: true, keepId: true });
-          } else if (plan.plot.plotId) {
-            idbGet(plan.plot.plotId).then(url => {
-              if (url) adoptPlotDataUrl(url, { preserveCalibration: true, keepId: true });
-              else alert('This plan’s plot photo is not on this computer. Upload the same photo and the saved scale will apply if the image size matches.');
-            });
-          }
-        } else {
-          plot = blankPlot();
-          plotImage = null;
-          plotDataUrl = null;
-        }
-        select(null); renderLists(); initCanvas();
-        updateCalibReadout();
+        applyPlan(JSON.parse(ev.target.result));
         alert('Plan loaded successfully!');
       } catch { alert('Could not read plan file. Make sure it was saved from this app.'); }
     };
@@ -452,6 +497,7 @@ function clearBedPlants(bedId) {
   bed.plants = [];
   delete bed.plantGrid;
   saveHistory();
+  notePlanChanged();
   switchTab(activeTab);
   syncPanel();
 }
@@ -544,6 +590,7 @@ function renderInteractiveGrid(bed) {
 }
 
 function rerenderIGrid(bedId) {
+  notePlanChanged();
   const container = document.getElementById(`igrid-${bedId}`);
   if (!container) return;
   const bed = beds.find(b => b.id === bedId);
@@ -784,6 +831,7 @@ function addPlantFromOrganizer(bedId) {
     bed.plants.push(p);
     if (bed.type !== 'planter') addPlantToGrid(bed, p);
     draw();
+    notePlanChanged();
   }
   sel.value = '';
   switchTab('plant'); // re-render organizer to show new plant

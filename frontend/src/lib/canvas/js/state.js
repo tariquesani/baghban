@@ -3,7 +3,7 @@ const SCALE = 36; // px per foot
 const GRID  = 0.5; // snap resolution in feet
 
 let garden   = { width: 20, height: 18 };
-let plot = { plotId: null, widthPx: 0, heightPx: 0, calibration: null, feetPerPixel: 0 };
+let plot = { plotId: null, widthPx: 0, heightPx: 0, calibration: null, feetPerPixel: 0, photoUrl: null };
 let plotImage = null;
 let plotDataUrl = null;
 let tool = 'select';
@@ -51,6 +51,7 @@ function saveHistory() {
       heightPx: plot.heightPx,
       calibration: plot.calibration ? { ...plot.calibration } : null,
       feetPerPixel: plot.feetPerPixel || 0,
+      photoUrl: plot.photoUrl || null,
     },
     nextId,
   });
