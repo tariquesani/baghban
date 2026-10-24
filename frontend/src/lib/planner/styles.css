@@ -35,7 +35,7 @@
       transition: width 0.2s ease;
       overflow: hidden;
     }
-    .sidebar button, .sidebar input { font-family: inherit; }
+    .sidebar button, .sidebar a.nav-btn, .sidebar input { font-family: inherit; }
     .sidebar input { min-width: 0; max-width: 100%; }
     .sidebar svg.lucide { width: 20px; height: 20px; flex: 0 0 auto; }
 
@@ -100,6 +100,7 @@
       width: 100%; min-height: 40px; margin: 2px 0; padding: 8px 12px;
       border-radius: 20px; display: flex; align-items: center; gap: 12px;
       color: var(--md-on-surface-variant); text-align: left; white-space: nowrap;
+      text-decoration: none;
     }
     .nav-btn.active {
       background: var(--md-primary); color: var(--md-on-primary);

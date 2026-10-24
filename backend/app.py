@@ -16,6 +16,9 @@ from pathlib import Path
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, Response
 
+from beds import create_bed_table, sync_beds, router as beds_router
+from calendar_entries import create_calendar_tables, router as calendar_router
+
 MAX_BYTES = 2 * 1024 * 1024
 MAX_PHOTO_BYTES = 15 * 1024 * 1024
 REQUIRED_FIELDS = ("version", "garden", "beds", "obstacles")
@@ -120,6 +123,7 @@ def migrate_legacy_photo() -> None:
 def connect() -> sqlite3.Connection:
     connection = sqlite3.connect(database_path())
     connection.row_factory = sqlite3.Row
+    connection.execute("PRAGMA foreign_keys = ON")
     return connection
 
 
@@ -136,6 +140,8 @@ def init_db() -> None:
             )
             """
         )
+        create_calendar_tables(connection)
+        create_bed_table(connection)
         connection.commit()
 
 
@@ -151,6 +157,7 @@ def read_plan() -> str | None:
 
 def write_plan(document: str) -> None:
     saved_at = datetime.now(timezone.utc).isoformat()
+    plan = json.loads(document)
     with closing(connect()) as connection:
         connection.execute(
             """
@@ -162,6 +169,8 @@ def write_plan(document: str) -> None:
             """,
             (document, saved_at),
         )
+        if isinstance(plan, dict):
+            sync_beds(connection, plan)
         connection.commit()
 
 
@@ -198,6 +207,8 @@ async def lifespan(_app: FastAPI):
 
 
 app = FastAPI(lifespan=lifespan)
+app.include_router(beds_router, prefix="/api")
+app.include_router(calendar_router, prefix="/api")
 
 
 @app.get("/api/garden")

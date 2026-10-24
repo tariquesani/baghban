@@ -94,7 +94,7 @@ function currentPlan() {
 }
 
 function notePlanChanged() {
-  if (applyingPlan) return;
+  if (!visitOpen || applyingPlan) return;
   document.dispatchEvent(new CustomEvent('planchange'));
 }
 
@@ -112,6 +112,7 @@ function restoreNextId(plan) {
 }
 
 function applyPlan(plan) {
+  if (!visitOpen) return;
   if (!plan || typeof plan !== 'object') throw new Error('Could not read plan');
   applyingPlan = true;
   try {
@@ -148,6 +149,7 @@ function applyPlan(plan) {
         adoptPlotDataUrl(plan.plot.photoUrl, { preserveCalibration: true, keepId: true, quiet: true });
       } else if (plan.plot.plotId) {
         idbGet(plan.plot.plotId).then(url => {
+          if (!visitOpen) return;
           if (url) adoptPlotDataUrl(url, { preserveCalibration: true, keepId: true });
           else alert('This plan’s plot photo is not on this computer. Upload the same photo and the saved scale will apply if the image size matches.');
         });
@@ -215,6 +217,7 @@ function loadJSON() {
     const file = e.target.files[0]; if (!file) return;
     const reader = new FileReader();
     reader.onload = ev => {
+      if (!visitOpen) return;
       try {
         applyPlan(JSON.parse(ev.target.result));
         alert('Plan loaded successfully!');

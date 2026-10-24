@@ -1,21 +1,23 @@
 <script>
-  import BedPlants from '../components/BedPlants.svelte';
-  import DetailsActions from '../components/DetailsActions.svelte';
-  import DetailsForm from '../components/DetailsForm.svelte';
-  import DetailsProperties from '../components/DetailsProperties.svelte';
-  import DetailsTip from '../components/DetailsTip.svelte';
-  import GardenSize from '../components/GardenSize.svelte';
-  import GroundArea from '../components/GroundArea.svelte';
-  import Help from '../components/Help.svelte';
-  import Legend from '../components/Legend.svelte';
-  import NewGarden from '../components/NewGarden.svelte';
-  import PlantOrganizer from '../components/PlantOrganizer.svelte';
-  import SidebarActions from '../components/SidebarActions.svelte';
-  import SidebarBrand from '../components/SidebarBrand.svelte';
-  import SidebarLists from '../components/SidebarLists.svelte';
-  import Toolbar from '../components/Toolbar.svelte';
+  import BedPlants from '../components/planner/BedPlants.svelte';
+  import DetailsActions from '../components/planner/DetailsActions.svelte';
+  import DetailsForm from '../components/planner/DetailsForm.svelte';
+  import DetailsProperties from '../components/planner/DetailsProperties.svelte';
+  import DetailsTip from '../components/planner/DetailsTip.svelte';
+  import GardenSize from '../components/planner/GardenSize.svelte';
+  import GroundArea from '../components/planner/GroundArea.svelte';
+  import Help from '../components/planner/Help.svelte';
+  import Legend from '../components/planner/Legend.svelte';
+  import NewGarden from '../components/planner/NewGarden.svelte';
+  import PlantOrganizer from '../components/planner/PlantOrganizer.svelte';
+  import SidebarActions from '../components/planner/SidebarActions.svelte';
+  import SidebarBrand from '../components/planner/SidebarBrand.svelte';
+  import SidebarHome from '../components/planner/SidebarHome.svelte';
+  import SidebarLists from '../components/planner/SidebarLists.svelte';
+  import Toolbar from '../components/planner/Toolbar.svelte';
   import { api } from '$lib/api/api';
-  import { mountPlanner } from '$lib/canvas/planner';
+  import { mountPlanner } from '$lib/planner/mount';
+  import plannerStyles from '$lib/planner/styles.css?inline';
 
   let helpOpen = $state(false);
   let activeTool = $state('select');
@@ -53,6 +55,11 @@
 
   /** @param {HTMLElement} element */
   function mountGarden(element) {
+    const style = document.createElement('style');
+    style.dataset.planner = '';
+    style.textContent = plannerStyles;
+    document.head.appendChild(style);
+
     const planner = mountPlanner(element);
     let saveTimer = 0;
     let stopped = false;
@@ -119,6 +126,7 @@
       document.removeEventListener('planchange', onPlanChange);
       document.removeEventListener('plotphoto', onPlotPhoto);
       planner.destroy();
+      style.remove();
     };
   }
 </script>
@@ -129,6 +137,7 @@
 
 <Toolbar {activeTool} />
 <SidebarBrand />
+<SidebarHome />
 <NewGarden />
 <GardenSize />
 <GroundArea />

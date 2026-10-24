@@ -105,7 +105,10 @@ function restorePlotMeta(meta) {
     if (plot.photoUrl) {
       adoptPlotDataUrl(plot.photoUrl, { preserveCalibration: true, keepId: true, quiet: true });
     } else if (plot.plotId) {
-      idbGet(plot.plotId).then(url => { if (url) adoptPlotDataUrl(url, { preserveCalibration: true, keepId: true }); });
+      idbGet(plot.plotId).then(url => {
+        if (!visitOpen || !url) return;
+        adoptPlotDataUrl(url, { preserveCalibration: true, keepId: true });
+      });
     }
   }
 }
@@ -279,6 +282,7 @@ function calibLineEnds() {
 function adoptPlotDataUrl(dataUrl, opts = {}) {
   const img = new Image();
   img.onload = () => {
+    if (!visitOpen) return;
     const sameSize = plot.widthPx === img.naturalWidth && plot.heightPx === img.naturalHeight && plot.calibration;
     const keep = opts.preserveCalibration && sameSize;
     if (!keep) saveHistory();
@@ -313,6 +317,7 @@ function uploadPlot() {
     const file = e.target.files[0]; if (!file) return;
     const reader = new FileReader();
     reader.onload = ev => {
+      if (!visitOpen) return;
       const fillingGap = !plotImage && plot.calibration;
       adoptPlotDataUrl(ev.target.result, { preserveCalibration: fillingGap, keepId: fillingGap });
     };
