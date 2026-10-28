@@ -1,6 +1,7 @@
 <script>
   import AppSidebar from './components/AppSidebar.svelte';
   import Calendar from './routes/Calendar.svelte';
+  import Crops from './routes/Crops.svelte';
   import Home from './routes/Home.svelte';
   import Planner from './routes/Planner.svelte';
 
@@ -8,6 +9,7 @@
     '/': Home,
     '/planner': Planner,
     '/calendar': Calendar,
+    '/crops': Crops,
     '/settings': Planner,
   };
 
@@ -37,6 +39,7 @@
   let showPlannerTools = $derived(path === '/planner' && canvas.ready && canvas.actions !== null);
   let pageTitle = $derived(
     path === '/calendar' ? 'Calendar'
+    : path === '/crops' ? 'Crops'
     : path === '/planner' || path === '/settings' ? 'Planner'
     : 'Home',
   );
@@ -124,6 +127,8 @@
         <Planner {search} panel={path === '/settings' ? 'settings' : 'planner'} onCanvas={noteCanvas} />
       {:else if path === '/calendar'}
         <Calendar />
+      {:else if path === '/crops'}
+        <Crops />
       {:else}
         <Home />
       {/if}

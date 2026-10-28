@@ -34,6 +34,7 @@
   const entries = [
     { id: 'home', label: 'Home', icon: 'house', href: '/' },
     { id: 'calendar', label: 'Calendar', icon: 'calendar', href: '/calendar' },
+    { id: 'crops', label: 'Crops', icon: 'leaf', href: '/crops' },
     { id: 'planner', label: 'Planner', icon: 'map', href: '/planner' },
     { id: 'planter', label: 'Planter', icon: 'layout-grid' },
     { id: 'inventory', label: 'Inventory', icon: 'package' },

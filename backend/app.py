@@ -18,6 +18,7 @@ from fastapi.responses import FileResponse, Response
 
 from beds import create_bed_table, sync_beds, router as beds_router
 from calendar_entries import create_calendar_tables, router as calendar_router
+from crops import create_crop_tables, seed_crops, router as crops_router
 
 MAX_BYTES = 2 * 1024 * 1024
 MAX_PHOTO_BYTES = 15 * 1024 * 1024
@@ -142,6 +143,8 @@ def init_db() -> None:
         )
         create_calendar_tables(connection)
         create_bed_table(connection)
+        create_crop_tables(connection)
+        seed_crops(connection)
         connection.commit()
 
 
@@ -209,6 +212,7 @@ async def lifespan(_app: FastAPI):
 app = FastAPI(lifespan=lifespan)
 app.include_router(beds_router, prefix="/api")
 app.include_router(calendar_router, prefix="/api")
+app.include_router(crops_router, prefix="/api")
 
 
 @app.get("/api/garden")

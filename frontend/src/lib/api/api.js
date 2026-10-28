@@ -7,7 +7,19 @@
 async function send(path, options) {
   const response = await fetch(`/api${path}`, options);
   if (response.status === 204) return null;
-  if (!response.ok) throw new Error(`Request failed (${response.status})`);
+  if (!response.ok) {
+    let detail = '';
+    const text = await response.text();
+    if (text) {
+      try {
+        const body = JSON.parse(text);
+        if (typeof body.detail === 'string') detail = body.detail;
+      } catch {
+        detail = '';
+      }
+    }
+    throw new Error(detail || `Request failed (${response.status})`);
+  }
   const type = response.headers.get('content-type') || '';
   if (type.startsWith('image/')) return response.blob();
   const text = await response.text();
