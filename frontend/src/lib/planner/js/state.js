@@ -2,7 +2,8 @@
 const SCALE = 36; // px per foot
 const GRID  = 0.5; // snap resolution in feet
 
-let garden   = { width: 20, height: 18 };
+let garden   = { width: 20, height: 18, scale: null, widthText: '', heightText: '' };
+let pendingCalib = null;
 let plot = { plotId: null, widthPx: 0, heightPx: 0, calibration: null, feetPerPixel: 0, photoUrl: null };
 let plotImage = null;
 let plotDataUrl = null;
@@ -66,9 +67,8 @@ function undoLast() {
   garden    = { ...snap.garden };
   nextId    = snap.nextId;
   if (snap.plot) restorePlotMeta(snap.plot);
-  document.getElementById('gardenWidth').value  = Math.round(garden.width * 10) / 10;
-  document.getElementById('gardenHeight').value = Math.round(garden.height * 10) / 10;
   _propHistorySaved = false;
+  publishScale();
   // If the previously selected item no longer exists, deselect it
   const stillExists = beds.find(b => b.id === selectedId) || obstacles.find(o => o.id === selectedId);
   if (!stillExists) select(null);
@@ -81,6 +81,22 @@ let obstacles = [];
 
 let beds = [];
 
-const BED_COLORS = ['#8B5E3C','#6B4226','#7A5230','#5C3D1E','#9B6B3C','#4A3020','#A0522D'];
+function gardenReady() {
+  return garden.scale === 'dimensions' || garden.scale === 'plan';
+}
+
+function publishScale() {
+  document.dispatchEvent(new CustomEvent('scalechange', {
+    detail: {
+      scale: garden.scale || null,
+      width: garden.width,
+      height: garden.height,
+      widthText: garden.widthText || '',
+      heightText: garden.heightText || '',
+    },
+  }));
+}
+
+const BED_COLORS = ['#2d6a30','#1f5c28','#3d8b40','#245c32','#4a9a4c','#1a4d24','#386a20'];
 let colorIdx = 0;
 

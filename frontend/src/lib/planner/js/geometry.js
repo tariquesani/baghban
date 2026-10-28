@@ -10,7 +10,8 @@ function formatFeetInches(feet) {
 function ft(v) { return v * SCALE; }
 function px(v) { return v / SCALE; }
 function snap(v) {
-  if (!document.getElementById('snapToggle').checked) return v;
+  const toggle = document.getElementById('snapToggle');
+  if (toggle && toggle.getAttribute('aria-pressed') === 'false') return v;
   return Math.round(v / GRID) * GRID;
 }
 // ─── Geometry ─────────────────────────────────────────────────────────────────
@@ -204,5 +205,6 @@ function neighborWarning(bed) {
 }
 
 function polygonDrawAllowed() {
+  if (!gardenReady()) return false;
   return !(plotImage && !(plot.feetPerPixel > 0));
 }

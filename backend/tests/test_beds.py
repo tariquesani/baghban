@@ -16,7 +16,7 @@ def herbs():
     return {
         "id": "bed1",
         "name": "Herbs",
-        "type": "raised",
+        "type": "bed",
         "x": 1,
         "y": 2,
         "w": 4,
@@ -28,7 +28,7 @@ def patch():
     return {
         "id": "area2",
         "name": "Patch",
-        "type": "ground",
+        "type": "bed",
         "shape": "polygon",
         "points": [
             {"x": 0, "y": 0},
@@ -68,14 +68,14 @@ def test_save_refreshes_area_and_keeps_a_removed_bed(tmp_path, monkeypatch):
             {
                 "id": "area2",
                 "name": "Patch",
-                "kind": "ground",
+                "kind": "bed",
                 "areaSqFt": 6,
                 "removed": False,
             },
             {
                 "id": "bed1",
                 "name": "Herbs",
-                "kind": "raised",
+                "kind": "bed",
                 "areaSqFt": 32,
                 "removed": False,
             },
@@ -93,14 +93,14 @@ def test_save_refreshes_area_and_keeps_a_removed_bed(tmp_path, monkeypatch):
             {
                 "id": "bed1",
                 "name": "Mint",
-                "kind": "raised",
+                "kind": "bed",
                 "areaSqFt": 9,
                 "removed": False,
             },
             {
                 "id": "area2",
                 "name": "Patch",
-                "kind": "ground",
+                "kind": "bed",
                 "areaSqFt": 6,
                 "removed": True,
             },
@@ -112,7 +112,7 @@ def test_save_refreshes_area_and_keeps_a_removed_bed(tmp_path, monkeypatch):
         brought_back = {
             "id": "area2",
             "name": "Lawn",
-            "type": "ground",
+            "type": "bed",
             "w": 2,
             "h": 5,
         }
@@ -121,14 +121,14 @@ def test_save_refreshes_area_and_keeps_a_removed_bed(tmp_path, monkeypatch):
             {
                 "id": "area2",
                 "name": "Lawn",
-                "kind": "ground",
+                "kind": "bed",
                 "areaSqFt": 10,
                 "removed": False,
             },
             {
                 "id": "bed1",
                 "name": "Mint",
-                "kind": "raised",
+                "kind": "bed",
                 "areaSqFt": 9,
                 "removed": False,
             },

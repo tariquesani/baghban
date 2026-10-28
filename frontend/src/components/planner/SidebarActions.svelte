@@ -15,13 +15,6 @@
   }
 </script>
 
-<button
-  type="button"
-  class="text-btn"
-  {@attach (element) => place(element, 'uploadPlotHost')}
-  onclick={() => globalThis.uploadPlot()}
->Upload plot</button>
-
 <div {@attach (element) => place(element, 'bedActionsHost')}>
   <SidebarButton label="Add bed" icon="square" onPress={() => globalThis.addBed()} />
   <SidebarButton
@@ -41,5 +34,6 @@
 </div>
 
 <div {@attach (element) => place(element, 'helpHost')}>
+  <SidebarButton label="Print plan" icon="printer" onPress={() => globalThis.printPlan()} />
   <SidebarButton label="Help" icon="circle-help" onPress={onHelp} />
 </div>

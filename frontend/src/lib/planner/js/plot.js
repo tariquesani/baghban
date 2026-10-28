@@ -32,12 +32,13 @@ function idbGet(plotId) {
 
 function updateCalibReadout() {
   const el = document.getElementById('calibReadout');
-  if (!el) return;
-  if (!plotImage) el.textContent = 'No plot photo loaded.';
-  else if (!(plot.feetPerPixel > 0)) el.textContent = 'Not calibrated. Use Calibrate, draw a line, and enter its length in feet.';
-  else {
-    const pxPerFt = 1 / plot.feetPerPixel;
-    el.textContent = `Calibrated · 1 ft = ${pxPerFt.toFixed(1)} px · garden ${garden.width.toFixed(1)} × ${garden.height.toFixed(1)} ft`;
+  if (el) {
+    if (!plotImage) el.textContent = 'No plot photo loaded.';
+    else if (!(plot.feetPerPixel > 0)) el.textContent = 'Not calibrated. Draw a line and enter its length in feet.';
+    else {
+      const pxPerFt = 1 / plot.feetPerPixel;
+      el.textContent = `Calibrated · 1 ft = ${pxPerFt.toFixed(1)} px · garden ${garden.width.toFixed(1)} × ${garden.height.toFixed(1)} ft`;
+    }
   }
   const drawBtn = document.getElementById('tool-draw');
   const allowed = polygonDrawAllowed();
@@ -64,7 +65,7 @@ function setTool(name) {
     return;
   }
   if (name === 'draw-bed' && !polygonDrawAllowed()) {
-    alert('Calibrate the plot photo first. Draw a line and enter its length in feet.');
+    alert('This plan needs a scale before a bed can be plotted.');
     return;
   }
   tool = name;
@@ -141,13 +142,13 @@ function scaleWorld(ratio) {
       b.points.forEach(scalePt);
       if (b.pivot) scalePt(b.pivot);
       syncPolygonBounds(b);
+      b.plantGrid = null;
     } else {
-      b.x *= ratio; b.y *= ratio; b.w *= ratio; b.h *= ratio;
-      if (b.diam) b.diam *= ratio;
+      b.x *= ratio;
+      b.y *= ratio;
     }
-    b.plantGrid = null;
   });
-  obstacles.forEach(o => { o.x *= ratio; o.y *= ratio; o.w *= ratio; o.h *= ratio; });
+  obstacles.forEach(o => { o.x *= ratio; o.y *= ratio; });
 }
 
 function matchGardenToPhotoAspect() {
@@ -161,20 +162,13 @@ function matchGardenToPhotoAspect() {
     garden.height = longSide;
     garden.width = longSide * aspect;
   }
-  const wIn = document.getElementById('gardenWidth');
-  const hIn = document.getElementById('gardenHeight');
-  if (wIn) wIn.value = Math.round(garden.width * 10) / 10;
-  if (hIn) hIn.value = Math.round(garden.height * 10) / 10;
 }
 
 function applyCalibration(cal) {
   const fpp = feetPerPixelFromLine(cal.x1, cal.y1, cal.x2, cal.y2, cal.lengthFt);
-  if (!(fpp > 0) || !isFinite(fpp)) return;
+  if (!(fpp > 0) || !isFinite(fpp)) return false;
   const nextW = plot.widthPx * fpp, nextH = plot.heightPx * fpp;
-  if (nextW > 500 || nextH > 500 || nextW < 1 || nextH < 1) {
-    alert('That length makes the garden smaller than 1 ft or larger than 500 ft. Check the line and try again.');
-    return;
-  }
+  if (nextW > 500 || nextH > 500 || nextW < 1 || nextH < 1) return false;
   saveHistory();
   const old = plot.feetPerPixel;
   if (old > 0) scaleWorld(fpp / old);
@@ -182,13 +176,46 @@ function applyCalibration(cal) {
   plot.feetPerPixel = fpp;
   garden.width = plot.widthPx * fpp;
   garden.height = plot.heightPx * fpp;
-  document.getElementById('gardenWidth').value = Math.round(garden.width * 10) / 10;
-  document.getElementById('gardenHeight').value = Math.round(garden.height * 10) / 10;
+  garden.scale = 'plan';
+  garden.widthText = '';
+  garden.heightText = '';
   updateCalibReadout();
   fitView();
   renderLists();
   if (selectedId) syncPanel();
   draw();
+  publishScale();
+  return true;
+}
+
+function offerCalibLength(x1, y1, x2, y2) {
+  pendingCalib = { x1, y1, x2, y2 };
+  const previous = plot.calibration && plot.calibration.lengthFt ? String(plot.calibration.lengthFt) : '';
+  document.dispatchEvent(new CustomEvent('calibline', {
+    detail: { x1, y1, x2, y2, previous },
+  }));
+  draw();
+}
+
+function beginCalibration() {
+  if (!plotImage) return false;
+  setTool('calibrate');
+  return true;
+}
+
+function submitCalibLength(raw) {
+  const line = pendingCalib || (plot.calibration ? {
+    x1: plot.calibration.x1,
+    y1: plot.calibration.y1,
+    x2: plot.calibration.x2,
+    y2: plot.calibration.y2,
+  } : null);
+  if (!line) return false;
+  const lengthFt = parseFloat(String(raw).trim());
+  if (!(lengthFt > 0)) return false;
+  const applied = applyCalibration({ ...line, lengthFt });
+  if (applied) pendingCalib = null;
+  return !!applied;
 }
 
 function handleCalibClick(wx, wy) {
@@ -201,11 +228,7 @@ function handleCalibClick(wx, wy) {
   calibClicks = [];
   calibHover = null;
   if (lenPx < 2) { draw(); return; }
-  const raw = prompt('How long is this line, in feet?', '10');
-  if (raw == null) { draw(); return; }
-  const lengthFt = parseFloat(raw);
-  if (!(lengthFt > 0)) { alert('Enter a length greater than 0.'); draw(); return; }
-  applyCalibration({ x1: a.x, y1: a.y, x2: b.x, y2: b.y, lengthFt });
+  offerCalibLength(a.x, a.y, b.x, b.y);
 }
 
 function hitCalibEndpoint(wx, wy, radiusWorld) {
@@ -261,11 +284,7 @@ function finishCalibDrag() {
     draw();
     return;
   }
-  const raw = prompt('How long is this line, in feet?', String(c.lengthFt));
-  if (raw == null) { draw(); return; }
-  const lengthFt = parseFloat(raw);
-  if (!(lengthFt > 0)) { alert('Enter a length greater than 0.'); draw(); return; }
-  applyCalibration({ x1, y1, x2, y2, lengthFt });
+  offerCalibLength(x1, y1, x2, y2);
 }
 
 function calibLineEnds() {
@@ -304,6 +323,7 @@ function adoptPlotDataUrl(dataUrl, opts = {}) {
     fitView();
     draw();
     notePlanChanged();
+    document.dispatchEvent(new CustomEvent('plotimage'));
     if (!opts.quiet) document.dispatchEvent(new CustomEvent('plotphoto'));
   };
   img.src = dataUrl;
@@ -353,16 +373,14 @@ function onDrawClick(wx, wy) {
 function closeDraft() {
   if (draftPoints.length < 3) return;
   saveHistory();
-  const ground = document.getElementById('drawGroundToggle').checked;
-  const id = (ground ? 'area' : 'bed') + nextId++;
-  const color = ground ? '#3a7d44' : BED_COLORS[colorIdx++ % BED_COLORS.length];
+  const id = 'bed' + nextId++;
+  const color = BED_COLORS[colorIdx++ % BED_COLORS.length];
   const bed = {
-    id, name: ground ? 'Ground Area' : 'New Bed',
+    id, name: 'New Bed',
     shape: 'polygon',
     points: draftPoints.map(p => ({ x: p.x, y: p.y })),
     x: 0, y: 0, w: 1, h: 1,
-    color, type: ground ? 'ground' : 'raised',
-    depthIn: ground ? undefined : 12,
+    color, type: 'bed',
     plants: [], notes: '',
   };
   syncPolygonBounds(bed);

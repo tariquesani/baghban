@@ -6,10 +6,12 @@
    *   onPress: () => void,
    *   tool?: string,
    *   variant?: 'tool' | 'action' | 'menu',
-   *   active?: boolean
+   *   active?: boolean,
+   *   pressed?: boolean | null,
+   *   id?: string
    * }} props
    */
-  let { label, icon, onPress, tool = undefined, variant = 'tool', active = false } = $props();
+  let { label, icon, onPress, tool = undefined, variant = 'tool', active = false, pressed = null, id = undefined } = $props();
 
   const variantClass = {
     tool: 'tool-btn',
@@ -19,11 +21,13 @@
 </script>
 
 <button
+  {id}
   type="button"
   class={[variantClass[variant], active && 'active']}
   data-tool={tool}
   title={label}
   aria-label={label}
+  aria-pressed={pressed === null ? undefined : pressed}
   onclick={onPress}
 >
   <i data-lucide={icon}></i>

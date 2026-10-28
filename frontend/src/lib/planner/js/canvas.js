@@ -33,7 +33,7 @@ function draw() {
   ctx.clearRect(0, 0, W, H);
 
   // Area outside the garden
-  ctx.fillStyle = '#cdd9cd';
+  ctx.fillStyle = '#f0f4f0';
   ctx.fillRect(0, 0, W, H);
 
   ctx.save();
@@ -222,7 +222,6 @@ function rotationInsideGarden(bed, target, fallback) {
 
 function drawPolygonBed(b) {
   const sel = b.id === selectedId;
-  const isGround = b.type === 'ground';
   const pivot = polygonPivot(b);
   const rot = b.rotation || 0;
   ctx.save();
@@ -245,15 +244,13 @@ function drawPolygonBed(b) {
   ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0;
   ctx.shadowOffsetX = 0; ctx.shadowOffsetY = 0;
 
-  if (isGround) ctx.setLineDash([5, 4]);
-  ctx.strokeStyle = sel ? '#ff9f0a' : (isGround ? 'rgba(255,255,255,0.7)' : 'rgba(0,0,0,0.28)');
+  ctx.strokeStyle = sel ? '#ff9f0a' : 'rgba(0,0,0,0.28)';
   ctx.lineWidth = sel ? 3 : 1.5;
   path(); ctx.stroke();
-  ctx.setLineDash([]);
 
   ctx.save();
   path(); ctx.clip();
-  ctx.strokeStyle = isGround ? 'rgba(255,255,255,0.28)' : 'rgba(255,255,255,0.35)';
+  ctx.strokeStyle = 'rgba(255,255,255,0.35)';
   ctx.lineWidth = 0.8;
   ctx.setLineDash([2, 2]);
   ctx.beginPath();
@@ -366,7 +363,6 @@ function drawBed(b) {
   const sel = b.id === selectedId;
   const isPot     = b.type === 'pot';
   const isPlanter = b.type === 'planter';
-  const isGround  = b.type === 'ground';
 
   // Apply rotation transform around bed center
   ctx.save();
@@ -429,14 +425,7 @@ function drawBed(b) {
     return;
   }
 
-  if (isGround) {
-    // Dashed border for ground areas
-    ctx.setLineDash([5, 4]);
-    ctx.strokeStyle = sel ? '#ff9f0a' : 'rgba(255,255,255,0.5)';
-    ctx.lineWidth = sel ? 2.5 : 1.5;
-    roundRect(x, y, w, h, 5); ctx.stroke();
-    ctx.setLineDash([]);
-  } else if (isPlanter) {
+  if (isPlanter) {
     const inset = Math.max(3, Math.min(w, h) * 0.12);
     roundRect(x + inset, y + inset, Math.max(1, w - inset * 2), Math.max(1, h - inset * 2), 4);
     ctx.strokeStyle = 'rgba(255,255,255,0.45)';
@@ -446,19 +435,16 @@ function drawBed(b) {
       ctx.strokeStyle = '#ff9f0a'; ctx.lineWidth = 3;
       roundRect(x, y, w, h, 5); ctx.stroke();
     }
-  } else {
-    // Selection ring for raised beds
-    if (sel) {
-      ctx.strokeStyle = '#ff9f0a'; ctx.lineWidth = 3;
-      roundRect(x, y, w, h, 5); ctx.stroke();
-    }
+  } else if (sel) {
+    ctx.strokeStyle = '#ff9f0a'; ctx.lineWidth = 3;
+    roundRect(x, y, w, h, 5); ctx.stroke();
   }
 
-  // Square-foot grid lines (raised + ground beds only — not pots or planters)
+  // Square-foot grid lines (beds only — not pots or planters)
   if (!isPot && !isPlanter) {
     ctx.save();
     ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip();
-    ctx.strokeStyle = isGround ? 'rgba(255,255,255,0.28)' : 'rgba(255,255,255,0.35)';
+    ctx.strokeStyle = 'rgba(255,255,255,0.35)';
     ctx.lineWidth = 0.8;
     ctx.setLineDash([2, 2]);
     ctx.beginPath();
@@ -586,7 +572,7 @@ function drawBed(b) {
   // Name label backdrop strip
   if (!isPlanter) {
   const hasGrid = b.plantGrid && b.plants && b.plants.length;
-  const dimLabel = isGround ? `in-ground · ${b.w*b.h} sqft` : `${b.w}×${b.h} · ${b.w*b.h} sqft`;
+  const dimLabel = `${b.w}×${b.h} · ${b.w*b.h} sqft`;
   if (hasGrid) {
     ctx.fillStyle = 'rgba(0,0,0,0.32)';
     ctx.fillRect(x, y, w, 36);

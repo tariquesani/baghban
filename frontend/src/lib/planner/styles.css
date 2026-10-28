@@ -9,6 +9,10 @@
     }
 
     .app { display: flex; height: 100vh; }
+    .app.is-setup .sidebar,
+    .app.is-settings .sidebar { display: none; }
+    .app.is-setup .main,
+    .app.is-settings .main { margin-left: 280px; }
 
     /* ── Sidebar (Material 3 type, Lucide rail) ── */
     .sidebar {
@@ -89,7 +93,7 @@
     }
     .sidebar-toggle {
       margin-left: auto;
-      width: 40px; height: 40px; border-radius: 20px;
+      width: 30px; height: 30px; border-radius: 8px;
       display: grid; place-items: center; flex: 0 0 auto;
       color: var(--md-on-surface-variant);
     }
@@ -536,15 +540,9 @@
       .report-bed-body { padding: 10px 8px; }
       .report-bed-header { flex-wrap: wrap; gap: 2px; }
 
-      /* Toolbar pinned at top so it's always visible */
-      .toolbar {
-        position: fixed; top: 0; left: 0; right: 0; z-index: 190;
-        padding: 6px 10px; background: #fafdf8;
-      }
-      .toolbar { flex-wrap: wrap; }
-      /* Push canvas down so it doesn't hide under the fixed toolbar */
-      .main { padding-top: 78px; }
       .canvas-area { padding: 0; }
+      .app.is-setup .main,
+      .app.is-settings .main { margin-left: 0; padding-top: 42vh; }
 
       /* Right panel slides up from bottom */
       .right-panel {

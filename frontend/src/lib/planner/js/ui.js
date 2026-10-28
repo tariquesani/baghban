@@ -1,10 +1,15 @@
 // ─── Selection ────────────────────────────────────────────────────────────────
+function markDetailsOpen(open) {
+  document.querySelector('.app')?.classList.toggle('panel-open', open);
+}
+
 function select(id, type, openPanel = true) {
   if (id !== selectedId) selectedVertex = -1;
   selectedId = id;
   const panel = document.getElementById('rightPanel');
   if (id && openPanel) { panel.classList.add('open'); syncPanel(); }
   else if (!id)        { panel.classList.remove('open'); publishDetails(); }
+  markDetailsOpen(panel.classList.contains('open'));
   draw(); renderLists();
 }
 
@@ -22,12 +27,11 @@ function syncPanel() {
   _propHistorySaved = false; // reset so next edit on this item saves a fresh snapshot
   const isBed = isBedSelected();
 
-  const isGround  = isBed && item.type === 'ground';
   const isPot     = isBed && item.type === 'pot';
   const isPlanter = isBed && item.type === 'planter';
   const poly      = isBed && isPolygon(item);
   document.getElementById('panelTitle').textContent =
-    isPlanter ? '🍱 Planter' : isPot ? '🪴 Pot' : isGround ? '🌍 Ground Area' : isBed ? '🌿 Bed Details' : '⬛ Obstacle Details';
+    isPlanter ? '🍱 Planter' : isPot ? '🪴 Pot' : isBed ? '🌿 Bed Details' : '⬛ Obstacle Details';
   const _vp = visualPos(item);
   document.getElementById('propX').value    = Math.round(_vp.x * 10) / 10;
   document.getElementById('propY').value    = Math.round(_vp.y * 10) / 10;
@@ -42,7 +46,6 @@ function syncPanel() {
   if (!isPot) document.getElementById('propRot').value = rotationDegrees(item.rotation);
 
   if (isBed) {
-    if (!isGround && !isPot && !isPlanter) document.getElementById('propDepth').value = item.depthIn || 12;
     if (isPot) document.getElementById('propDiam').value = item.diam || 1;
     renderPlantTags(item);
   }
@@ -60,7 +63,6 @@ function publishDetails() {
     return;
   }
   const isBed = isBedSelected();
-  const isGround = isBed && item.type === 'ground';
   const isPot = isBed && item.type === 'pot';
   const isPlanter = isBed && item.type === 'planter';
   const poly = isBed && isPolygon(item);
@@ -75,7 +77,6 @@ function publishDetails() {
       showPot: isPot,
       showPlanter: isPlanter,
       showRotation: !isPot,
-      showDepth: isBed && !isGround && !isPot && !isPlanter,
       showPosition: !poly,
       showPlants: isBed,
       focusName,
@@ -209,21 +210,16 @@ function removePlant(plant) {
 
 // ─── Add / Remove ─────────────────────────────────────────────────────────────
 function addBed() {
+  if (!gardenReady()) return;
   saveHistory();
   const id = 'bed' + nextId++;
   const color = BED_COLORS[colorIdx++ % BED_COLORS.length];
-  beds.push({ id, name:'New Bed', x:2, y:2, w:4, h:8, color, type:'raised', depthIn:12, plants:[], notes:'' });
+  beds.push({ id, name:'New Bed', x:2, y:2, w:4, h:8, color, type:'bed', plants:[], notes:'' });
   renderLists(); draw(); select(id, 'bed');
 }
 
-function addGroundArea() {
-  saveHistory();
-  const id = 'area' + nextId++;
-  beds.push({ id, name:'Ground Area', x:1, y:1, w:6, h:4, color:'#3a7d44', type:'ground', plants:[], notes:'' });
-  select(id, 'bed'); renderLists(); draw();
-}
-
 function addPot() {
+  if (!gardenReady()) return;
   saveHistory();
   const id = 'pot' + nextId++;
   beds.push({ id, name:'Pot', x:2, y:2, diam:1, w:1, h:1, color:'#c1440e', type:'pot', plants:[], notes:'' });
@@ -231,6 +227,7 @@ function addPot() {
 }
 
 function addPlanter() {
+  if (!gardenReady()) return;
   saveHistory();
   const id = 'planter' + nextId++;
   beds.push({ id, name:'Planter', x:2, y:2, w:3, h:1, color:'#9c6644', type:'planter', plants:[], notes:'' });
@@ -282,6 +279,7 @@ function updatePotDiam(val) {
 }
 
 function addObstacle() {
+  if (!gardenReady()) return;
   saveHistory();
   const id = 'obs' + nextId++;
   obstacles.push({ id, name: '⬛ Obstacle', x: 4, y: 4, w: 4, h: 4, color: '#888' });
@@ -318,7 +316,7 @@ function toggleSidebar() {
 }
 
 function openSidebar() {
-  document.querySelector('.app').classList.add('is-drawer');
+  document.dispatchEvent(new CustomEvent('sidebaropen'));
 }
 
 function closeSidebar() {
@@ -326,13 +324,6 @@ function closeSidebar() {
 }
 
 function initSidebar() {
-  applySidebarCollapsed(isSidebarWide() && localStorage.getItem(SIDEBAR_KEY) === 'true');
-  sidebarWideQuery.addEventListener('change', () => {
-    closeSidebar();
-    if (isSidebarWide()) {
-      applySidebarCollapsed(document.querySelector('.app').classList.contains('is-collapsed'));
-    }
-  });
   if (window.lucide) lucide.createIcons();
 }
 
@@ -343,7 +334,7 @@ function duplicateSelected() {
   const isObs = obstacles.find(o => o.id === selectedId);
   if (isBed) {
     const orig = beds.find(b => b.id === selectedId);
-    const newId = (orig.type === 'planter' ? 'planter' : orig.type === 'pot' ? 'pot' : orig.type === 'ground' ? 'area' : 'bed') + nextId++;
+    const newId = (orig.type === 'planter' ? 'planter' : orig.type === 'pot' ? 'pot' : 'bed') + nextId++;
     const copy = { ...orig, id: newId, x: orig.x + 1, y: orig.y + 1,
                    plants: [...(orig.plants || [])], notes: orig.notes || '', plantGrid: null };
     if (orig.points) {
@@ -373,27 +364,11 @@ function deleteSelected() {
   renderLists(); draw();
 }
 
-// ─── Garden size ──────────────────────────────────────────────────────────────
-function applyGardenSize() {
-  saveHistory();
-  garden.width  = parseFloat(document.getElementById('gardenWidth').value)  || 20;
-  garden.height = parseFloat(document.getElementById('gardenHeight').value) || 18;
-  if (plotImage) {
-    plot.calibration = null;
-    plot.feetPerPixel = 0;
-    updateCalibReadout();
-  }
-  fitView();
-  draw();
-  notePlanChanged();
-}
-
 // ─── Sidebar lists ────────────────────────────────────────────────────────────
 function bedListSize(b) {
   if (b.type === 'pot') return `${b.diam * 12}" pot`;
   if (b.type === 'planter') return `${Math.round(b.w * 12)}×${Math.round(b.h * 12)}" planter`;
   if (isPolygon(b)) return `${bedArea(b).toFixed(1)} sq ft · ${b.points.length} sides`;
-  if (b.type === 'ground') return `${b.w}×${b.h} ft · in-ground`;
   return `${b.w}×${b.h} ft`;
 }
 

@@ -5,7 +5,6 @@
    *     showPot?: boolean,
    *     showPlanter?: boolean,
    *     showRotation?: boolean,
-   *     showDepth?: boolean,
    *     showPosition?: boolean
    *   } | null
    * }} props
@@ -61,16 +60,6 @@
     <label for="propRot">Angle (°)</label>
     <input id="propRot" type="number" min="0" max="359" step="1" oninput={(event) => globalThis.updateRotation(event.currentTarget.value)} />
     <p class="plot-note">Drag the ↻ handle to turn. Hold Shift to snap to 15°.</p>
-  </div>
-
-  <div class="field" id="depthSection" hidden={!details?.showDepth}>
-    <label for="propDepth">Depth</label>
-    <select id="propDepth" onchange={(event) => globalThis.updateProp('depthIn', +event.currentTarget.value)}>
-      <option value="8">8 in — 1× 2×8 (shallow)</option>
-      <option value="12" selected>12 in — 2× 2×6 (most plants)</option>
-      <option value="15">15 in — 2× 2×8 (deep roots)</option>
-      <option value="18">18 in — 3× 2×6 (maximum)</option>
-    </select>
   </div>
 
   <div class="field-row" id="posRow" hidden={!details?.showPosition}>

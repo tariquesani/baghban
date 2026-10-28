@@ -38,7 +38,7 @@ const program = new Function(
 
 let lucideReady;
 
-function loadLucide() {
+export function loadLucide() {
   if (window.lucide) return Promise.resolve();
   if (!lucideReady) {
     lucideReady = new Promise((resolve, reject) => {

@@ -14,7 +14,7 @@
 <div class="panel-block" {@attach (element) => place(element, 'legendHost')}>
   <div class="legend">
     <div class="legend-item">
-      <div class="legend-swatch" style:background="#8B5E3C"></div> Raised Bed
+      <div class="legend-swatch" style:background="#2d6a30"></div> Bed
     </div>
     <div class="legend-item">
       <div class="legend-swatch" style:background="#9c6644"></div> Planter

@@ -1,6 +1,4 @@
 <script>
-  import SidebarButton from './SidebarButton.svelte';
-
   let open = $state(false);
   let showForBed = $state(false);
 
@@ -45,10 +43,6 @@
   onorganizeropen={noteOpen}
   onorganizerclose={noteClose}
 />
-
-<div {@attach (element) => place(element, 'organizerToolHost')}>
-  <SidebarButton label="Plant organizer" icon="layout-grid" onPress={() => globalThis.openReport()} />
-</div>
 
 <div
   class="organizer-row"

@@ -1,4 +1,5 @@
 <script>
+  import AppSidebar from './components/AppSidebar.svelte';
   import Calendar from './routes/Calendar.svelte';
   import Home from './routes/Home.svelte';
   import Planner from './routes/Planner.svelte';
@@ -7,7 +8,11 @@
     '/': Home,
     '/planner': Planner,
     '/calendar': Calendar,
+    '/settings': Planner,
   };
+
+  const railKey = 'sidebar-collapsed';
+  const wideQuery = window.matchMedia('(min-width: 801px)');
 
   /** @param {string} pathname */
   function normalize(pathname) {
@@ -16,9 +21,54 @@
   }
 
   let path = $state(normalize(window.location.pathname));
+  let search = $state(window.location.search);
+  let wide = $state(wideQuery.matches);
+  let collapsed = $state(localStorage.getItem(railKey) === 'true');
+  let drawerOpen = $state(false);
+  let canvas = $state({
+    ready: false,
+    activeTool: 'select',
+    /** @type {null | { addBed: () => void, setTool: (tool: string) => void, addPot: () => void, addPlanter: () => void, addObstacle: () => void, printPlan: () => void }} */
+    actions: null,
+  });
+
+  let iconRail = $derived(wide && collapsed);
+  let railWidth = $derived(wide ? (collapsed ? '72px' : '280px') : '0px');
+  let showPlannerTools = $derived(path === '/planner' && canvas.ready && canvas.actions !== null);
+  let pageTitle = $derived(
+    path === '/calendar' ? 'Calendar'
+    : path === '/planner' || path === '/settings' ? 'Planner'
+    : 'Home',
+  );
 
   function syncPath() {
     path = normalize(window.location.pathname);
+    search = window.location.search;
+  }
+
+  function noteViewport() {
+    wide = wideQuery.matches;
+    if (wide) drawerOpen = false;
+  }
+
+  function toggleRail() {
+    if (!wide) {
+      drawerOpen = false;
+      return;
+    }
+    collapsed = !collapsed;
+    localStorage.setItem(railKey, String(collapsed));
+  }
+
+  function openDrawer() {
+    if (!wide) drawerOpen = true;
+  }
+
+  /**
+   * @param {{ ready: boolean, activeTool: string, actions: typeof canvas.actions }} report
+   */
+  function noteCanvas(report) {
+    canvas = report;
   }
 
   /** @param {MouseEvent} event */
@@ -33,19 +83,111 @@
     const next = normalize(url.pathname);
     if (!Object.hasOwn(screens, next)) return;
     event.preventDefault();
-    if (next === path) return;
-    history.pushState(null, '', next);
+    drawerOpen = false;
+    const nextSearch = url.search;
+    if (next === path && nextSearch === search) return;
+    history.pushState(null, '', next + nextSearch);
     path = next;
+    search = nextSearch;
+    drawerOpen = false;
   }
 </script>
 
-<svelte:window onpopstate={syncPath} />
-<svelte:document onclick={followLink} />
+<svelte:window onpopstate={syncPath} onresize={noteViewport} />
+<svelte:document onclick={followLink} onsidebaropen={openDrawer} />
 
-{#if path === '/planner'}
-  <Planner />
-{:else if path === '/calendar'}
-  <Calendar />
-{:else}
-  <Home />
-{/if}
+<div class="shell" style:--rail-width={railWidth}>
+  {#if drawerOpen}
+    <button
+      type="button"
+      class="rail-backdrop"
+      aria-label="Close sidebar"
+      onclick={() => drawerOpen = false}
+    ></button>
+  {/if}
+  <AppSidebar
+    {path}
+    {wide}
+    {iconRail}
+    {drawerOpen}
+    {showPlannerTools}
+    activeTool={canvas.activeTool}
+    actions={canvas.actions}
+    onToggle={toggleRail}
+  />
+  <div class="shell-main">
+    <header class="page-head">
+      <h1>{pageTitle}</h1>
+    </header>
+    <div class="page-body">
+      {#if path === '/planner' || path === '/settings'}
+        <Planner {search} panel={path === '/settings' ? 'settings' : 'planner'} onCanvas={noteCanvas} />
+      {:else if path === '/calendar'}
+        <Calendar />
+      {:else}
+        <Home />
+      {/if}
+    </div>
+  </div>
+</div>
+
+<style>
+  :global(body) {
+    margin: 0;
+  }
+
+  .shell {
+    --page-head: 64px;
+    display: flex;
+    height: 100vh;
+    min-width: 0;
+    background: #f0f4f0;
+  }
+
+  .shell-main {
+    flex: 1;
+    min-width: 0;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .page-head {
+    flex: 0 0 var(--page-head);
+    height: var(--page-head);
+    box-sizing: border-box;
+    padding: 8px 24px 0;
+  }
+
+  .page-head h1 {
+    margin: 0;
+    font-family: Roboto, sans-serif;
+    font-size: 2rem;
+    font-weight: 500;
+    color: #191d17;
+  }
+
+  .page-body {
+    flex: 1;
+    min-height: 0;
+    min-width: 0;
+    position: relative;
+    overflow: auto;
+  }
+
+  .page-body :global(.map-host),
+  .page-body :global(.map-host .app) {
+    height: 100%;
+  }
+
+  .rail-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 199;
+    border: 0;
+    padding: 0;
+    background: rgba(25, 29, 23, 0.4);
+    cursor: pointer;
+  }
+</style>

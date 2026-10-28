@@ -39,7 +39,7 @@ function printPlan() {
   <h1>🌱 Garden Layout Plan</h1>
   <p style="color:#555;font-size:13px">Garden: <strong>${garden.width} ft × ${garden.height} ft</strong></p>
   <img src="${img}">
-  <h2 style="font-size:15px;margin-bottom:8px">Raised Bed Summary</h2>
+  <h2 style="font-size:15px;margin-bottom:8px">Bed Summary</h2>
   <table>
     <tr><th>Bed</th><th>Size</th><th>Position (from top-left)</th><th>Plants</th><th>Notes</th></tr>
     ${beds.map(b => `<tr>
@@ -116,11 +116,14 @@ function applyPlan(plan) {
   if (!plan || typeof plan !== 'object') throw new Error('Could not read plan');
   applyingPlan = true;
   try {
-    if (plan.garden) {
-      Object.assign(garden, plan.garden);
-      document.getElementById('gardenWidth').value  = garden.width;
-      document.getElementById('gardenHeight').value = garden.height;
-    }
+    garden = {
+      width: 20,
+      height: 18,
+      scale: null,
+      widthText: '',
+      heightText: '',
+      ...(plan.garden || {}),
+    };
     if (plan.beds) {
       beds = plan.beds;
       beds.forEach(b => {
@@ -161,6 +164,7 @@ function applyPlan(plan) {
     }
     select(null); renderLists(); initCanvas();
     updateCalibReadout();
+    publishScale();
   } finally {
     applyingPlan = false;
   }
@@ -182,31 +186,79 @@ function showNewGardenDialog() {
 }
 
 function confirmNewGarden() {
-  // Reset all state
   beds      = [];
   obstacles = [];
-  garden    = { width: 20, height: 18 };
+  garden    = { width: 20, height: 18, scale: null, widthText: '', heightText: '' };
   plot = blankPlot();
   plotImage = null;
   plotDataUrl = null;
   calibClicks = [];
+  pendingCalib = null;
   draftPoints = [];
   draftCursor = null;
   tool = 'select';
   nextId    = 1;
   colorIdx  = 0;
   selectedId = null;
-  history   = []; historyIdx = -1;
-  document.getElementById('gardenWidth').value  = garden.width;
-  document.getElementById('gardenHeight').value = garden.height;
+  undoStack.length = 0;
   document.getElementById('rightPanel').classList.remove('open');
+  document.querySelector('.app')?.classList.remove('panel-open');
   select(null);
   setTool('select');
   updateCalibReadout();
   renderLists();
   fitView();
   draw();
+  publishScale();
   document.dispatchEvent(new CustomEvent('plotphoto'));
+}
+
+function rememberScale(scale, widthText, heightText) {
+  if (garden.scale === 'dimensions' || garden.scale === 'plan') return;
+  if (scale !== 'dimensions' && scale !== 'plan') return;
+  garden.scale = scale;
+  garden.widthText = widthText || '';
+  garden.heightText = heightText || '';
+  publishScale();
+  notePlanChanged();
+}
+
+function confirmDimensions(widthText, heightText, width, height) {
+  if (!(width >= 1) || width > 500 || !(height >= 1) || height > 500) return false;
+  saveHistory();
+  garden.width = width;
+  garden.height = height;
+  garden.widthText = widthText;
+  garden.heightText = heightText;
+  garden.scale = 'dimensions';
+  plot = blankPlot();
+  plotImage = null;
+  plotDataUrl = null;
+  calibClicks = [];
+  pendingCalib = null;
+  setTool('select');
+  updateCalibReadout();
+  fitView();
+  draw();
+  notePlanChanged();
+  publishScale();
+  document.dispatchEvent(new CustomEvent('plotphoto'));
+  return true;
+}
+
+function reviseDimensions(widthText, heightText, width, height) {
+  if (garden.scale !== 'dimensions') return false;
+  if (!(width >= 1) || width > 500 || !(height >= 1) || height > 500) return false;
+  saveHistory();
+  garden.width = width;
+  garden.height = height;
+  garden.widthText = widthText;
+  garden.heightText = heightText;
+  fitView();
+  draw();
+  notePlanChanged();
+  publishScale();
+  return true;
 }
 
 function loadJSON() {
@@ -747,7 +799,6 @@ function generatePlantsHTML() {
         </div>` : '';
 
     // Grid (interactive)
-    const isGround  = bed.type === 'ground';
     const isPot     = bed.type === 'pot';
     const isPlanter = bed.type === 'planter';
 
@@ -769,20 +820,20 @@ function generatePlantsHTML() {
           <div class="plant-meta">
             <span class="pill">📐 ${pd.sqft >= 1 ? pd.sqft + ' sq ft/plant' : perSqft + '/sq ft'}</span>
             <span class="pill">↔ ${pd.spacing}" apart</span>
-            ${(!isGround && !isPot && !isPlanter) ? `<span class="pill">⬇ ${pd.depthIn}" soil</span>` : ''}
+            ${(!isPot && !isPlanter) ? `<span class="pill">⬇ ${pd.depthIn}" soil</span>` : ''}
             <span class="pill">☀ ${pd.sun}</span>
             <span class="pill">💧 ${pd.water}</span>
             ${trellisTag}
           </div>
           ${(cTags || aTags) ? `<div class="plant-meta">${cTags}${aTags}</div>` : ''}
-          <div class="plant-notes">${countLabel} in this ${sqftTotal} sq ft ${isPlanter ? 'planter' : isPot ? 'pot' : isGround ? 'ground area' : 'bed'}. ${pd.notes}</div>
+          <div class="plant-notes">${countLabel} in this ${sqftTotal} sq ft ${isPlanter ? 'planter' : isPot ? 'pot' : 'bed'}. ${pd.notes}</div>
         </div>
       </div>`;
     }).join('');
 
     return `<div class="report-bed">
       <div class="report-bed-header">
-        <h3>${bed.name} ${isPlanter ? '<span style="font-size:11px;font-weight:normal;background:rgba(156,102,68,0.18);border:1px solid #9c6644;border-radius:4px;padding:1px 6px;vertical-align:middle">🍱 planter</span>' : isPot ? '<span style="font-size:11px;font-weight:normal;background:rgba(193,68,14,0.15);border:1px solid #c1440e;border-radius:4px;padding:1px 6px;vertical-align:middle">🪴 pot</span>' : isGround ? '<span style="font-size:11px;font-weight:normal;background:rgba(58,125,68,0.2);border:1px solid #3a7d44;border-radius:4px;padding:1px 6px;vertical-align:middle">🌍 in-ground</span>' : ''}</h3>
+        <h3>${bed.name} ${isPlanter ? '<span style="font-size:11px;font-weight:normal;background:rgba(156,102,68,0.18);border:1px solid #9c6644;border-radius:4px;padding:1px 6px;vertical-align:middle">🍱 planter</span>' : isPot ? '<span style="font-size:11px;font-weight:normal;background:rgba(193,68,14,0.15);border:1px solid #c1440e;border-radius:4px;padding:1px 6px;vertical-align:middle">🪴 pot</span>' : ''}</h3>
         <span>${isPlanter ? `${Math.round(bed.w * 12)}×${Math.round(bed.h * 12)} in · ${sqftTotal} sq ft` : isPolygon(bed) ? `${sqftTotal} sq ft` : `${bed.w} ft × ${bed.h} ft · ${sqftTotal} sq ft`}</span>
       </div>
       ${addRow}
