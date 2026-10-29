@@ -22,25 +22,37 @@ def png_bytes() -> bytes:
     )
 
 
-def sowing():
-    return {
-        "id": "sow-7",
+def add_bed(client, name="Herbs"):
+    saved = client.put(
+        "/api/beds",
+        json={"name": name, "kind": "bed", "x": 1, "y": 2, "w": 4, "h": 8},
+    )
+    assert saved.status_code == 200
+    bed_id = saved.json()["id"]
+    assert isinstance(bed_id, int)
+    return bed_id
+
+
+def sowing(bed_id, entry_id=None):
+    body = {
         "kind": "sowing",
         "date": "2026-10-24",
-        "bedId": "bed-2",
+        "bedId": bed_id,
         "crop": "Coriander",
         "status": "planned",
         "note": "Second sowing of the month",
         "photoUrl": "",
     }
+    if entry_id is not None:
+        body["id"] = entry_id
+    return body
 
 
-def watering():
-    return {
-        "id": "care-9",
+def watering(bed_id, entry_id=None):
+    body = {
         "kind": "care",
         "date": "2026-10-23",
-        "bedId": "bed-4",
+        "bedId": bed_id,
         "crop": "Tomato",
         "status": "done",
         "note": "",
@@ -51,14 +63,16 @@ def watering():
         "amount": 10,
         "unit": "L",
     }
+    if entry_id is not None:
+        body["id"] = entry_id
+    return body
 
 
-def fertilising(entry_id="care-10", date="2026-10-18", amount=50):
-    return {
-        "id": entry_id,
+def fertilising(bed_id, entry_id=None, date="2026-10-18", amount=50):
+    body = {
         "kind": "care",
         "date": date,
-        "bedId": "bed-4",
+        "bedId": bed_id,
         "crop": "Tomato",
         "status": "done",
         "note": "",
@@ -69,14 +83,16 @@ def fertilising(entry_id="care-10", date="2026-10-18", amount=50):
         "amount": amount,
         "unit": "g",
     }
+    if entry_id is not None:
+        body["id"] = entry_id
+    return body
 
 
-def harvest(entry_id="evt-18", date="2026-10-23", status="done", weight=840, crop="Tomato"):
-    return {
-        "id": entry_id,
+def harvest(bed_id, entry_id=None, date="2026-10-23", status="done", weight=840, crop="Tomato"):
+    body = {
         "kind": "harvest",
         "date": date,
-        "bedId": "bed-4",
+        "bedId": bed_id,
         "crop": crop,
         "status": status,
         "note": "",
@@ -85,19 +101,24 @@ def harvest(entry_id="evt-18", date="2026-10-23", status="done", weight=840, cro
         "unit": "fruit",
         "weightGrams": weight,
     }
+    if entry_id is not None:
+        body["id"] = entry_id
+    return body
 
 
-def diary():
-    return {
-        "id": "note-19",
+def diary(bed_id, entry_id=None):
+    body = {
         "kind": "diary",
         "date": "2026-10-22",
-        "bedId": "bed-4",
+        "bedId": bed_id,
         "crop": "Tomato",
         "status": "done",
         "note": "First fruit split after the rain.",
         "photoUrl": "",
     }
+    if entry_id is not None:
+        body["id"] = entry_id
+    return body
 
 
 def test_creates_each_kind_through_one_url(tmp_path, monkeypatch):
@@ -106,18 +127,21 @@ def test_creates_each_kind_through_one_url(tmp_path, monkeypatch):
     with TestClient(app) as client:
         assert client.get("/api/calendar").json() == []
         assert client.get("/api/calendar/missing").status_code == 404
+        bed_id = add_bed(client)
 
-        saved_sowing = client.put("/api/calendar/sow-7", json=sowing())
+        saved_sowing = client.post("/api/calendar", json=sowing(bed_id))
         assert saved_sowing.status_code == 200
-        assert saved_sowing.json() == sowing()
+        sowing_id = saved_sowing.json()["id"]
+        assert saved_sowing.json() == {**sowing(bed_id), "id": sowing_id}
         assert "action" not in saved_sowing.json()
         assert "weightGrams" not in saved_sowing.json()
 
-        assert client.put("/api/calendar/care-9", json=watering()).json()["action"] == "watering"
-        assert client.put("/api/calendar/care-10", json=fertilising()).json()["amount"] == 50
+        watered = client.post("/api/calendar", json=watering(bed_id))
+        assert watered.json()["action"] == "watering"
+        fed = client.post("/api/calendar", json=fertilising(bed_id))
+        assert fed.json()["amount"] == 50
         pest = {
-            **watering(),
-            "id": "care-11",
+            **watering(bed_id),
             "date": "2026-10-21",
             "action": "pest_control",
             "product": "Neem oil",
@@ -125,26 +149,40 @@ def test_creates_each_kind_through_one_url(tmp_path, monkeypatch):
             "amount": 15,
             "unit": "ml",
         }
-        assert client.put("/api/calendar/care-11", json=pest).json()["problem"] == "Whitefly"
-        assert client.put("/api/calendar/evt-18", json=harvest()).json()["weightGrams"] == 840
-        assert client.put("/api/calendar/note-19", json=diary()).json()["kind"] == "diary"
+        sprayed = client.post("/api/calendar", json=pest)
+        assert sprayed.json()["problem"] == "Whitefly"
+        picked = client.post("/api/calendar", json=harvest(bed_id))
+        assert picked.json()["weightGrams"] == 840
+        noted = client.post("/api/calendar", json=diary(bed_id))
+        assert noted.json()["kind"] == "diary"
 
         listed = client.get("/api/calendar?from=2026-10-01&to=2026-10-31").json()
         assert [entry["id"] for entry in listed] == [
-            "care-10",
-            "care-11",
-            "note-19",
-            "care-9",
-            "evt-18",
-            "sow-7",
+            fed.json()["id"],
+            sprayed.json()["id"],
+            noted.json()["id"],
+            watered.json()["id"],
+            picked.json()["id"],
+            sowing_id,
         ]
-        assert client.get("/api/calendar/evt-18").json()["unit"] == "fruit"
+        assert client.get(f"/api/calendar/{picked.json()['id']}").json()["unit"] == "fruit"
+        watering_id = watered.json()["id"]
+        harvest_id = picked.json()["id"]
 
     connection = sqlite3.connect(tmp_path / "baghban.db")
     assert connection.execute("SELECT COUNT(*) FROM calendar_entry").fetchone()[0] == 6
-    assert connection.execute("SELECT action FROM care WHERE entry_id = 'care-9'").fetchone()[0] == "watering"
-    assert connection.execute("SELECT weight_grams FROM harvest WHERE entry_id = 'evt-18'").fetchone()[0] == 840
-    assert connection.execute("SELECT COUNT(*) FROM harvest WHERE entry_id = 'sow-7'").fetchone()[0] == 0
+    assert connection.execute(
+        "SELECT action FROM care WHERE entry_id = ?",
+        (watering_id,),
+    ).fetchone()[0] == "watering"
+    assert connection.execute(
+        "SELECT weight_grams FROM harvest WHERE entry_id = ?",
+        (harvest_id,),
+    ).fetchone()[0] == 840
+    assert connection.execute(
+        "SELECT COUNT(*) FROM harvest WHERE entry_id = ?",
+        (sowing_id,),
+    ).fetchone()[0] == 0
     connection.close()
 
 
@@ -152,39 +190,104 @@ def test_filters_and_replaces_without_changing_kind(tmp_path, monkeypatch):
     monkeypatch.setenv("BAGHBAN_DB", str(tmp_path / "baghban.db"))
 
     with TestClient(app) as client:
-        client.put("/api/calendar/sow-7", json=sowing())
-        client.put("/api/calendar/care-9", json=watering())
-        client.put("/api/calendar/evt-18", json=harvest())
-        client.put("/api/calendar/evt-20", json=harvest("evt-20", "2026-10-30", "planned", 100))
+        bed_id = add_bed(client)
+        sown = client.post("/api/calendar", json=sowing(bed_id)).json()
+        watered = client.post("/api/calendar", json=watering(bed_id)).json()
+        picked = client.post("/api/calendar", json=harvest(bed_id)).json()
+        later = client.post(
+            "/api/calendar",
+            json=harvest(bed_id, date="2026-10-30", status="planned", weight=100),
+        ).json()
 
         sowings = client.get("/api/calendar?kind=sowing&status=planned&crop=Coriander")
-        assert [entry["id"] for entry in sowings.json()] == ["sow-7"]
-        care = client.get("/api/calendar?kind=care&action=watering&bedId=bed-4")
-        assert [entry["id"] for entry in care.json()] == ["care-9"]
+        assert [entry["id"] for entry in sowings.json()] == [sown["id"]]
+        care = client.get(f"/api/calendar?kind=care&action=watering&bedId={bed_id}")
+        assert [entry["id"] for entry in care.json()] == [watered["id"]]
         done = client.get("/api/calendar?kind=harvest&status=done&from=2026-10-23&to=2026-10-23")
-        assert [entry["id"] for entry in done.json()] == ["evt-18"]
+        assert [entry["id"] for entry in done.json()] == [picked["id"]]
+        assert later["id"] != picked["id"]
 
-        rejected = client.put("/api/calendar/evt-18", json={**watering(), "id": "evt-18"})
+        missing_bed = client.post("/api/calendar", json=sowing(999999))
+        assert missing_bed.status_code == 400
+        assert missing_bed.json()["detail"] == "bedId does not exist"
+        text_bed = sowing(bed_id)
+        text_bed["bedId"] = "bed-4"
+        assert client.post("/api/calendar", json=text_bed).status_code == 400
+        chosen = sowing(bed_id)
+        chosen["id"] = 4
+        assert client.post("/api/calendar", json=chosen).status_code == 400
+
+        whole = sowing(bed_id)
+        whole["bedId"] = ""
+        whole["note"] = "Whole garden"
+        garden = client.post("/api/calendar", json=whole)
+        assert garden.status_code == 200
+        assert garden.json()["bedId"] is None
+        blank = client.get("/api/calendar?bedId=")
+        assert [entry["id"] for entry in blank.json()] == [garden.json()["id"]]
+        assert client.get("/api/calendar?bedId=bed-4").status_code == 400
+
+        client.delete(f"/api/beds/{bed_id}")
+        removed = diary(bed_id)
+        removed["note"] = "Still names the bed"
+        kept = client.post("/api/calendar", json=removed)
+        assert kept.status_code == 200
+        assert kept.json()["bedId"] == bed_id
+
+        connection = sqlite3.connect(tmp_path / "baghban.db")
+        connection.execute("PRAGMA foreign_keys = ON")
+        connection.execute(
+            """
+            INSERT INTO care (entry_id, action, product, problem, amount, unit)
+            VALUES (?, 'watering', 'left over', '', 1, 'L')
+            """,
+            (picked["id"],),
+        )
+        connection.commit()
+        connection.close()
+
+        rejected = client.put(
+            f"/api/calendar/{picked['id']}",
+            json={**watering(bed_id), "id": picked["id"]},
+        )
         assert rejected.status_code == 400
         assert rejected.json()["detail"] == "kind cannot change"
-        assert client.get("/api/calendar/evt-18").json()["weightGrams"] == 840
+        assert client.get(f"/api/calendar/{picked['id']}").json()["weightGrams"] == 840
+        connection = sqlite3.connect(tmp_path / "baghban.db")
+        assert connection.execute(
+            "SELECT COUNT(*) FROM care WHERE entry_id = ?",
+            (picked["id"],),
+        ).fetchone()[0] == 1
+        connection.close()
 
-        changed = harvest()
+        changed = harvest(bed_id, picked["id"])
         changed["weightGrams"] = 900
-        assert client.put("/api/calendar/evt-18", json=changed).json()["weightGrams"] == 900
+        changed["quantity"] = None
+        replaced = client.put(f"/api/calendar/{picked['id']}", json=changed)
+        assert replaced.status_code == 200
+        assert replaced.json()["weightGrams"] == 900
+        assert replaced.json()["quantity"] is None
+        connection = sqlite3.connect(tmp_path / "baghban.db")
+        assert connection.execute(
+            "SELECT COUNT(*) FROM care WHERE entry_id = ?",
+            (picked["id"],),
+        ).fetchone()[0] == 0
+        connection.close()
 
-        extra = {**sowing(), "quantity": 3}
-        assert client.put("/api/calendar/sow-7", json=extra).status_code == 400
-        named = {**sowing(), "bedName": "Herb bed"}
-        rejected_name = client.put("/api/calendar/sow-7", json=named)
+        extra = {**sowing(bed_id, sown["id"]), "quantity": 3}
+        assert client.put(f"/api/calendar/{sown['id']}", json=extra).status_code == 400
+        named = {**sowing(bed_id, sown["id"]), "bedName": "Herb bed"}
+        rejected_name = client.put(f"/api/calendar/{sown['id']}", json=named)
         assert rejected_name.status_code == 400
         assert rejected_name.json()["detail"] == "bedName is not part of a sowing entry"
-        planned_diary = {**diary(), "status": "planned"}
-        assert client.put("/api/calendar/note-19", json=planned_diary).status_code == 400
-        mismatch = sowing()
-        mismatch["id"] = "other"
-        assert client.put("/api/calendar/sow-7", json=mismatch).status_code == 400
-        assert client.put("/api/calendar/bad id", json=sowing()).status_code == 400
+        planned_diary = diary(bed_id)
+        planned_diary["status"] = "planned"
+        assert client.post("/api/calendar", json=planned_diary).status_code == 400
+        mismatch = sowing(bed_id, sown["id"])
+        mismatch["id"] = sown["id"] + 1
+        assert client.put(f"/api/calendar/{sown['id']}", json=mismatch).status_code == 400
+        assert client.put(f"/api/calendar/{sown['id'] + 50}", json=sowing(bed_id, sown["id"] + 50)).status_code == 404
+        assert client.put("/api/calendar/bad id", json=sowing(bed_id, 1)).status_code == 404
         assert client.get("/api/calendar?from=2026-13-01").status_code == 400
 
 
@@ -198,21 +301,25 @@ def test_totals_skip_planned_harvests_and_sum_care(tmp_path, monkeypatch):
             "weightGrams": 0,
         }
         assert client.get("/api/calendar/totals/care").status_code == 400
+        bed_id = add_bed(client)
 
-        client.put("/api/calendar/evt-18", json=harvest())
-        client.put("/api/calendar/evt-20", json=harvest("evt-20", "2026-10-30", "planned", 500))
-        client.put("/api/calendar/evt-21", json=harvest("evt-21", "2026-10-12", "done", 120, "Coriander"))
-        client.put("/api/calendar/evt-22", json=harvest("evt-22", "2026-09-01", "done", 50))
-        client.put("/api/calendar/care-10", json=fertilising())
-        client.put("/api/calendar/care-12", json=fertilising("care-12", "2026-10-19", 25))
-        client.put("/api/calendar/care-9", json=watering())
+        client.post("/api/calendar", json=harvest(bed_id))
+        client.post("/api/calendar", json=harvest(bed_id, date="2026-10-30", status="planned", weight=500))
+        client.post(
+            "/api/calendar",
+            json=harvest(bed_id, date="2026-10-12", status="done", weight=120, crop="Coriander"),
+        )
+        client.post("/api/calendar", json=harvest(bed_id, date="2026-09-01", status="done", weight=50))
+        client.post("/api/calendar", json=fertilising(bed_id))
+        client.post("/api/calendar", json=fertilising(bed_id, date="2026-10-19", amount=25))
+        client.post("/api/calendar", json=watering(bed_id))
 
         tomato = client.get(
             "/api/calendar/totals/harvest?crop=Tomato&from=2026-09-23&to=2026-10-23"
         )
         assert tomato.json() == {"crop": "Tomato", "weightGrams": 840}
         bed = client.get(
-            "/api/calendar/totals/harvest?crop=Tomato&bedId=bed-4&from=2026-09-23&to=2026-10-23"
+            f"/api/calendar/totals/harvest?crop=Tomato&bedId={bed_id}&from=2026-09-23&to=2026-10-23"
         )
         assert bed.json()["weightGrams"] == 840
         crops = client.get("/api/calendar/totals/harvest?from=2026-09-23&to=2026-10-23").json()
@@ -231,7 +338,7 @@ def test_totals_skip_planned_harvests_and_sum_care(tmp_path, monkeypatch):
             "amount": 75,
         }
         water = client.get(
-            "/api/calendar/totals/care?action=watering&unit=L&bedId=bed-4&from=2026-10-01&to=2026-10-31"
+            f"/api/calendar/totals/care?action=watering&unit=L&bedId={bed_id}&from=2026-10-01&to=2026-10-31"
         )
         assert water.json() == {"action": "watering", "unit": "L", "amount": 10}
 
@@ -241,38 +348,43 @@ def test_delete_removes_child_row_and_photo(tmp_path, monkeypatch):
     photo = png_bytes()
 
     with TestClient(app) as client:
-        assert client.delete("/api/calendar/evt-18").status_code == 204
+        assert client.delete("/api/calendar/1").status_code == 204
+        assert client.delete("/api/calendar/evt-18").status_code == 404
+        bed_id = add_bed(client)
 
         stored = client.put(
-            "/api/photos/evt-18",
+            "/api/photos/harvest-1",
             content=photo,
             headers={"Content-Type": "image/png"},
         )
-        assert stored.json() == {"url": "/api/photos/evt-18"}
-        body = harvest()
-        body["photoUrl"] = "/api/photos/evt-18"
-        assert client.put("/api/calendar/evt-18", json=body).json()["photoUrl"] == "/api/photos/evt-18"
+        assert stored.json() == {"url": "/api/photos/harvest-1"}
+        body = harvest(bed_id)
+        body["photoUrl"] = "/api/photos/harvest-1"
+        saved = client.post("/api/calendar", json=body)
+        assert saved.status_code == 200
+        entry_id = saved.json()["id"]
+        assert saved.json()["photoUrl"] == "/api/photos/harvest-1"
 
-        cleared = harvest()
+        cleared = harvest(bed_id, entry_id)
         cleared["photoUrl"] = ""
         cleared["weightGrams"] = 900
-        assert client.put("/api/calendar/evt-18", json=cleared).json()["photoUrl"] == ""
-        assert client.get("/api/photos/evt-18").status_code == 404
+        assert client.put(f"/api/calendar/{entry_id}", json=cleared).json()["photoUrl"] == ""
+        assert client.get("/api/photos/harvest-1").status_code == 404
 
         client.put(
-            "/api/photos/evt-18",
+            "/api/photos/harvest-1",
             content=photo,
             headers={"Content-Type": "image/png"},
         )
-        replaced = harvest()
-        replaced["photoUrl"] = "/api/photos/evt-18"
-        client.put("/api/calendar/evt-18", json=replaced)
-        removed = client.delete("/api/calendar/evt-18")
+        replaced = harvest(bed_id, entry_id)
+        replaced["photoUrl"] = "/api/photos/harvest-1"
+        client.put(f"/api/calendar/{entry_id}", json=replaced)
+        removed = client.delete(f"/api/calendar/{entry_id}")
         assert removed.status_code == 204
-        assert client.get("/api/calendar/evt-18").status_code == 404
-        assert client.get("/api/photos/evt-18").status_code == 404
+        assert client.get(f"/api/calendar/{entry_id}").status_code == 404
+        assert client.get("/api/photos/harvest-1").status_code == 404
 
-    assert (tmp_path / "photos" / "evt-18.png").exists() is False
+    assert (tmp_path / "photos" / "harvest-1.png").exists() is False
     connection = sqlite3.connect(tmp_path / "baghban.db")
     assert connection.execute("SELECT COUNT(*) FROM calendar_entry").fetchone()[0] == 0
     assert connection.execute("SELECT COUNT(*) FROM harvest").fetchone()[0] == 0

@@ -1,5 +1,3 @@
-import json
-import sqlite3
 import struct
 import zlib
 
@@ -59,49 +57,3 @@ def test_plot_photo_round_trip(tmp_path, monkeypatch):
         assert client.get("/api/photos/plot-1").status_code == 404
 
     assert (tmp_path / "photos" / "plot-1.png").exists() is False
-
-
-def test_migrates_legacy_plot_photo(tmp_path, monkeypatch):
-    database = tmp_path / "baghban.db"
-    monkeypatch.setenv("BAGHBAN_DB", str(database))
-    photo = png_bytes()
-    (tmp_path / "plot-photo").write_bytes(photo)
-    plan = {
-        "version": 2,
-        "garden": {"width": 20, "height": 18},
-        "beds": [],
-        "obstacles": [],
-        "plot": {
-            "plotId": "plot-9",
-            "widthPx": 1,
-            "heightPx": 1,
-            "calibration": None,
-            "feetPerPixel": 0,
-        },
-    }
-    connection = sqlite3.connect(database)
-    connection.execute(
-        """
-        CREATE TABLE garden_plan (
-            id INTEGER PRIMARY KEY CHECK (id = 1),
-            document TEXT NOT NULL,
-            saved_at TEXT NOT NULL
-        )
-        """
-    )
-    connection.execute(
-        "INSERT INTO garden_plan (id, document, saved_at) VALUES (1, ?, 't')",
-        (json.dumps(plan),),
-    )
-    connection.commit()
-    connection.close()
-
-    with TestClient(app) as client:
-        loaded = client.get("/api/garden")
-        assert loaded.json()["plot"]["photoUrl"] == "/api/photos/plot-9"
-        image = client.get("/api/photos/plot-9")
-        assert image.status_code == 200
-        assert image.content == photo
-
-    assert (tmp_path / "plot-photo").exists() is False
-    assert (tmp_path / "photos" / "plot-9.png").is_file()

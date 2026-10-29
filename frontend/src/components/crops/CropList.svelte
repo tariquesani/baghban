@@ -3,8 +3,8 @@
 
   /**
    * @param {{
-   *   crops: Array<{ id: string, name: string, category: string, emoji: string }>,
-   *   selectedId: string,
+   *   crops: Array<{ id: number, name: string, category: string, emoji: string }>,
+   *   selectedId: number | '',
    *   query: string,
    *   category: string,
    *   showArchived: boolean,
@@ -12,7 +12,7 @@
    *   onCategory: (value: string) => void,
    *   onShowArchived: (value: boolean) => void,
    *   onAdd: () => void,
-   *   onSelect: (crop: { id: string }) => void,
+   *   onSelect: (crop: { id: number }) => void,
    *   ready: boolean,
    * }} props
    */

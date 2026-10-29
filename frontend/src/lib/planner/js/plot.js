@@ -142,7 +142,6 @@ function scaleWorld(ratio) {
       b.points.forEach(scalePt);
       if (b.pivot) scalePt(b.pivot);
       syncPolygonBounds(b);
-      b.plantGrid = null;
     } else {
       b.x *= ratio;
       b.y *= ratio;
@@ -182,7 +181,7 @@ function applyCalibration(cal) {
   updateCalibReadout();
   fitView();
   renderLists();
-  if (selectedId) syncPanel();
+  if (selectedObj) syncPanel();
   draw();
   publishScale();
   return true;
@@ -373,7 +372,7 @@ function onDrawClick(wx, wy) {
 function closeDraft() {
   if (draftPoints.length < 3) return;
   saveHistory();
-  const id = 'bed' + nextId++;
+  const id = takeStandInId();
   const color = BED_COLORS[colorIdx++ % BED_COLORS.length];
   const bed = {
     id, name: 'New Bed',

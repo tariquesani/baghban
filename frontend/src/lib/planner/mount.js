@@ -1,3 +1,6 @@
+import { stampStandIn } from '$lib/domain/row-save.js';
+import { isSelected } from '$lib/domain/selection.js';
+import { gardenScene } from '$lib/domain/scene.js';
 import editorHtml from './editor.html?raw';
 import catalogSource from './js/catalog.js?raw';
 import plantLookupSource from './js/plant_lookup.js?raw';
@@ -28,6 +31,9 @@ const publishedNames = [...programSource.matchAll(/^function\s+([A-Za-z_$][\w$]*
 // Each call gets a fresh scope, so a later visit can declare the same
 // bindings. visitOpen lets a destroyed visit ignore photo loads still in flight.
 const program = new Function(
+  'gardenScene',
+  'isSelected',
+  'stampStandIn',
   'let visitOpen = true;\n'
   + 'function finishVisit() { visitOpen = false; }\n'
   + programSource
@@ -86,7 +92,7 @@ function openSession() {
   };
 
   try {
-    const api = program();
+    const api = program(gardenScene, isSelected, stampStandIn);
     for (const name of publishedNames) globalThis[name] = api[name];
     return {
       finish() {

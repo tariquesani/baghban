@@ -1,8 +1,10 @@
 """Calendar entries: sowing, care, harvest, and diary.
 
-The client uses /api/calendar/{id} for every kind. Care and harvest rows
-are written with the calendar row. Photos stay on /api/photos/{id}.
-An entry stores a bed id. The bed's name lives on the bed table.
+POST /api/calendar inserts a row and returns its integer id.
+PUT /api/calendar/{id} replaces that entry. Care and harvest rows are written
+with the calendar row, and replaced when a new body drops them.
+Photos stay on /api/photos/{id}. An entry stores a bed id, or none for the
+whole garden. The bed's name lives on the bed table.
 """
 
 import json
@@ -13,7 +15,6 @@ from datetime import datetime
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import Response
 
-ENTRY_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,80}")
 PHOTO_URL = re.compile(r"/api/photos/([A-Za-z0-9][A-Za-z0-9_-]{0,80})")
 KINDS = ("sowing", "care", "harvest", "diary")
 STATUSES = ("planned", "done")
@@ -65,10 +66,10 @@ def create_calendar_tables(connection) -> None:
     connection.execute(
         """
         CREATE TABLE IF NOT EXISTS calendar_entry (
-            id        TEXT PRIMARY KEY,
+            id        INTEGER PRIMARY KEY AUTOINCREMENT,
             kind      TEXT NOT NULL CHECK (kind IN ('sowing', 'care', 'harvest', 'diary')),
             date      TEXT NOT NULL,
-            bed_id    TEXT,
+            bed_id    INTEGER REFERENCES bed(id),
             crop      TEXT,
             status    TEXT NOT NULL CHECK (status IN ('planned', 'done')),
             note      TEXT NOT NULL DEFAULT '',
@@ -79,7 +80,7 @@ def create_calendar_tables(connection) -> None:
     connection.execute(
         """
         CREATE TABLE IF NOT EXISTS harvest (
-            entry_id      TEXT PRIMARY KEY REFERENCES calendar_entry(id),
+            entry_id      INTEGER PRIMARY KEY REFERENCES calendar_entry(id),
             quantity      REAL,
             unit          TEXT,
             weight_grams  INTEGER
@@ -89,7 +90,7 @@ def create_calendar_tables(connection) -> None:
     connection.execute(
         """
         CREATE TABLE IF NOT EXISTS care (
-            entry_id  TEXT PRIMARY KEY REFERENCES calendar_entry(id),
+            entry_id  INTEGER PRIMARY KEY REFERENCES calendar_entry(id),
             action    TEXT NOT NULL CHECK (action IN ('watering', 'fertilising', 'pest_control')),
             product   TEXT,
             problem   TEXT,
@@ -100,10 +101,10 @@ def create_calendar_tables(connection) -> None:
     )
 
 
-def require_entry_id(entry_id: str) -> str:
-    if not ENTRY_ID.fullmatch(entry_id):
-        raise HTTPException(status_code=400, detail="Invalid entry id")
-    return entry_id
+def require_entry_id(entry_id: str) -> int:
+    if not entry_id.isdigit() or entry_id.startswith("0"):
+        raise HTTPException(status_code=404, detail="Entry not found")
+    return int(entry_id)
 
 
 def require_date(value, name: str) -> str:
@@ -132,12 +133,32 @@ def require_choice(value: str | None, choices: tuple, name: str) -> str | None:
     return value
 
 
+def query_bed_id(value: str | None):
+    """None skips the filter. '' means entries with no bed. Otherwise an int."""
+    if value is None:
+        return None
+    if value == "":
+        return ""
+    if not value.isdigit() or value.startswith("0"):
+        raise HTTPException(status_code=400, detail="bedId must be an integer")
+    return int(value)
+
+
 def text_field(body: dict, key: str) -> str:
     if key not in body or body[key] is None:
         return ""
     value = body[key]
     if not isinstance(value, str):
         raise HTTPException(status_code=400, detail=f"{key} must be a string")
+    return value
+
+
+def bed_id_field(body: dict) -> int | None:
+    if "bedId" not in body or body["bedId"] is None or body["bedId"] == "":
+        return None
+    value = body["bedId"]
+    if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+        raise HTTPException(status_code=400, detail="bedId must be an integer")
     return value
 
 
@@ -196,8 +217,11 @@ def parse_body(raw: bytes) -> dict:
     return body
 
 
-def parse_entry(entry_id: str, body: dict) -> dict:
-    if body.get("id") != entry_id:
+def parse_entry(body: dict, entry_id: int | None) -> dict:
+    if entry_id is None:
+        if body.get("id") is not None:
+            raise HTTPException(status_code=400, detail="id is assigned by the server")
+    elif body.get("id") != entry_id:
         raise HTTPException(status_code=400, detail="id must match the URL")
     kind = body.get("kind")
     if kind not in KINDS:
@@ -213,10 +237,9 @@ def parse_entry(entry_id: str, body: dict) -> dict:
         raise HTTPException(status_code=400, detail="A diary entry is done")
 
     entry = {
-        "id": entry_id,
         "kind": kind,
         "date": require_date(body.get("date"), "date"),
-        "bed_id": text_field(body, "bedId") or None,
+        "bed_id": bed_id_field(body),
         "crop": text_field(body, "crop") or None,
         "status": status,
         "note": text_field(body, "note"),
@@ -243,11 +266,16 @@ def parse_entry(entry_id: str, body: dict) -> dict:
 
 
 def entry_json(row) -> dict:
+    bed_id = row["bed_id"]
+    if bed_id is None or bed_id == "":
+        bed_id = None
+    else:
+        bed_id = int(bed_id)
     body = {
-        "id": row["id"],
+        "id": int(row["id"]),
         "kind": row["kind"],
         "date": row["date"],
-        "bedId": row["bed_id"] or "",
+        "bedId": bed_id,
         "crop": row["crop"] or "",
         "status": row["status"],
         "note": row["note"] or "",
@@ -266,7 +294,7 @@ def entry_json(row) -> dict:
     return body
 
 
-def fetch_entry(connection, entry_id: str):
+def fetch_entry(connection, entry_id: int):
     return connection.execute(
         SELECT_ENTRIES + " WHERE calendar_entry.id = ?",
         (entry_id,),
@@ -279,33 +307,73 @@ def connect():
     return open_db()
 
 
-def save_entry(entry_id: str, body: dict) -> dict:
-    entry = parse_entry(entry_id, body)
+def require_bed(connection, bed_id: int | None) -> None:
+    if bed_id is None:
+        return
+    found = connection.execute("SELECT 1 FROM bed WHERE id = ?", (bed_id,)).fetchone()
+    if found is None:
+        raise HTTPException(status_code=400, detail="bedId does not exist")
+
+
+def write_children(connection, entry_id: int, entry: dict) -> None:
+    if entry["kind"] == "care":
+        care = entry["care"]
+        connection.execute(
+            """
+            INSERT INTO care (entry_id, action, product, problem, amount, unit)
+            VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT(entry_id) DO UPDATE SET
+                action = excluded.action,
+                product = excluded.product,
+                problem = excluded.problem,
+                amount = excluded.amount,
+                unit = excluded.unit
+            """,
+            (
+                entry_id,
+                care["action"],
+                care["product"],
+                care["problem"],
+                care["amount"],
+                care["unit"],
+            ),
+        )
+    else:
+        connection.execute("DELETE FROM care WHERE entry_id = ?", (entry_id,))
+    if entry["kind"] == "harvest":
+        harvest = entry["harvest"]
+        connection.execute(
+            """
+            INSERT INTO harvest (entry_id, quantity, unit, weight_grams)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(entry_id) DO UPDATE SET
+                quantity = excluded.quantity,
+                unit = excluded.unit,
+                weight_grams = excluded.weight_grams
+            """,
+            (
+                entry_id,
+                harvest["quantity"],
+                harvest["unit"],
+                harvest["weight_grams"],
+            ),
+        )
+    else:
+        connection.execute("DELETE FROM harvest WHERE entry_id = ?", (entry_id,))
+
+
+def create_entry(body: dict) -> dict:
+    entry = parse_entry(body, None)
     with closing(connect()) as connection:
-        existing = connection.execute(
-            "SELECT kind, photo_url FROM calendar_entry WHERE id = ?",
-            (entry_id,),
-        ).fetchone()
-        if existing is not None and existing["kind"] != entry["kind"]:
-            raise HTTPException(status_code=400, detail="kind cannot change")
-        previous_photo = existing["photo_url"] if existing is not None else None
+        require_bed(connection, entry["bed_id"])
         try:
-            connection.execute(
+            cursor = connection.execute(
                 """
                 INSERT INTO calendar_entry (
-                    id, kind, date, bed_id, crop, status, note, photo_url
-                )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(id) DO UPDATE SET
-                    date = excluded.date,
-                    bed_id = excluded.bed_id,
-                    crop = excluded.crop,
-                    status = excluded.status,
-                    note = excluded.note,
-                    photo_url = excluded.photo_url
+                    kind, date, bed_id, crop, status, note, photo_url
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
-                    entry["id"],
                     entry["kind"],
                     entry["date"],
                     entry["bed_id"],
@@ -315,46 +383,54 @@ def save_entry(entry_id: str, body: dict) -> dict:
                     entry["photo_url"],
                 ),
             )
-            if entry["kind"] == "care":
-                care = entry["care"]
-                connection.execute(
-                    """
-                    INSERT INTO care (entry_id, action, product, problem, amount, unit)
-                    VALUES (?, ?, ?, ?, ?, ?)
-                    ON CONFLICT(entry_id) DO UPDATE SET
-                        action = excluded.action,
-                        product = excluded.product,
-                        problem = excluded.problem,
-                        amount = excluded.amount,
-                        unit = excluded.unit
-                    """,
-                    (
-                        entry_id,
-                        care["action"],
-                        care["product"],
-                        care["problem"],
-                        care["amount"],
-                        care["unit"],
-                    ),
-                )
-            if entry["kind"] == "harvest":
-                harvest = entry["harvest"]
-                connection.execute(
-                    """
-                    INSERT INTO harvest (entry_id, quantity, unit, weight_grams)
-                    VALUES (?, ?, ?, ?)
-                    ON CONFLICT(entry_id) DO UPDATE SET
-                        quantity = excluded.quantity,
-                        unit = excluded.unit,
-                        weight_grams = excluded.weight_grams
-                    """,
-                    (
-                        entry_id,
-                        harvest["quantity"],
-                        harvest["unit"],
-                        harvest["weight_grams"],
-                    ),
-                )
+            entry_id = cursor.lastrowid
+            write_children(connection, entry_id, entry)
+            connection.commit()
+            return entry_json(fetch_entry(connection, entry_id))
+        except HTTPException:
+            connection.rollback()
+            raise
+        except Exception:
+            connection.rollback()
+            raise
+
+
+def replace_entry(entry_id: int, body: dict) -> dict:
+    entry = parse_entry(body, entry_id)
+    with closing(connect()) as connection:
+        existing = connection.execute(
+            "SELECT kind, photo_url FROM calendar_entry WHERE id = ?",
+            (entry_id,),
+        ).fetchone()
+        if existing is None:
+            raise HTTPException(status_code=404, detail="Entry not found")
+        if existing["kind"] != entry["kind"]:
+            raise HTTPException(status_code=400, detail="kind cannot change")
+        require_bed(connection, entry["bed_id"])
+        previous_photo = existing["photo_url"]
+        try:
+            connection.execute(
+                """
+                UPDATE calendar_entry SET
+                    date = ?,
+                    bed_id = ?,
+                    crop = ?,
+                    status = ?,
+                    note = ?,
+                    photo_url = ?
+                WHERE id = ?
+                """,
+                (
+                    entry["date"],
+                    entry["bed_id"],
+                    entry["crop"],
+                    entry["status"],
+                    entry["note"],
+                    entry["photo_url"],
+                    entry_id,
+                ),
+            )
+            write_children(connection, entry_id, entry)
             connection.commit()
             saved = entry_json(fetch_entry(connection, entry_id))
         except HTTPException:
@@ -368,7 +444,7 @@ def save_entry(entry_id: str, body: dict) -> dict:
     return saved
 
 
-def remove_entry(entry_id: str) -> None:
+def remove_entry(entry_id: int) -> None:
     with closing(connect()) as connection:
         existing = connection.execute(
             "SELECT photo_url FROM calendar_entry WHERE id = ?",
@@ -388,6 +464,16 @@ def remove_entry(entry_id: str) -> None:
     discard_photo(photo)
 
 
+def bed_clause(bed_id, clauses: list, params: list) -> None:
+    if bed_id is None:
+        return
+    if bed_id == "":
+        clauses.append("calendar_entry.bed_id IS NULL")
+        return
+    clauses.append("calendar_entry.bed_id = ?")
+    params.append(bed_id)
+
+
 def list_entries(filters: dict) -> list:
     clauses = []
     params = []
@@ -400,12 +486,7 @@ def list_entries(filters: dict) -> list:
     if filters["kind"] is not None:
         clauses.append("calendar_entry.kind = ?")
         params.append(filters["kind"])
-    if filters["bed_id"] is not None:
-        if filters["bed_id"] == "":
-            clauses.append("(calendar_entry.bed_id IS NULL OR calendar_entry.bed_id = '')")
-        else:
-            clauses.append("calendar_entry.bed_id = ?")
-            params.append(filters["bed_id"])
+    bed_clause(filters["bed_id"], clauses, params)
     if filters["crop"] is not None:
         if filters["crop"] == "":
             clauses.append("(calendar_entry.crop IS NULL OR calendar_entry.crop = '')")
@@ -427,15 +508,13 @@ def list_entries(filters: dict) -> list:
     return [entry_json(row) for row in rows]
 
 
-def harvest_total(crop: str | None, bed_id: str | None, date_from: str | None, date_to: str | None):
+def harvest_total(crop: str | None, bed_id, date_from: str | None, date_to: str | None):
     clauses = ["calendar_entry.kind = 'harvest'", "calendar_entry.status = 'done'"]
     params = []
     if crop is not None:
         clauses.append("calendar_entry.crop = ?")
         params.append(crop)
-    if bed_id is not None:
-        clauses.append("calendar_entry.bed_id = ?")
-        params.append(bed_id)
+    bed_clause(bed_id, clauses, params)
     if date_from is not None:
         clauses.append("calendar_entry.date >= ?")
         params.append(date_from)
@@ -461,15 +540,13 @@ def harvest_total(crop: str | None, bed_id: str | None, date_from: str | None, d
     ]
 
 
-def care_total(action: str, unit: str, product: str | None, bed_id: str | None, date_from: str | None, date_to: str | None) -> dict:
+def care_total(action: str, unit: str, product: str | None, bed_id, date_from: str | None, date_to: str | None) -> dict:
     clauses = ["care.action = ?", "care.unit = ?"]
     params = [action, unit]
     if product is not None:
         clauses.append("care.product = ?")
         params.append(product)
-    if bed_id is not None:
-        clauses.append("calendar_entry.bed_id = ?")
-        params.append(bed_id)
+    bed_clause(bed_id, clauses, params)
     if date_from is not None:
         clauses.append("calendar_entry.date >= ?")
         params.append(date_from)
@@ -505,7 +582,7 @@ def get_calendar(
         "date_from": optional_date(date_from, "from"),
         "date_to": optional_date(date_to, "to"),
         "kind": require_choice(kind, KINDS, "kind"),
-        "bed_id": bed_id,
+        "bed_id": query_bed_id(bed_id),
         "crop": crop,
         "status": require_choice(status, STATUSES, "status"),
         "action": require_choice(action, ACTIONS, "action"),
@@ -522,7 +599,7 @@ def get_harvest_total(
 ):
     return harvest_total(
         crop,
-        bed_id,
+        query_bed_id(bed_id),
         optional_date(date_from, "from"),
         optional_date(date_to, "to"),
     )
@@ -545,17 +622,22 @@ def get_care_total(
         action,
         unit,
         product,
-        bed_id,
+        query_bed_id(bed_id),
         optional_date(date_from, "from"),
         optional_date(date_to, "to"),
     )
 
 
+@router.post("/calendar")
+async def post_entry(request: Request) -> dict:
+    return create_entry(parse_body(await request.body()))
+
+
 @router.get("/calendar/{entry_id}")
 def get_entry(entry_id: str) -> dict:
-    require_entry_id(entry_id)
+    parsed = require_entry_id(entry_id)
     with closing(connect()) as connection:
-        row = fetch_entry(connection, entry_id)
+        row = fetch_entry(connection, parsed)
     if row is None:
         raise HTTPException(status_code=404, detail="Entry not found")
     return entry_json(row)
@@ -563,12 +645,10 @@ def get_entry(entry_id: str) -> dict:
 
 @router.put("/calendar/{entry_id}")
 async def put_entry(entry_id: str, request: Request) -> dict:
-    require_entry_id(entry_id)
-    return save_entry(entry_id, parse_body(await request.body()))
+    return replace_entry(require_entry_id(entry_id), parse_body(await request.body()))
 
 
 @router.delete("/calendar/{entry_id}")
 def delete_entry(entry_id: str) -> Response:
-    require_entry_id(entry_id)
-    remove_entry(entry_id)
+    remove_entry(require_entry_id(entry_id))
     return Response(status_code=204)

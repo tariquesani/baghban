@@ -1,6 +1,6 @@
 <script>
-  import { archiveCrop, getCrop, listCrops, saveCrop } from '$lib/api/crops.js';
-  import { cloneCrop, cropPayload, cropSlug, emptyCrop } from '$lib/domain/crop.js';
+  import { archiveCrop, createCrop, listCrops, saveCrop } from '$lib/api/crops.js';
+  import { cloneCrop, cropPayload, emptyCrop } from '$lib/domain/crop.js';
   import CropForm from '../components/crops/CropForm.svelte';
   import CropList from '../components/crops/CropList.svelte';
 
@@ -71,7 +71,7 @@
     clearPicker();
   }
 
-  /** @param {{ id: string }} crop */
+  /** @param {{ id: number }} crop */
   function openCrop(crop) {
     const found = crops.find((row) => row.id === crop.id);
     if (!found) return;
@@ -84,13 +84,6 @@
     clearPicker();
   }
 
-  /**
-   * @param {string} name
-   */
-  function cropIdFor(name) {
-    return creating ? cropSlug(name) : draft.id;
-  }
-
   async function saveDraft() {
     const name = draft.name.trim();
     if (!name) {
@@ -101,24 +94,12 @@
       error = 'A crop needs a category';
       return;
     }
-    const id = cropIdFor(name);
-    if (!id) {
-      error = 'Use a name with letters or numbers';
-      return;
-    }
     busy = true;
     error = '';
     try {
-      if (creating) {
-        try {
-          await getCrop(id);
-          error = 'A crop with this name already exists';
-          return;
-        } catch (err) {
-          if (!(err instanceof Error) || !err.message.includes('Crop not found')) throw err;
-        }
-      }
-      const saved = await saveCrop(cropPayload(draft, id));
+      const saved = creating
+        ? await createCrop(cropPayload(draft))
+        : await saveCrop(cropPayload(draft));
       creating = false;
       selectedId = saved.id;
       draft = cloneCrop(saved);
@@ -157,7 +138,7 @@
     busy = true;
     error = '';
     try {
-      const saved = await saveCrop(cropPayload({ ...draft, archived: false }, draft.id));
+      const saved = await saveCrop(cropPayload({ ...draft, archived: false }));
       creating = false;
       selectedId = saved.id;
       draft = cloneCrop(saved);

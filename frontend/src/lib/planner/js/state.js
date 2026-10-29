@@ -20,13 +20,19 @@ let selectedVertex = -1;
 let dragOriginPoints = null;
 let dragOriginPivot = null;
 let dragStartFeet = null;
-let selectedId = null;
+let selectedObj = null;
 let dragging   = null;
 let dragOff    = { x: 0, y: 0 };
 let isRotating      = false;
 let rotateStartAngle = 0;
 let rotateStartRot   = 0;
-let nextId     = 1;
+let nextId     = -1;
+
+function takeStandInId() {
+  const id = nextId;
+  nextId -= 1;
+  return id;
+}
 
 // ─── Viewport (zoom / pan) ────────────────────────────────────────────────────
 let viewX = 0, viewY = 0, viewZoom = 1;
@@ -54,7 +60,6 @@ function saveHistory() {
       feetPerPixel: plot.feetPerPixel || 0,
       photoUrl: plot.photoUrl || null,
     },
-    nextId,
   });
   if (undoStack.length > MAX_HISTORY) undoStack.shift();
 }
@@ -65,13 +70,11 @@ function undoLast() {
   beds      = snap.beds;
   obstacles = snap.obstacles;
   garden    = { ...snap.garden };
-  nextId    = snap.nextId;
   if (snap.plot) restorePlotMeta(snap.plot);
   _propHistorySaved = false;
   publishScale();
   // If the previously selected item no longer exists, deselect it
-  const stillExists = beds.find(b => b.id === selectedId) || obstacles.find(o => o.id === selectedId);
-  if (!stillExists) select(null);
+  if (!getSelected()) select(null);
   else syncPanel();
   updateCalibReadout();
   renderLists(); draw();

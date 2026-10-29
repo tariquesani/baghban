@@ -2,17 +2,16 @@
 
 The planner file is the seed. init_db reads it once, when the crop table
 is empty, and copies every plant. Later saves stay as the gardener left them.
+Ids are integers assigned on insert. A text id is rewritten at startup.
 """
 
 import json
-import re
 from contextlib import closing
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import Response
 
-CROP_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,80}")
 CATEGORIES = ("Vegetables", "Herbs", "Flowers", "Fruit")
 SUNS = ("", "Full", "Full/Part")
 WATERS = ("", "Low", "Medium", "High")
@@ -71,25 +70,11 @@ def display_name(plant: dict) -> str:
     return name
 
 
-def crop_slug(name: str) -> str:
-    parts = []
-    current = []
-    for char in name.casefold():
-        if char.isascii() and char.isalnum():
-            current.append(char)
-        elif current:
-            parts.append("".join(current))
-            current = []
-    if current:
-        parts.append("".join(current))
-    return "-".join(parts)
-
-
 def create_crop_tables(connection) -> None:
     connection.execute(
         """
         CREATE TABLE IF NOT EXISTS crop (
-            id                TEXT PRIMARY KEY,
+            id                INTEGER PRIMARY KEY AUTOINCREMENT,
             name              TEXT NOT NULL,
             category          TEXT NOT NULL CHECK (category IN ('Vegetables', 'Herbs', 'Flowers', 'Fruit')),
             emoji             TEXT NOT NULL DEFAULT '',
@@ -109,7 +94,7 @@ def create_crop_tables(connection) -> None:
     connection.execute(
         """
         CREATE TABLE IF NOT EXISTS crop_alias (
-            crop_id  TEXT NOT NULL REFERENCES crop(id),
+            crop_id  INTEGER NOT NULL REFERENCES crop(id),
             alias    TEXT NOT NULL,
             PRIMARY KEY (crop_id, alias)
         )
@@ -118,8 +103,8 @@ def create_crop_tables(connection) -> None:
     connection.execute(
         """
         CREATE TABLE IF NOT EXISTS crop_link (
-            crop_id   TEXT NOT NULL REFERENCES crop(id),
-            other_id  TEXT NOT NULL REFERENCES crop(id),
+            crop_id   INTEGER NOT NULL REFERENCES crop(id),
+            other_id  INTEGER NOT NULL REFERENCES crop(id),
             relation  TEXT NOT NULL CHECK (relation IN ('companion', 'avoid')),
             PRIMARY KEY (crop_id, other_id, relation),
             CHECK (crop_id != other_id)
@@ -138,22 +123,17 @@ def seed_crops(connection) -> None:
     ids = {}
     for plant in plants:
         name = display_name(plant)
-        crop_id = crop_slug(name)
-        if not crop_id or crop_id in ids.values():
+        if plant["name"] in ids:
             raise RuntimeError(f"Could not seed a crop id for {name}")
-        ids[plant["name"]] = crop_id
-        prepared.append((crop_id, name, plant))
-    for crop_id, name, plant in prepared:
-        connection.execute(
+        cursor = connection.execute(
             """
             INSERT INTO crop (
-                id, name, category, emoji, sqft, spacing, depth_in,
+                name, category, emoji, sqft, spacing, depth_in,
                 sun, water, trellis, notes
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
-                crop_id,
                 name,
                 plant["category"],
                 plant.get("emoji") or "",
@@ -166,7 +146,10 @@ def seed_crops(connection) -> None:
                 plant.get("notes") or "",
             ),
         )
-    for crop_id, name, plant in prepared:
+        ids[plant["name"]] = cursor.lastrowid
+        prepared.append((name, plant))
+    for name, plant in prepared:
+        crop_id = ids[plant["name"]]
         for relation, key in (("companion", "companions"), ("avoid", "avoid")):
             for other_name in plant.get(key) or []:
                 other_id = ids.get(other_name)
@@ -187,10 +170,10 @@ def connect():
     return open_db()
 
 
-def require_crop_id(crop_id: str) -> str:
-    if not CROP_ID.fullmatch(crop_id):
-        raise HTTPException(status_code=400, detail="Invalid crop id")
-    return crop_id
+def require_crop_id(crop_id: str) -> int:
+    if not crop_id.isdigit() or crop_id.startswith("0"):
+        raise HTTPException(status_code=404, detail="Crop not found")
+    return int(crop_id)
 
 
 def parse_body(raw: bytes) -> dict:
@@ -266,12 +249,22 @@ def string_list(body: dict, key: str, noun: str) -> list[str]:
     return cleaned
 
 
-def id_list(body: dict, key: str, noun: str) -> list[str]:
-    values = string_list(body, key, noun)
-    for value in values:
-        if not CROP_ID.fullmatch(value):
+def id_list(body: dict, key: str, noun: str) -> list[int]:
+    if key not in body or body[key] is None:
+        return []
+    value = body[key]
+    if not isinstance(value, list):
+        raise HTTPException(status_code=400, detail=f"{key} must be a list of crop ids")
+    cleaned = []
+    seen = set()
+    for item in value:
+        if isinstance(item, bool) or not isinstance(item, int) or item < 1:
             raise HTTPException(status_code=400, detail="Invalid crop id")
-    return values
+        if item in seen:
+            raise HTTPException(status_code=400, detail=f"Duplicate {noun}")
+        seen.add(item)
+        cleaned.append(item)
+    return cleaned
 
 
 def choice_field(body: dict, key: str, choices: tuple, label: str) -> str:
@@ -281,12 +274,15 @@ def choice_field(body: dict, key: str, choices: tuple, label: str) -> str:
     return value
 
 
-def parse_crop(crop_id: str, body: dict) -> dict:
+def parse_crop(body: dict, crop_id: int | None) -> dict:
     unknown = set(body) - FIELDS
     if unknown:
         name = sorted(unknown)[0]
         raise HTTPException(status_code=400, detail=f"{name} is not part of a crop")
-    if body.get("id") != crop_id:
+    if crop_id is None:
+        if body.get("id") is not None:
+            raise HTTPException(status_code=400, detail="id is assigned by the server")
+    elif body.get("id") != crop_id:
         raise HTTPException(status_code=400, detail="id must match the URL")
     name = text_field(body, "name")
     if name == "":
@@ -320,7 +316,7 @@ def parse_crop(crop_id: str, body: dict) -> dict:
     for alias in crop["aliases"]:
         if alias.casefold() == folded_name:
             raise HTTPException(status_code=400, detail="An alias cannot match the crop name")
-    if crop_id in crop["companions"] or crop_id in crop["avoid"]:
+    if crop_id is not None and (crop_id in crop["companions"] or crop_id in crop["avoid"]):
         raise HTTPException(status_code=400, detail="A crop cannot link to itself")
     if set(crop["companions"]) & set(crop["avoid"]):
         raise HTTPException(
@@ -332,7 +328,7 @@ def parse_crop(crop_id: str, body: dict) -> dict:
 
 def crop_json(row, aliases, companions, avoid) -> dict:
     return {
-        "id": row["id"],
+        "id": int(row["id"]),
         "name": row["name"],
         "category": row["category"],
         "emoji": row["emoji"] or "",
@@ -352,7 +348,7 @@ def crop_json(row, aliases, companions, avoid) -> dict:
     }
 
 
-def children_for(connection, crop_ids: list[str]) -> tuple[dict, dict, dict]:
+def children_for(connection, crop_ids: list[int]) -> tuple[dict, dict, dict]:
     if not crop_ids:
         return {}, {}, {}
     marks = ",".join("?" for _ in crop_ids)
@@ -376,7 +372,7 @@ def children_for(connection, crop_ids: list[str]) -> tuple[dict, dict, dict]:
         aliases[row["crop_id"]].append(row["alias"])
     for row in link_rows:
         target = companions if row["relation"] == "companion" else avoid
-        target[row["crop_id"]].append(row["other_id"])
+        target[row["crop_id"]].append(int(row["other_id"]))
     for crop_id in crop_ids:
         aliases[crop_id].sort(key=str.casefold)
         companions[crop_id].sort()
@@ -393,7 +389,7 @@ def rows_json(connection, rows) -> list[dict]:
     ]
 
 
-def fetch_crop(connection, crop_id: str):
+def fetch_crop(connection, crop_id: int):
     return connection.execute("SELECT * FROM crop WHERE id = ?", (crop_id,)).fetchone()
 
 
@@ -433,7 +429,7 @@ def list_crops(query: str | None, category: str | None, archived: int) -> list[d
         return rows_json(connection, rows)
 
 
-def read_crop(crop_id: str) -> dict:
+def read_crop(crop_id: int) -> dict:
     with closing(connect()) as connection:
         row = fetch_crop(connection, crop_id)
         if row is None:
@@ -441,16 +437,20 @@ def read_crop(crop_id: str) -> dict:
         return rows_json(connection, [row])[0]
 
 
-def labels_used_by_others(connection, crop_id: str) -> set[str]:
-    rows = connection.execute(
-        "SELECT name FROM crop WHERE id != ?",
-        (crop_id,),
-    ).fetchall()
+def labels_used_by_others(connection, crop_id: int | None) -> set[str]:
+    if crop_id is None:
+        rows = connection.execute("SELECT name FROM crop").fetchall()
+        alias_rows = connection.execute("SELECT alias FROM crop_alias").fetchall()
+    else:
+        rows = connection.execute(
+            "SELECT name FROM crop WHERE id != ?",
+            (crop_id,),
+        ).fetchall()
+        alias_rows = connection.execute(
+            "SELECT alias FROM crop_alias WHERE crop_id != ?",
+            (crop_id,),
+        ).fetchall()
     used = {row["name"].casefold() for row in rows}
-    alias_rows = connection.execute(
-        "SELECT alias FROM crop_alias WHERE crop_id != ?",
-        (crop_id,),
-    ).fetchall()
     used.update(row["alias"].casefold() for row in alias_rows)
     return used
 
@@ -476,52 +476,44 @@ def ensure_available(connection, crop: dict) -> None:
         raise HTTPException(status_code=400, detail=f"Unknown crop {missing[0]}")
 
 
-def write_crop(connection, crop: dict) -> None:
-    connection.execute(
+def crop_values(crop: dict) -> tuple:
+    return (
+        crop["name"],
+        crop["category"],
+        crop["emoji"],
+        crop["sqft"],
+        crop["spacing"],
+        crop["depth_in"],
+        crop["sowing_depth_mm"],
+        crop["days_to_maturity"],
+        crop["sun"],
+        crop["water"],
+        1 if crop["trellis"] else 0,
+        crop["notes"],
+        1 if crop["archived"] else 0,
+    )
+
+
+def insert_crop_row(connection, crop: dict) -> int:
+    cursor = connection.execute(
         """
         INSERT INTO crop (
-            id, name, category, emoji, sqft, spacing, depth_in, sowing_depth_mm,
+            name, category, emoji, sqft, spacing, depth_in, sowing_depth_mm,
             days_to_maturity, sun, water, trellis, notes, archived
-        )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(id) DO UPDATE SET
-            name = excluded.name,
-            category = excluded.category,
-            emoji = excluded.emoji,
-            sqft = excluded.sqft,
-            spacing = excluded.spacing,
-            depth_in = excluded.depth_in,
-            sowing_depth_mm = excluded.sowing_depth_mm,
-            days_to_maturity = excluded.days_to_maturity,
-            sun = excluded.sun,
-            water = excluded.water,
-            trellis = excluded.trellis,
-            notes = excluded.notes,
-            archived = excluded.archived
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
-        (
-            crop["id"],
-            crop["name"],
-            crop["category"],
-            crop["emoji"],
-            crop["sqft"],
-            crop["spacing"],
-            crop["depth_in"],
-            crop["sowing_depth_mm"],
-            crop["days_to_maturity"],
-            crop["sun"],
-            crop["water"],
-            1 if crop["trellis"] else 0,
-            crop["notes"],
-            1 if crop["archived"] else 0,
-        ),
+        crop_values(crop),
     )
-    connection.execute("DELETE FROM crop_alias WHERE crop_id = ?", (crop["id"],))
-    connection.execute("DELETE FROM crop_link WHERE crop_id = ?", (crop["id"],))
+    return cursor.lastrowid
+
+
+def replace_children(connection, crop_id: int, crop: dict) -> None:
+    connection.execute("DELETE FROM crop_alias WHERE crop_id = ?", (crop_id,))
+    connection.execute("DELETE FROM crop_link WHERE crop_id = ?", (crop_id,))
     for alias in crop["aliases"]:
         connection.execute(
             "INSERT INTO crop_alias (crop_id, alias) VALUES (?, ?)",
-            (crop["id"], alias),
+            (crop_id, alias),
         )
     for other_id in crop["companions"]:
         connection.execute(
@@ -529,7 +521,7 @@ def write_crop(connection, crop: dict) -> None:
             INSERT INTO crop_link (crop_id, other_id, relation)
             VALUES (?, ?, 'companion')
             """,
-            (crop["id"], other_id),
+            (crop_id, other_id),
         )
     for other_id in crop["avoid"]:
         connection.execute(
@@ -537,16 +529,46 @@ def write_crop(connection, crop: dict) -> None:
             INSERT INTO crop_link (crop_id, other_id, relation)
             VALUES (?, ?, 'avoid')
             """,
-            (crop["id"], other_id),
+            (crop_id, other_id),
         )
 
 
-def save_crop(crop_id: str, body: dict) -> dict:
-    crop = parse_crop(crop_id, body)
+def insert_crop(connection, crop: dict) -> int:
+    crop_id = insert_crop_row(connection, crop)
+    replace_children(connection, crop_id, crop)
+    return crop_id
+
+
+def update_crop(connection, crop: dict) -> None:
+    connection.execute(
+        """
+        UPDATE crop SET
+            name = ?,
+            category = ?,
+            emoji = ?,
+            sqft = ?,
+            spacing = ?,
+            depth_in = ?,
+            sowing_depth_mm = ?,
+            days_to_maturity = ?,
+            sun = ?,
+            water = ?,
+            trellis = ?,
+            notes = ?,
+            archived = ?
+        WHERE id = ?
+        """,
+        (*crop_values(crop), crop["id"]),
+    )
+    replace_children(connection, crop["id"], crop)
+
+
+def create_crop(body: dict) -> dict:
+    crop = parse_crop(body, None)
     with closing(connect()) as connection:
         try:
             ensure_available(connection, crop)
-            write_crop(connection, crop)
+            crop_id = insert_crop(connection, crop)
             connection.commit()
             row = fetch_crop(connection, crop_id)
             return rows_json(connection, [row])[0]
@@ -558,7 +580,26 @@ def save_crop(crop_id: str, body: dict) -> dict:
             raise
 
 
-def archive_crop(crop_id: str) -> None:
+def save_crop(crop_id: int, body: dict) -> dict:
+    crop = parse_crop(body, crop_id)
+    with closing(connect()) as connection:
+        try:
+            if fetch_crop(connection, crop_id) is None:
+                raise HTTPException(status_code=404, detail="Crop not found")
+            ensure_available(connection, crop)
+            update_crop(connection, crop)
+            connection.commit()
+            row = fetch_crop(connection, crop_id)
+            return rows_json(connection, [row])[0]
+        except HTTPException:
+            connection.rollback()
+            raise
+        except Exception:
+            connection.rollback()
+            raise
+
+
+def archive_crop(crop_id: int) -> None:
     with closing(connect()) as connection:
         row = fetch_crop(connection, crop_id)
         if row is None:
@@ -595,20 +636,22 @@ def get_crops(
     return list_crops(query, category_filter(category), archived_filter(archived))
 
 
+@router.post("/crops")
+async def post_crop(request: Request) -> dict:
+    return create_crop(parse_body(await request.body()))
+
+
 @router.get("/crops/{crop_id}")
 def get_crop(crop_id: str) -> dict:
-    require_crop_id(crop_id)
-    return read_crop(crop_id)
+    return read_crop(require_crop_id(crop_id))
 
 
 @router.put("/crops/{crop_id}")
 async def put_crop(crop_id: str, request: Request) -> dict:
-    require_crop_id(crop_id)
-    return save_crop(crop_id, parse_body(await request.body()))
+    return save_crop(require_crop_id(crop_id), parse_body(await request.body()))
 
 
 @router.delete("/crops/{crop_id}")
 def delete_crop(crop_id: str) -> Response:
-    require_crop_id(crop_id)
-    archive_crop(crop_id)
+    archive_crop(require_crop_id(crop_id))
     return Response(status_code=204)

@@ -12,6 +12,8 @@
   import SetupPlan from '../components/planner/SetupPlan.svelte';
   import Toolbar from '../components/planner/Toolbar.svelte';
   import { api } from '$lib/api/api';
+  import { createSaveQueue, sceneFromPlan } from '$lib/domain/row-save';
+  import { gardenScene } from '$lib/domain/scene';
   import { gardenSizeLabel, inferScale } from '$lib/domain/scale';
   import { mountPlanner } from '$lib/planner/mount';
   import plannerStyles from '$lib/planner/styles.css?inline';
@@ -227,6 +229,7 @@
     document.head.appendChild(style);
 
     const planner = mountPlanner(element);
+    const saver = createSaveQueue();
     let saveTimer = 0;
     let stopped = false;
     let serverPhotoUrl = null;
@@ -236,13 +239,46 @@
       return name.replace(/\.(jpg|png|webp)$/i, '') || null;
     }
 
-    function onPlanChange() {
+    function announceSaveFailure() {
+      window.alert('Could not save this change.');
+    }
+
+    function armSaves(now) {
       window.clearTimeout(saveTimer);
+      const delay = saver.nextDelay(now);
+      if (delay == null) return;
       saveTimer = window.setTimeout(() => {
-        api.put('/garden', globalThis.currentPlan()).catch((error) => {
-          console.error(error);
-        });
-      }, 800);
+        saveTimer = 0;
+        releaseSaves(Date.now());
+      }, delay);
+    }
+
+    function submitSave(request) {
+      const sent = request.method === 'DELETE'
+        ? api.delete(request.path)
+        : api.put(request.path, request.body);
+      sent.then((row) => {
+        const outcome = saver.succeeded(request, row, Date.now());
+        if (outcome.alert) announceSaveFailure();
+        if (outcome.stamp && !stopped) {
+          globalThis.adoptRowId(outcome.stamp.type, outcome.stamp.from, outcome.stamp.to);
+        }
+        releaseSaves(Date.now());
+      }).catch((error) => {
+        console.error(error);
+        if (saver.failed(request)) announceSaveFailure();
+      });
+    }
+
+    function releaseSaves(now) {
+      for (const request of saver.take(now)) submitSave(request);
+      armSaves(now);
+    }
+
+    function onPlanChange() {
+      if (stopped) return;
+      saver.observe(sceneFromPlan(globalThis.currentPlan()), Date.now());
+      releaseSaves(Date.now());
     }
 
     async function onPlotPhoto() {
@@ -286,14 +322,16 @@
       document.addEventListener('plotimage', notePlotImage);
       document.addEventListener('scalechange', noteScale);
       document.addEventListener('calibline', noteCalibLine);
-      if (plan) globalThis.applyPlan(plan);
+      if (plan) globalThis.applyPlan(gardenScene(plan));
+      saver.baseline(sceneFromPlan(globalThis.currentPlan()));
       settleScale(new URLSearchParams(window.location.search).get('setup') === 'plan');
       plannerReady = true;
     }).catch(() => {});
 
     return () => {
       stopped = true;
-      window.clearTimeout(saveTimer);
+      saver.flush(Date.now());
+      releaseSaves(Date.now());
       document.removeEventListener('planchange', onPlanChange);
       document.removeEventListener('plotphoto', onPlotPhoto);
       document.removeEventListener('plotimage', notePlotImage);

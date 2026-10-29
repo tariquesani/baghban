@@ -4,6 +4,7 @@
   let plantingAreas = $state.raw([]);
   let obstacles = $state.raw([]);
   let selectedId = $state(null);
+  let selectedType = $state(null);
 
   /** @param {{ id: string, name: string, color: string, plants?: string[] }} bed */
   function plantingRow(bed) {
@@ -29,12 +30,13 @@
   /**
    * New row objects each time. The canvas mutates the real records
    * outside Svelte, and a keyed row only redraws when its object changes.
-   * @param {{ beds: Parameters<typeof plantingRow>[0][], obstacles: Parameters<typeof obstacleRow>[0][], selectedId: string | null }} detail
+   * @param {{ beds: Parameters<typeof plantingRow>[0][], obstacles: Parameters<typeof obstacleRow>[0][], selectedObj: { type: 'bed' | 'obstacle', id: number | string } | null }} detail
    */
   function showLists(detail) {
     plantingAreas = detail.beds.map(plantingRow);
     obstacles = detail.obstacles.map(obstacleRow);
-    selectedId = detail.selectedId;
+    selectedId = detail.selectedObj ? detail.selectedObj.id : null;
+    selectedType = detail.selectedObj ? detail.selectedObj.type : null;
   }
 
   /** @param {CustomEvent} event */
@@ -52,6 +54,7 @@
 <AreaList
   areas={plantingAreas}
   {selectedId}
+  {selectedType}
   hostId="bedList"
   emptyLabel="No planting areas yet"
   selectType="bed"
@@ -59,6 +62,7 @@
 <AreaList
   areas={obstacles}
   {selectedId}
+  {selectedType}
   hostId="obstacleList"
   emptyLabel="No obstacles yet"
   selectType="obstacle"

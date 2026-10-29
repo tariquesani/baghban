@@ -90,7 +90,7 @@ function drawObstacle(o) {
   const ox = ft(o.x), oy = ft(o.y), w = ft(o.w), h = ft(o.h);
   const cx = ox + w/2, cy = oy + h/2;
   const rot = o.rotation || 0;
-  const sel = o.id === selectedId;
+  const sel = isSelected(selectedObj, 'obstacle', o.id);
 
   ctx.save();
   ctx.translate(cx, cy);
@@ -220,8 +220,39 @@ function rotationInsideGarden(bed, target, fallback) {
   return near;
 }
 
+function cropEmojis(plants) {
+  return (plants || [])
+    .map(name => PLANT_DATA[name] && PLANT_DATA[name].emoji)
+    .filter(Boolean);
+}
+
+function drawCropEmojis(emojis, centerX, topY, maxWidth, maxHeight) {
+  if (!emojis.length || maxWidth < 10 || maxHeight < 10) return;
+  const gap = 2;
+  let size = Math.min(26, Math.floor(maxHeight), Math.floor((maxWidth + gap) / Math.min(emojis.length, 8)) - gap);
+  size = Math.max(12, Math.min(26, size));
+  const perRow = Math.max(1, Math.floor((maxWidth + gap) / (size + gap)));
+  ctx.save();
+  ctx.fillStyle = '#fff';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.font = `${size}px sans-serif`;
+  emojis.forEach((emoji, index) => {
+    const col = index % perRow;
+    const row = Math.floor(index / perRow);
+    if (topY + (row + 1) * (size + gap) > topY + maxHeight + gap) return;
+    const rowCount = Math.min(perRow, emojis.length - row * perRow);
+    const rowWidth = rowCount * size + (rowCount - 1) * gap;
+    const x = centerX - rowWidth / 2 + size / 2 + col * (size + gap);
+    const y = topY + size / 2 + row * (size + gap);
+    ctx.globalAlpha = 0.95;
+    ctx.fillText(emoji, x, y);
+  });
+  ctx.restore();
+}
+
 function drawPolygonBed(b) {
-  const sel = b.id === selectedId;
+  const sel = isSelected(selectedObj, 'bed', b.id);
   const pivot = polygonPivot(b);
   const rot = b.rotation || 0;
   ctx.save();
@@ -248,48 +279,6 @@ function drawPolygonBed(b) {
   ctx.lineWidth = sel ? 3 : 1.5;
   path(); ctx.stroke();
 
-  ctx.save();
-  path(); ctx.clip();
-  ctx.strokeStyle = 'rgba(255,255,255,0.35)';
-  ctx.lineWidth = 0.8;
-  ctx.setLineDash([2, 2]);
-  ctx.beginPath();
-  const x0 = ft(b.x), y0 = ft(b.y);
-  for (let col = 1; col < b.w; col++) {
-    const lx = x0 + ft(col);
-    ctx.moveTo(lx, y0); ctx.lineTo(lx, y0 + ft(b.h));
-  }
-  for (let row = 1; row < b.h; row++) {
-    const ly = y0 + ft(row);
-    ctx.moveTo(x0, ly); ctx.lineTo(x0 + ft(b.w), ly);
-  }
-  ctx.stroke();
-  ctx.setLineDash([]);
-
-  if (!b.plantGrid && b.plants?.length) initPlantGrid(b);
-  if (b.plantGrid) {
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillStyle = '#fff';
-    b.plantGrid.forEach((row, ri) => {
-      row.forEach((cell, ci) => {
-        if (!cell || cell.occupied) return;
-        if (!polygonCellInside(b, ri, ci)) return;
-        const emoji = typeof cell === 'string' ? cell : cell.emoji;
-        if (!emoji) return;
-        const rSpan = cell.rowSpan || 1;
-        const cSpan = cell.colSpan || 1;
-        const ex = x0 + ft(ci) + ft(cSpan) / 2;
-        const ey = y0 + ft(ri) + ft(rSpan) / 2;
-        const fs = clamp(10, Math.round(SCALE * Math.min(rSpan, cSpan) * 0.58), 36);
-        ctx.font = `${fs}px sans-serif`;
-        ctx.globalAlpha = 0.92;
-        ctx.fillText(emoji, ex, ey);
-        ctx.globalAlpha = 1;
-      });
-    });
-  }
-  ctx.restore();
-
   const label = polygonLabelPoint(b.points);
   const area = bedArea(b);
   ctx.fillStyle = '#fff';
@@ -300,6 +289,16 @@ function drawPolygonBed(b) {
   ctx.globalAlpha = 0.85;
   ctx.fillText(`${area.toFixed(1)} sq ft`, ft(label.x), ft(label.y) + 8);
   ctx.globalAlpha = 1;
+  ctx.save();
+  path(); ctx.clip();
+  drawCropEmojis(
+    cropEmojis(b.plants),
+    ft(label.x),
+    ft(label.y) + 18,
+    Math.max(12, ft(Math.min(b.w, b.h)) * 0.8),
+    Math.max(12, ft(Math.min(b.w, b.h)) * 0.45),
+  );
+  ctx.restore();
   ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
   ctx.restore();
 
@@ -360,7 +359,7 @@ function drawBed(b) {
   const bx = ft(b.x), by = ft(b.y), w = ft(b.w), h = ft(b.h);
   const cx = bx + w/2, cy = by + h/2;
   const rot = b.rotation || 0;
-  const sel = b.id === selectedId;
+  const sel = isSelected(selectedObj, 'bed', b.id);
   const isPot     = b.type === 'pot';
   const isPlanter = b.type === 'planter';
 
@@ -411,14 +410,8 @@ function drawBed(b) {
     ctx.globalAlpha = 0.75;
     ctx.fillText(`${b.diam * 12}"`, potCx, hasPlants ? potCy - r * 0.18 : potCy + r * 0.32);
     ctx.globalAlpha = 1;
-    // Plant emojis (up to 2 inside the circle)
-    if (hasPlants && r > 20) {
-      ctx.font = `${clamp(9, 11, r / 3)}px sans-serif`;
-      b.plants.slice(0, 2).forEach((p, i) => {
-        ctx.globalAlpha = 0.88;
-        ctx.fillText(p, potCx, potCy + r * 0.2 + i * 14);
-      });
-      ctx.globalAlpha = 1;
+    if (hasPlants && r > 16) {
+      drawCropEmojis(cropEmojis(b.plants), potCx, potCy + r * 0.08, r * 1.5, r * 0.7);
     }
     ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
     ctx.restore();
@@ -440,167 +433,42 @@ function drawBed(b) {
     roundRect(x, y, w, h, 5); ctx.stroke();
   }
 
-  // Square-foot grid lines (beds only — not pots or planters)
-  if (!isPot && !isPlanter) {
-    ctx.save();
-    ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip();
-    ctx.strokeStyle = 'rgba(255,255,255,0.35)';
-    ctx.lineWidth = 0.8;
-    ctx.setLineDash([2, 2]);
-    ctx.beginPath();
-    for (let col = 1; col < b.w; col++) {
-      const lx = x + ft(col);
-      ctx.moveTo(lx, y); ctx.lineTo(lx, y + h);
-    }
-    for (let row = 1; row < b.h; row++) {
-      const ly = y + ft(row);
-      ctx.moveTo(x, ly); ctx.lineTo(x + w, ly);
-    }
-    ctx.stroke();
-    ctx.setLineDash([]);
-    ctx.restore();
-  }
-
-  // Plant emojis from grid — draw first so name label sits on top
-  if (!isPlanter && !b.plantGrid && b.plants?.length) initPlantGrid(b);
-  if (!isPlanter && b.plantGrid) {
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    b.plantGrid.forEach((row, ri) => {
-      row.forEach((cell, ci) => {
-        if (!cell || cell.occupied) return;
-        const emoji = typeof cell === 'string' ? cell : cell.emoji;
-        if (!emoji) return;
-        const rSpan    = cell.rowSpan  || 1;
-        const cSpan    = cell.colSpan  || 1;
-        const perSqft  = cell.perSqft  || 1;
-        const ex = x + ft(ci) + ft(cSpan) / 2;
-        const ey = y + ft(ri) + ft(rSpan) / 2;
-        const fs = clamp(10, Math.round(SCALE * Math.min(rSpan, cSpan) * 0.58), 36);
-        ctx.font = `${fs}px sans-serif`;
-        ctx.globalAlpha = 0.92;
-        ctx.fillText(emoji, ex, ey);
-        // Dense plants: draw ×N count badge in bottom-right of cell
-        if (perSqft > 1) {
-          const badgeFs = clamp(7, Math.round(SCALE * 0.26), 12);
-          ctx.font = `bold ${badgeFs}px sans-serif`;
-          ctx.fillStyle = '#fff';
-          ctx.globalAlpha = 0.85;
-          ctx.textAlign = 'right'; ctx.textBaseline = 'bottom';
-          ctx.fillText(`×${perSqft}`, x + ft(ci) + ft(cSpan) - 2, y + ft(ri) + ft(rSpan) - 1);
-          ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-          ctx.fillStyle = '#fff';
-        }
-      });
-    });
-    ctx.globalAlpha = 1;
-  }
-
   if (isPlanter) {
     const lenIn = Math.round(b.w * 12);
     const widIn = Math.round(b.h * 12);
-    const icons = (b.plants || []).slice(0, 2)
-      .map(p => PLANT_DATA[p] && PLANT_DATA[p].emoji)
-      .filter(Boolean);
     const shortSide = Math.min(w, h);
     const nameFs = clamp(8, 13, shortSide / 3.2);
     const sizeFs = clamp(7, 11, shortSide / 4.5);
     const sizeLabel = `${lenIn}×${widIn}"`;
-
+    const emojis = cropEmojis(b.plants);
     ctx.save();
     roundRect(x, y, w, h, 5);
     ctx.clip();
     ctx.fillStyle = '#fff';
+    ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-
-    if (!icons.length) {
-      ctx.textAlign = 'center';
-      ctx.font = `bold ${nameFs}px sans-serif`;
-      ctx.fillText(b.name, x + w / 2, y + h / 2 - 5);
-      ctx.font = `${sizeFs}px sans-serif`;
-      ctx.globalAlpha = 0.8;
-      ctx.fillText(sizeLabel, x + w / 2, y + h / 2 + 8);
-      ctx.globalAlpha = 1;
-    } else if (w >= h + 8) {
-      const pad = 6;
-      ctx.font = `bold ${nameFs}px sans-serif`;
-      const nameW = ctx.measureText(b.name).width;
-      ctx.font = `${sizeFs}px sans-serif`;
-      const sizeW = ctx.measureText(sizeLabel).width;
-      const labelW = Math.max(nameW, sizeW);
-      ctx.textAlign = 'left';
-      ctx.font = `bold ${nameFs}px sans-serif`;
-      ctx.fillText(b.name, x + pad, y + h * 0.38);
-      ctx.font = `${sizeFs}px sans-serif`;
-      ctx.globalAlpha = 0.8;
-      ctx.fillText(sizeLabel, x + pad, y + h * 0.72);
-      ctx.globalAlpha = 1;
-
-      const emojiFs = clamp(12, Math.round(shortSide * 0.62), 28);
-      const gap = emojiFs * 1.05;
-      const iconSpan = (icons.length - 1) * gap;
-      const areaLeft = x + pad + labelW + 8;
-      const areaRight = x + w - 6;
-      const cxIcons = (areaLeft + areaRight) / 2;
-      ctx.font = `${emojiFs}px sans-serif`;
-      ctx.textAlign = 'center';
-      icons.forEach((emoji, i) => {
-        ctx.globalAlpha = 0.95;
-        ctx.fillText(emoji, cxIcons - iconSpan / 2 + i * gap, y + h / 2);
-      });
-      ctx.globalAlpha = 1;
-    } else {
-      const emojiFs = clamp(12, Math.round(shortSide * 0.5), 28);
-      const gap = emojiFs * 1.05;
-      const iconSpan = (icons.length - 1) * gap;
-      ctx.textAlign = 'center';
-      ctx.font = `${emojiFs}px sans-serif`;
-      icons.forEach((emoji, i) => {
-        ctx.globalAlpha = 0.95;
-        ctx.fillText(emoji, x + w / 2 - iconSpan / 2 + i * gap, y + h * 0.32);
-      });
-      ctx.globalAlpha = 1;
-      ctx.font = `bold ${nameFs}px sans-serif`;
-      ctx.fillText(b.name, x + w / 2, y + h * 0.68);
-      ctx.font = `${sizeFs}px sans-serif`;
-      ctx.globalAlpha = 0.8;
-      ctx.fillText(sizeLabel, x + w / 2, y + h * 0.86);
-      ctx.globalAlpha = 1;
-    }
+    const nameY = emojis.length ? y + h * 0.28 : y + h / 2 - 6;
+    ctx.font = `bold ${nameFs}px sans-serif`;
+    ctx.fillText(b.name, x + w / 2, nameY);
+    ctx.font = `${sizeFs}px sans-serif`;
+    ctx.globalAlpha = 0.8;
+    ctx.fillText(sizeLabel, x + w / 2, nameY + nameFs);
+    ctx.globalAlpha = 1;
+    drawCropEmojis(emojis, x + w / 2, y + h * 0.52, w - 10, h * 0.42);
     ctx.restore();
   }
 
-  // Name label backdrop strip
   if (!isPlanter) {
-  const hasGrid = b.plantGrid && b.plants && b.plants.length;
   const dimLabel = `${b.w}×${b.h} · ${b.w*b.h} sqft`;
-  if (hasGrid) {
-    ctx.fillStyle = 'rgba(0,0,0,0.32)';
-    ctx.fillRect(x, y, w, 36);
-  }
-
-  // Bed name
   ctx.fillStyle = '#fff';
   ctx.font = `bold ${clamp(10, 13, w / 5)}px sans-serif`;
   ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-  ctx.fillText(b.name, x + w/2, y + (hasGrid ? 3 : 7));
-
-  // Dimensions sub-label — always shown
+  ctx.fillText(b.name, x + w/2, y + 7);
   ctx.font = `${clamp(9, 11, w/6)}px sans-serif`;
   ctx.globalAlpha = 0.8;
-  ctx.fillText(dimLabel, x + w/2, y + (hasGrid ? 18 : 22));
+  ctx.fillText(dimLabel, x + w/2, y + 22);
   ctx.globalAlpha = 1;
-
-  if (!hasGrid) {
-    // Plant name fallback (before organizer is opened)
-    if (b.plants && b.plants.length && h > 70) {
-      ctx.font = `${clamp(9, 11, w/6)}px sans-serif`;
-      b.plants.slice(0, 4).forEach((p, i) => {
-        ctx.globalAlpha = 0.88;
-        ctx.fillText(p, x + w/2, y + 38 + i * 14);
-      });
-      ctx.globalAlpha = 1;
-    }
-  }
+  drawCropEmojis(cropEmojis(b.plants), x + w / 2, y + 36, Math.max(12, w - 8), Math.max(12, h - 42));
   }
 
   ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
@@ -648,7 +516,7 @@ function clamp(min, max, val) { return Math.min(max, Math.max(min, val)); }
 
 // ─── Hit test ────────────────────────────────────────────────────────────────
 function applyDragRotation(pointerX, pointerY, shiftKey) {
-  const selItem = beds.find(b => b.id === selectedId) || obstacles.find(o => o.id === selectedId);
+  const selItem = getSelected();
   if (!selItem) return;
   const polygon = isPolygon(selItem);
   const cen = polygon
@@ -741,7 +609,7 @@ function pointerCursor() {
   }
   if (!pointerWorld) return 'grab';
   const wpx = pointerWorld.x, wpy = pointerWorld.y;
-  const selItem = selectedId && (beds.find(b => b.id === selectedId) || obstacles.find(o => o.id === selectedId));
+  const selItem = getSelected();
   if (selItem && isPolygon(selItem)) {
     if (hitPolygonRotateHandle(wpx, wpy, selItem)) return 'default';
     if (hitPolygonVertex(selItem, wpx, wpy, 12 / viewZoom) >= 0) return 'default';
@@ -785,11 +653,11 @@ function releaseSpace() {
 function finishPointerGesture(event) {
   if (calibDrag) finishCalibDrag();
   if (isRotating) isRotating = false;
-  if (dragging && isPolygon(dragging) && dragMode === 'vertex') dragging.plantGrid = null;
   dragging = null;
   dragMode = null;
   dragVertex = -1;
-  if (selectedId && beds.some(b => b.id === selectedId && isPolygon(b))) updatePolyPanel();
+  const selected = getSelected();
+  if (selected && selectedObj.type === 'bed' && isPolygon(selected)) updatePolyPanel();
   dragOriginPoints = null;
   dragOriginPivot = null;
   isPanning = false;
@@ -825,7 +693,7 @@ canvas.addEventListener('mousedown', e => {
   if (tool === 'draw-bed') { onDrawClick(wpx, wpy); return; }
 
   // Check rotation handle of selected item first
-  const selItem = selectedId && (beds.find(b => b.id === selectedId) || obstacles.find(o => o.id === selectedId));
+  const selItem = getSelected();
   if (selItem && isPolygon(selItem) && hitPolygonRotateHandle(wpx, wpy, selItem)) {
     beginRotate(selItem, wpx, wpy);
     refreshCursor();
@@ -962,6 +830,7 @@ canvas.addEventListener('mouseup', e => finishPointerGesture(e));
   let touchMoved    = false;
   let pinchDist     = null;
   let lastTapId     = null;   // for double-tap detection
+  let lastTapType   = null;
   let lastTapTime   = 0;
   let pinchMid      = null;
 
@@ -1013,7 +882,7 @@ canvas.addEventListener('mouseup', e => finishPointerGesture(e));
     }
 
     // Check rotation handle first
-    const selItem = selectedId && (beds.find(b => b.id === selectedId) || obstacles.find(o => o.id === selectedId));
+    const selItem = getSelected();
     if (selItem && isPolygon(selItem) && hitPolygonRotateHandle(wpx, wpy, selItem)) {
       beginRotate(selItem, wpx, wpy);
       touchHit = { type: 'bed', item: selItem };
@@ -1140,15 +1009,16 @@ canvas.addEventListener('mouseup', e => finishPointerGesture(e));
       const hitId  = touchHit.item.id;
       const hitType = touchHit.type;
       const now    = Date.now();
-      const isDoubleTap = hitId === lastTapId && (now - lastTapTime) < 350;
+      const isDoubleTap = isSelected({ type: lastTapType, id: lastTapId }, hitType, hitId) && (now - lastTapTime) < 350;
       if (isDoubleTap) {
         // Double-tap → open panel
         select(hitId, hitType, true);
-        lastTapId = null; lastTapTime = 0;
+        lastTapId = null; lastTapType = null; lastTapTime = 0;
       } else {
         // Single tap → just select (show rotation handle, no panel)
         select(hitId, hitType, false);
         lastTapId   = hitId;
+        lastTapType = hitType;
         lastTapTime = now;
       }
     } else if (!touchHit) {
@@ -1217,7 +1087,7 @@ document.addEventListener('keydown', e => {
     setTool('select');
     return;
   }
-  if (!selectedId) return;
+  if (!selectedObj) return;
   // Don't fire Delete when user is typing in an input / textarea
   const tag = document.activeElement.tagName;
   if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;

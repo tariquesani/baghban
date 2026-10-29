@@ -1,14 +1,17 @@
 <script>
+  import { isSelected } from '$lib/domain/selection.js';
+
   /**
    * @param {{
-   *   areas: Array<{ id: string, name: string, color: string, size: string, plants?: string }>,
-   *   selectedId: string | null,
+   *   areas: Array<{ id: number | string, name: string, color: string, size: string, plants?: string }>,
+   *   selectedId: number | string | null,
+   *   selectedType: 'bed' | 'obstacle' | null,
    *   hostId: string,
    *   emptyLabel: string,
    *   selectType: 'bed' | 'obstacle'
    * }} props
    */
-  let { areas, selectedId, hostId, emptyLabel, selectType } = $props();
+  let { areas, selectedId, selectedType, hostId, emptyLabel, selectType } = $props();
 
   /**
    * @param {HTMLElement} element
@@ -26,7 +29,7 @@
   {#each areas as area (area.id)}
     <button
       type="button"
-      class={['list-item', area.id === selectedId && 'selected']}
+      class={['list-item', isSelected({ type: selectedType, id: selectedId }, selectType, area.id) && 'selected']}
       onclick={() => globalThis.select(area.id, selectType)}
     >
       <div class="list-item-header">

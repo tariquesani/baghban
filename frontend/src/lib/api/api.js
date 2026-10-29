@@ -37,6 +37,18 @@ export const api = {
    * @param {string} path
    * @param {unknown} body
    */
+  post(path, body) {
+    return send(path, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+  },
+
+  /**
+   * @param {string} path
+   * @param {unknown} body
+   */
   put(path, body) {
     if (body instanceof Blob) {
       return send(path, {

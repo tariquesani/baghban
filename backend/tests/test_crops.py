@@ -1,84 +1,75 @@
 from fastapi.testclient import TestClient
 
 from app import app
-from crops import crop_slug, display_name, read_catalog
+from crops import display_name, read_catalog
 
 
 def fresh(monkeypatch, tmp_path):
     monkeypatch.setenv("BAGHBAN_DB", str(tmp_path / "baghban.db"))
 
 
-def expected_plants():
-    plants = read_catalog()
-    ids = {plant["name"]: crop_slug(display_name(plant)) for plant in plants}
-    expected = []
-    for plant in plants:
-        name = display_name(plant)
-        expected.append(
-            {
-                "id": ids[plant["name"]],
-                "name": name,
-                "category": plant["category"],
-                "emoji": plant["emoji"],
-                "sqft": plant["sqft"],
-                "spacing": plant["spacing"],
-                "depthIn": plant["depthIn"],
-                "sun": plant["sun"],
-                "water": plant["water"],
-                "trellis": plant["trellis"],
-                "notes": plant["notes"],
-                "companions": sorted(ids[item] for item in plant["companions"]),
-                "avoid": sorted(ids[item] for item in plant["avoid"]),
-            }
-        )
-    return expected
+def crops_by_name(client):
+    return {crop["name"]: crop for crop in client.get("/api/crops").json()}
+
+
+def crop_named(client, name):
+    found = crops_by_name(client)[name]
+    assert isinstance(found["id"], int)
+    return found
 
 
 def test_init_db_seeds_every_catalogue_plant(tmp_path, monkeypatch):
     fresh(monkeypatch, tmp_path)
     with TestClient(app) as client:
-        crops = client.get("/api/crops").json()
-        by_id = {crop["id"]: crop for crop in crops}
-        expected = expected_plants()
-        assert len(by_id) == len(expected)
-        for plant in expected:
-            saved = by_id[plant["id"]]
-            assert saved["name"] == plant["name"]
-            assert saved["category"] == plant["category"]
-            assert saved["emoji"] == plant["emoji"]
-            assert saved["sqft"] == plant["sqft"]
-            assert saved["spacing"] == plant["spacing"]
-            assert saved["depthIn"] == plant["depthIn"]
-            assert saved["sun"] == plant["sun"]
-            assert saved["water"] == plant["water"]
-            assert saved["trellis"] is plant["trellis"]
-            assert saved["notes"] == plant["notes"]
-            assert saved["companions"] == plant["companions"]
-            assert saved["avoid"] == plant["avoid"]
-            assert saved["aliases"] == []
-            assert saved["sowingDepthMm"] is None
-            assert saved["daysToMaturity"] is None
-            assert saved["archived"] is False
-        assert by_id["tomatoes"]["name"] == "Tomatoes"
-        assert by_id["cilantro"]["name"] == "Cilantro"
-        assert by_id["mint"]["name"] == "Mint"
-        assert "vegetable" in by_id
-        assert "herb" in by_id
-        assert "bhindi" not in by_id
+        saved = crops_by_name(client)
+        plants = read_catalog()
+        ids = {}
+        for plant in plants:
+            name = display_name(plant)
+            crop = saved[name]
+            assert isinstance(crop["id"], int)
+            ids[plant["name"]] = crop["id"]
+        assert len(saved) == len(plants)
+        assert len({crop["id"] for crop in saved.values()}) == len(plants)
+        for plant in plants:
+            crop = saved[display_name(plant)]
+            assert crop["category"] == plant["category"]
+            assert crop["emoji"] == plant["emoji"]
+            assert crop["sqft"] == plant["sqft"]
+            assert crop["spacing"] == plant["spacing"]
+            assert crop["depthIn"] == plant["depthIn"]
+            assert crop["sun"] == plant["sun"]
+            assert crop["water"] == plant["water"]
+            assert crop["trellis"] is plant["trellis"]
+            assert crop["notes"] == plant["notes"]
+            assert crop["companions"] == sorted(ids[item] for item in plant["companions"])
+            assert crop["avoid"] == sorted(ids[item] for item in plant["avoid"])
+            assert crop["aliases"] == []
+            assert crop["sowingDepthMm"] is None
+            assert crop["daysToMaturity"] is None
+            assert crop["archived"] is False
+        assert saved["Tomatoes"]["name"] == "Tomatoes"
+        assert "Cilantro" in saved
+        assert "Mint" in saved
+        assert "Vegetable" in saved
+        assert "Herb" in saved
+        assert "Bhindi" not in saved
 
 
 def test_second_init_leaves_a_renamed_crop(tmp_path, monkeypatch):
     fresh(monkeypatch, tmp_path)
     with TestClient(app) as client:
-        tomatoes = client.get("/api/crops/tomatoes").json()
+        tomatoes = crop_named(client, "Tomatoes")
         tomatoes["name"] = "Tomato"
-        saved = client.put("/api/crops/tomatoes", json=tomatoes)
+        saved = client.put(f"/api/crops/{tomatoes['id']}", json=tomatoes)
         assert saved.status_code == 200
-        assert saved.json()["id"] == "tomatoes"
+        assert saved.json()["id"] == tomatoes["id"]
         assert saved.json()["name"] == "Tomato"
         assert saved.json()["companions"] == tomatoes["companions"]
+        tomato_id = tomatoes["id"]
     with TestClient(app) as client:
-        again = client.get("/api/crops/tomatoes").json()
+        again = client.get(f"/api/crops/{tomato_id}").json()
+        assert again["id"] == tomato_id
         assert again["name"] == "Tomato"
         assert len(client.get("/api/crops").json()) == len(read_catalog())
 
@@ -86,97 +77,142 @@ def test_second_init_leaves_a_renamed_crop(tmp_path, monkeypatch):
 def test_alias_search_and_companion_round_trip(tmp_path, monkeypatch):
     fresh(monkeypatch, tmp_path)
     with TestClient(app) as client:
-        cilantro = client.get("/api/crops/cilantro").json()
+        cilantro = crop_named(client, "Cilantro")
         cilantro["aliases"] = ["Dhaniya"]
-        saved = client.put("/api/crops/cilantro", json=cilantro)
+        saved = client.put(f"/api/crops/{cilantro['id']}", json=cilantro)
         assert saved.status_code == 200
         found = client.get("/api/crops", params={"q": "dhaniya"}).json()
-        assert [crop["id"] for crop in found] == ["cilantro"]
+        assert [crop["id"] for crop in found] == [cilantro["id"]]
         herbs = client.get("/api/crops", params={"category": "Herbs"}).json()
         assert herbs
         assert all(crop["category"] == "Herbs" for crop in herbs)
-        assert any(crop["id"] == "cilantro" for crop in herbs)
+        assert any(crop["id"] == cilantro["id"] for crop in herbs)
 
-        tomatoes = client.get("/api/crops/tomatoes").json()
-        tomatoes["companions"] = ["basil", "chives"]
-        saved = client.put("/api/crops/tomatoes", json=tomatoes)
+        tomatoes = crop_named(client, "Tomatoes")
+        basil = crop_named(client, "Basil")
+        chives = crop_named(client, "Chives")
+        tomatoes["companions"] = [basil["id"], chives["id"]]
+        saved = client.put(f"/api/crops/{tomatoes['id']}", json=tomatoes)
         assert saved.status_code == 200
-        assert saved.json()["companions"] == ["basil", "chives"]
-        assert saved.json()["avoid"] == ["broccoli"]
+        assert saved.json()["companions"] == sorted([basil["id"], chives["id"]])
+        assert saved.json()["avoid"] == tomatoes["avoid"]
 
 
 def test_archive_hides_and_restore_returns(tmp_path, monkeypatch):
     fresh(monkeypatch, tmp_path)
     with TestClient(app) as client:
-        removed = client.delete("/api/crops/mint")
+        mint = crop_named(client, "Mint")
+        removed = client.delete(f"/api/crops/{mint['id']}")
         assert removed.status_code == 204
         listed = client.get("/api/crops").json()
-        assert all(crop["id"] != "mint" for crop in listed)
+        assert all(crop["id"] != mint["id"] for crop in listed)
         archived = client.get("/api/crops", params={"archived": "1"}).json()
-        assert [crop["id"] for crop in archived] == ["mint"]
-        stored = client.get("/api/crops/mint").json()
+        assert [crop["id"] for crop in archived] == [mint["id"]]
+        stored = client.get(f"/api/crops/{mint['id']}").json()
         assert stored["archived"] is True
         stored["archived"] = False
-        restored = client.put("/api/crops/mint", json=stored)
+        restored = client.put(f"/api/crops/{mint['id']}", json=stored)
         assert restored.status_code == 200
-        assert any(crop["id"] == "mint" for crop in client.get("/api/crops").json())
+        assert any(crop["id"] == mint["id"] for crop in client.get("/api/crops").json())
         assert client.get("/api/crops", params={"archived": "1"}).json() == []
 
 
 def test_put_rejects_bad_crops(tmp_path, monkeypatch):
     fresh(monkeypatch, tmp_path)
     with TestClient(app) as client:
-        tomatoes = client.get("/api/crops/tomatoes").json()
+        tomatoes = crop_named(client, "Tomatoes")
+        basil = crop_named(client, "Basil")
 
-        mismatch = client.put("/api/crops/tomatoes", json={**tomatoes, "id": "basil"})
+        mismatch = client.put(
+            f"/api/crops/{tomatoes['id']}",
+            json={**tomatoes, "id": basil["id"]},
+        )
         assert mismatch.status_code == 400
 
         selfish = client.put(
-            "/api/crops/tomatoes",
-            json={**tomatoes, "companions": ["tomatoes"]},
+            f"/api/crops/{tomatoes['id']}",
+            json={**tomatoes, "companions": [tomatoes["id"]]},
         )
         assert selfish.status_code == 400
 
         both = client.put(
-            "/api/crops/tomatoes",
-            json={**tomatoes, "companions": ["basil"], "avoid": ["basil"]},
+            f"/api/crops/{tomatoes['id']}",
+            json={**tomatoes, "companions": [basil["id"]], "avoid": [basil["id"]]},
         )
         assert both.status_code == 400
 
         missing = client.put(
-            "/api/crops/tomatoes",
-            json={**tomatoes, "companions": ["no-such-crop"]},
+            f"/api/crops/{tomatoes['id']}",
+            json={**tomatoes, "companions": [999999]},
         )
         assert missing.status_code == 400
 
-        named = client.put("/api/crops/basil", json={**client.get("/api/crops/basil").json(), "name": "Tomatoes"})
+        text_id = client.put(
+            f"/api/crops/{tomatoes['id']}",
+            json={**tomatoes, "companions": ["no-such-crop"]},
+        )
+        assert text_id.status_code == 400
+
+        named = client.put(
+            f"/api/crops/{basil['id']}",
+            json={**basil, "name": "Tomatoes"},
+        )
         assert named.status_code == 400
 
         alias = client.put(
-            "/api/crops/basil",
-            json={**client.get("/api/crops/basil").json(), "aliases": ["Tomatoes"]},
+            f"/api/crops/{basil['id']}",
+            json={**basil, "aliases": ["Tomatoes"]},
         )
         assert alias.status_code == 400
 
         same_name = client.put(
-            "/api/crops/basil",
-            json={**client.get("/api/crops/basil").json(), "aliases": ["Basil"]},
+            f"/api/crops/{basil['id']}",
+            json={**basil, "aliases": ["Basil"]},
         )
         assert same_name.status_code == 400
 
-        negative = client.put("/api/crops/tomatoes", json={**tomatoes, "sqft": -1})
+        negative = client.put(
+            f"/api/crops/{tomatoes['id']}",
+            json={**tomatoes, "sqft": -1},
+        )
         assert negative.status_code == 400
 
-        fraction = client.put("/api/crops/tomatoes", json={**tomatoes, "daysToMaturity": 1.5})
+        fraction = client.put(
+            f"/api/crops/{tomatoes['id']}",
+            json={**tomatoes, "daysToMaturity": 1.5},
+        )
         assert fraction.status_code == 400
 
-        created = client.put(
-            "/api/crops/bhindi",
-            json={"id": "bhindi", "name": "Bhindi", "category": "Vegetables"},
+        chosen = client.post(
+            "/api/crops",
+            json={"id": 4, "name": "Bhindi", "category": "Vegetables"},
+        )
+        assert chosen.status_code == 400
+
+        absent = client.put(
+            "/api/crops/999999",
+            json={"id": 999999, "name": "Bhindi", "category": "Vegetables"},
+        )
+        assert absent.status_code == 404
+
+        created = client.post(
+            "/api/crops",
+            json={"name": "Bhindi", "category": "Vegetables"},
         )
         assert created.status_code == 200
         body = created.json()
-        assert body["id"] == "bhindi"
+        assert isinstance(body["id"], int)
+        assert body["name"] == "Bhindi"
         assert body["sqft"] is None
         assert body["aliases"] == []
-        assert any(crop["id"] == "bhindi" for crop in client.get("/api/crops").json())
+        assert body["companions"] == []
+        assert body["avoid"] == []
+        assert crop_named(client, "Bhindi")["id"] == body["id"]
+
+        renamed = client.put(
+            f"/api/crops/{body['id']}",
+            json={**body, "name": "Okra"},
+        )
+        assert renamed.status_code == 200
+        assert renamed.json()["id"] == body["id"]
+        assert renamed.json()["name"] == "Okra"

@@ -4,7 +4,7 @@
   /**
    * @param {{
    *   draft: {
-   *     id: string,
+   *     id: number | '',
    *     name: string,
    *     category: string,
    *     emoji: string,
@@ -19,11 +19,11 @@
    *     notes: string,
    *     archived: boolean,
    *     aliases: string[],
-   *     companions: string[],
-   *     avoid: string[],
+   *     companions: number[],
+   *     avoid: number[],
    *   },
    *   creating: boolean,
-   *   choices: Array<{ id: string, name: string, emoji: string, aliases: string[] }>,
+   *   choices: Array<{ id: number, name: string, emoji: string, aliases: string[] }>,
    *   busy: boolean,
    *   error: string,
    *   narrow: boolean,
@@ -56,8 +56,8 @@
 
   /**
    * @param {string} query
-   * @param {string[]} selected
-   * @param {string[]} blocked
+   * @param {number[]} selected
+   * @param {number[]} blocked
    */
   function matching(query, selected, blocked) {
     const needle = query.trim().toLowerCase();
@@ -70,7 +70,7 @@
     }).slice(0, 6);
   }
 
-  /** @param {string} id */
+  /** @param {number} id */
   function cropName(id) {
     const found = choices.find((crop) => crop.id === id);
     return found ? found.name : id;
@@ -106,24 +106,24 @@
     draft[key] = optionalNumber(text);
   }
 
-  /** @param {string} id */
+  /** @param {number} id */
   function addCompanion(id) {
     draft.companions = [...draft.companions, id];
     companionQuery = '';
   }
 
-  /** @param {string} id */
+  /** @param {number} id */
   function removeCompanion(id) {
     draft.companions = draft.companions.filter((item) => item !== id);
   }
 
-  /** @param {string} id */
+  /** @param {number} id */
   function addAvoid(id) {
     draft.avoid = [...draft.avoid, id];
     avoidQuery = '';
   }
 
-  /** @param {string} id */
+  /** @param {number} id */
   function removeAvoid(id) {
     draft.avoid = draft.avoid.filter((item) => item !== id);
   }

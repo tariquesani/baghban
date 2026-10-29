@@ -1,4 +1,4 @@
-implementation-notes/*
+implementation-notes/
 .cursor/*
 backend/data/
 
@@ -106,3 +106,4 @@ vite.config.ts.timestamp-*
 *.sln
 *.sw?
 pyrightconfig.json
+backend/convert_old_plan.py

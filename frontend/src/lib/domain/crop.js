@@ -14,24 +14,6 @@ export const WATERS = [
 ];
 
 /**
- * Stable id from a display name. Matches the seed slug in the API.
- * @param {string} name
- */
-export function cropSlug(name) {
-  const parts = [];
-  let current = '';
-  for (const char of String(name).toLowerCase()) {
-    if (/[a-z0-9]/.test(char)) current += char;
-    else if (current) {
-      parts.push(current);
-      current = '';
-    }
-  }
-  if (current) parts.push(current);
-  return parts.join('-');
-}
-
-/**
  * @param {string} text
  * @returns {number | null}
  */
@@ -78,12 +60,12 @@ export function cloneCrop(crop) {
 }
 
 /**
+ * Body for create or update. The server assigns the id, so a new draft omits it.
  * @param {ReturnType<typeof emptyCrop>} draft
- * @param {string} id
  */
-export function cropPayload(draft, id) {
+export function cropPayload(draft) {
   return {
-    id,
+    ...(typeof draft.id === 'number' ? { id: draft.id } : {}),
     name: draft.name.trim(),
     category: draft.category,
     emoji: draft.emoji.trim(),

@@ -32,7 +32,3 @@ const PLANT_OPTIONS_HTML = buildPlantOptionsHTML(PLANT_CATALOG);
 
 const plantSelect = document.getElementById('plantSelect');
 if (plantSelect) plantSelect.innerHTML = PLANT_OPTIONS_HTML;
-
-// Reverse lookup: emoji character → sqft (used for grid migration)
-const EMOJI_SQFT = {};
-Object.values(PLANT_DATA).forEach(pd => { EMOJI_SQFT[pd.emoji] = pd.sqft; });
