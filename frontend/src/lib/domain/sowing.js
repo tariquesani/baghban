@@ -1,0 +1,156 @@
+/** Draft and request for recording a sowing. */
+
+const PHOTO_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
+const MAX_PHOTO_BYTES = 15 * 1024 * 1024;
+
+/**
+ * @param {Date} [now]
+ * @returns {string}
+ */
+export function localDate(now = new Date()) {
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${now.getFullYear()}-${month}-${day}`;
+}
+
+/** @param {string} date YYYY-MM-DD */
+export function formatSowingDate(date) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
+  if (!match) return '';
+  return `${match[3]}/${match[2]}/${match[1]}`;
+}
+
+/**
+ * A future date is a reminder. Today and earlier record the sowing as done.
+ * @param {string} date
+ * @param {string} today
+ * @returns {'planned' | 'done'}
+ */
+export function statusForSowingDate(date, today) {
+  if (date > today) return 'planned';
+  return 'done';
+}
+
+/**
+ * @param {unknown} crops
+ * @returns {{ id: number, name: string, emoji: string }[]}
+ */
+export function sowingCropChoices(crops) {
+  if (!Array.isArray(crops)) return [];
+  return crops
+    .filter((crop) => crop && typeof crop === 'object' && !crop.archived && typeof crop.name === 'string' && crop.name.trim())
+    .map((crop) => ({
+      id: typeof crop.id === 'number' ? crop.id : 0,
+      name: crop.name.trim(),
+      emoji: typeof crop.emoji === 'string' ? crop.emoji : '',
+    }))
+    .sort((left, right) => left.name.localeCompare(right.name));
+}
+
+/**
+ * @param {unknown} beds
+ * @returns {{ id: number, name: string }[]}
+ */
+export function sowingBedChoices(beds) {
+  if (!Array.isArray(beds)) return [];
+  return beds
+    .filter((bed) => bed && typeof bed === 'object' && !bed.removed && typeof bed.id === 'number' && typeof bed.name === 'string' && bed.name.trim())
+    .map((bed) => ({ id: bed.id, name: bed.name.trim() }))
+    .sort((left, right) => left.name.localeCompare(right.name));
+}
+
+/**
+ * @param {{ name: string }[]} crops
+ * @param {string} selected
+ */
+export function matchingCropName(crops, selected) {
+  const wanted = selected.trim().toLowerCase();
+  if (!wanted) return '';
+  const found = crops.find((crop) => crop.name.toLowerCase() === wanted);
+  return found ? found.name : '';
+}
+
+/**
+ * @param {{ date: string, crop: string, today: string, crops: { name: string }[] }} input
+ */
+export function sowingDraft(input) {
+  const date = input.date || input.today;
+  return {
+    date,
+    crop: matchingCropName(input.crops, input.crop),
+    status: statusForSowingDate(date, input.today),
+    bedId: 'none',
+    note: '',
+  };
+}
+
+/**
+ * @param {{ type?: string, size?: number } | null | undefined} file
+ */
+export function photoProblem(file) {
+  if (!file) return '';
+  if (!file.type || !PHOTO_TYPES.has(file.type)) return 'Use a JPEG, PNG, or WebP.';
+  if (typeof file.size === 'number' && file.size > MAX_PHOTO_BYTES) return 'Photo is larger than 15 MB.';
+  return '';
+}
+
+/**
+ * @param {{
+ *   crop: string,
+ *   date: string,
+ *   status: 'planned' | 'done',
+ *   bedId: string,
+ *   note: string,
+ * }} draft
+ * @returns {{ ok: true, body: {
+ *   kind: 'sowing',
+ *   date: string,
+ *   bedId: number | null,
+ *   crop: string,
+ *   status: 'planned' | 'done',
+ *   note: string,
+ *   photoUrl: string,
+ * }} | { ok: false, field: 'crop' | 'date' | 'bed', message: string }}
+ */
+export function sowingRequest(draft) {
+  const crop = draft.crop.trim();
+  if (!crop) return { ok: false, field: 'crop', message: 'Choose a crop.' };
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(draft.date)) {
+    return { ok: false, field: 'date', message: 'Choose a date.' };
+  }
+  const bedId = draft.bedId === 'none' || draft.bedId === '' ? null : Number(draft.bedId);
+  if (bedId !== null && !Number.isInteger(bedId)) {
+    return { ok: false, field: 'bed', message: 'Choose a bed.' };
+  }
+  return {
+    ok: true,
+    body: {
+      kind: 'sowing',
+      date: draft.date,
+      bedId,
+      crop,
+      status: draft.status,
+      note: draft.note.trim(),
+      photoUrl: '',
+    },
+  };
+}
+
+/**
+ * @param {{ id: number, date: string, crop: string, status: 'planned' | 'done', note?: string, photoUrl?: string, bedId?: number | null }} saved
+ * @param {string} bedName
+ * @returns {import('./calendar.js').CalendarEntry}
+ */
+export function calendarSowing(saved, bedName) {
+  return {
+    id: String(saved.id),
+    date: saved.date,
+    crop: saved.crop,
+    kind: 'sowing',
+    status: saved.status,
+    note: saved.note || '',
+    bed: bedName || '',
+    bedId: typeof saved.bedId === 'number' ? saved.bedId : null,
+    photoUrl: saved.photoUrl || '',
+  };
+}

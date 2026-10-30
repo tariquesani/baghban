@@ -7,6 +7,7 @@ crop is still in the bed. Taking it out sets that date and keeps the row.
 
 import json
 import logging
+import sqlite3
 from contextlib import closing
 from datetime import datetime, timezone
 
@@ -147,6 +148,33 @@ def assign_crop(bed_id: int, name: str) -> dict:
                 (cursor.lastrowid,),
             ).fetchone()
         return _assignment(active, crop)
+
+
+def place_crop(connection, bed_id: int, name: str, when: str) -> None:
+    """Give a bed an active crop on `when`. An active row for that pair stays."""
+    crop = match_crop(_crop_rows(connection), name)
+    if crop is None:
+        raise HTTPException(status_code=400, detail="Unknown crop")
+    active = connection.execute(
+        """
+        SELECT 1
+        FROM beds_crops
+        WHERE bed_id = ? AND crop_id = ? AND archived_on IS NULL
+        """,
+        (bed_id, int(crop["id"])),
+    ).fetchone()
+    if active is not None:
+        return
+    try:
+        connection.execute(
+            """
+            INSERT INTO beds_crops (bed_id, crop_id, created_on)
+            VALUES (?, ?, ?)
+            """,
+            (bed_id, int(crop["id"]), when),
+        )
+    except sqlite3.IntegrityError:
+        return
 
 
 def archive_crop(bed_id: int, name: str) -> None:

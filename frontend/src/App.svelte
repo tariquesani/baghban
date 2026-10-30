@@ -29,6 +29,9 @@
   let wide = $state(wideQuery.matches);
   let collapsed = $state(localStorage.getItem(railKey) === 'true');
   let drawerOpen = $state(false);
+  let entryOpen = $state(false);
+  let entrySession = $state(0);
+  let entryKind = $state('sowing');
   let canvas = $state({
     ready: false,
     activeTool: 'select',
@@ -49,6 +52,14 @@
   function syncPath() {
     path = normalize(window.location.pathname);
     search = window.location.search;
+    entryOpen = false;
+  }
+
+  /** @param {string} kind */
+  function askForEntry(kind) {
+    entryKind = kind;
+    entrySession += 1;
+    entryOpen = true;
   }
 
   function noteViewport() {
@@ -89,6 +100,7 @@
     if (!Object.hasOwn(screens, next)) return;
     event.preventDefault();
     drawerOpen = false;
+    entryOpen = false;
     const nextSearch = url.search;
     if (next === path && nextSearch === search) return;
     history.pushState(null, '', next + nextSearch);
@@ -120,6 +132,7 @@
     activeTool={canvas.activeTool}
     actions={canvas.actions}
     onToggle={toggleRail}
+    onAddEntry={askForEntry}
   />
   <div class="shell-main">
     <header class="page-head">
@@ -129,7 +142,7 @@
       {#if path === '/planner' || path === '/settings'}
         <Planner {search} panel={path === '/settings' ? 'settings' : 'planner'} onCanvas={noteCanvas} />
       {:else if path === '/calendar'}
-        <Calendar />
+        <Calendar bind:entryOpen {entrySession} {entryKind} />
       {:else if path === '/crops'}
         <Crops />
       {:else}

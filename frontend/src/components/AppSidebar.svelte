@@ -18,6 +18,7 @@
    *     printPlan: () => void,
    *   },
    *   onToggle: () => void,
+   *   onAddEntry: (kind: string) => void,
    * }} props
    */
   let {
@@ -29,6 +30,7 @@
     activeTool,
     actions,
     onToggle,
+    onAddEntry,
   } = $props();
 
   const entries = [
@@ -109,6 +111,30 @@
           <i data-lucide={entry.icon}></i>
           <span class="rail-label">{entry.label}</span>
         </button>
+      {/if}
+      {#if entry.id === 'calendar' && path === '/calendar'}
+        <div class="rail-tools">
+          <button type="button" class="rail-btn" title="Add Sowing" onclick={() => onAddEntry('sowing')}>
+            <i data-lucide="bean"></i>
+            <span class="rail-label">Add Sowing</span>
+          </button>
+          <button type="button" class="rail-btn" title="Add Care" onclick={() => onAddEntry('care')}>
+            <i data-lucide="hand-heart"></i>
+            <span class="rail-label">Add Care</span>
+          </button>
+          <button type="button" class="rail-btn" title="Add Harvest" onclick={() => onAddEntry('harvest')}>
+            <i data-lucide="groceries"></i>
+            <span class="rail-label">Add Harvest</span>
+          </button>
+          <button type="button" class="rail-btn" title="Add Pest Control" onclick={() => onAddEntry('pest')}>
+            <i data-lucide="bug-off"></i>
+            <span class="rail-label">Add Pest Control</span>
+          </button>
+          <button type="button" class="rail-btn" title="Add Diary Note" onclick={() => onAddEntry('diary')}>
+            <i data-lucide="notebook-pen"></i>
+            <span class="rail-label">Add Diary Note</span>
+          </button>
+        </div>
       {/if}
       {#if entry.id === 'planner' && showPlannerTools && actions}
         <div class="rail-tools">

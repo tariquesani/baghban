@@ -1,8 +1,8 @@
-"""Calendar entries: sowing, care, harvest, and diary.
+"""Calendar entries: sowing, care, pest, harvest, and diary.
 
 POST /api/calendar inserts a row and returns its integer id.
-PUT /api/calendar/{id} replaces that entry. Care and harvest rows are written
-with the calendar row, and replaced when a new body drops them.
+PUT /api/calendar/{id} replaces that entry. Care, pest, and harvest rows are
+written with the calendar row, and replaced when a new body drops them.
 Photos stay on /api/photos/{id}. An entry stores a bed id, or none for the
 whole garden. The bed's name lives on the bed table.
 """
@@ -16,9 +16,9 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import Response
 
 PHOTO_URL = re.compile(r"/api/photos/([A-Za-z0-9][A-Za-z0-9_-]{0,80})")
-KINDS = ("sowing", "care", "harvest", "diary")
+KINDS = ("sowing", "care", "pest", "harvest", "diary")
 STATUSES = ("planned", "done")
-ACTIONS = ("watering", "fertilising", "pest_control")
+ACTIONS = ("watering", "fertilising")
 SHARED_FIELDS = {
     "id",
     "kind",
@@ -32,7 +32,8 @@ SHARED_FIELDS = {
 FIELDS = {
     "sowing": SHARED_FIELDS,
     "diary": SHARED_FIELDS,
-    "care": SHARED_FIELDS | {"action", "product", "problem", "amount", "unit"},
+    "care": SHARED_FIELDS | {"action", "product", "amount", "unit"},
+    "pest": SHARED_FIELDS | {"problem", "product", "amount", "unit"},
     "harvest": SHARED_FIELDS | {"quantity", "unit", "weightGrams"},
 }
 
@@ -50,13 +51,17 @@ SELECT
     harvest.unit AS harvest_unit,
     harvest.weight_grams AS weight_grams,
     care.action AS action,
-    care.product AS product,
-    care.problem AS problem,
-    care.amount AS amount,
-    care.unit AS care_unit
+    care.product AS care_product,
+    care.amount AS care_amount,
+    care.unit AS care_unit,
+    pest.problem AS problem,
+    pest.product AS pest_product,
+    pest.amount AS pest_amount,
+    pest.unit AS pest_unit
 FROM calendar_entry
 LEFT JOIN harvest ON harvest.entry_id = calendar_entry.id
 LEFT JOIN care ON care.entry_id = calendar_entry.id
+LEFT JOIN pest ON pest.entry_id = calendar_entry.id
 """
 
 router = APIRouter()
@@ -67,7 +72,7 @@ def create_calendar_tables(connection) -> None:
         """
         CREATE TABLE IF NOT EXISTS calendar_entry (
             id        INTEGER PRIMARY KEY AUTOINCREMENT,
-            kind      TEXT NOT NULL CHECK (kind IN ('sowing', 'care', 'harvest', 'diary')),
+            kind      TEXT NOT NULL CHECK (kind IN ('sowing', 'care', 'pest', 'harvest', 'diary')),
             date      TEXT NOT NULL,
             bed_id    INTEGER REFERENCES bed(id),
             crop      TEXT,
@@ -91,9 +96,19 @@ def create_calendar_tables(connection) -> None:
         """
         CREATE TABLE IF NOT EXISTS care (
             entry_id  INTEGER PRIMARY KEY REFERENCES calendar_entry(id),
-            action    TEXT NOT NULL CHECK (action IN ('watering', 'fertilising', 'pest_control')),
+            action    TEXT NOT NULL CHECK (action IN ('watering', 'fertilising')),
             product   TEXT,
+            amount    REAL,
+            unit      TEXT
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS pest (
+            entry_id  INTEGER PRIMARY KEY REFERENCES calendar_entry(id),
             problem   TEXT,
+            product   TEXT,
             amount    REAL,
             unit      TEXT
         )
@@ -252,7 +267,13 @@ def parse_entry(body: dict, entry_id: int | None) -> dict:
         entry["care"] = {
             "action": action,
             "product": text_field(body, "product"),
+            "amount": number_field(body, "amount"),
+            "unit": text_field(body, "unit"),
+        }
+    if kind == "pest":
+        entry["pest"] = {
             "problem": text_field(body, "problem"),
+            "product": text_field(body, "product"),
             "amount": number_field(body, "amount"),
             "unit": text_field(body, "unit"),
         }
@@ -283,10 +304,14 @@ def entry_json(row) -> dict:
     }
     if row["kind"] == "care":
         body["action"] = row["action"]
-        body["product"] = row["product"] or ""
-        body["problem"] = row["problem"] or ""
-        body["amount"] = json_number(row["amount"])
+        body["product"] = row["care_product"] or ""
+        body["amount"] = json_number(row["care_amount"])
         body["unit"] = row["care_unit"] or ""
+    elif row["kind"] == "pest":
+        body["problem"] = row["problem"] or ""
+        body["product"] = row["pest_product"] or ""
+        body["amount"] = json_number(row["pest_amount"])
+        body["unit"] = row["pest_unit"] or ""
     elif row["kind"] == "harvest":
         body["quantity"] = json_number(row["quantity"])
         body["unit"] = row["harvest_unit"] or ""
@@ -320,12 +345,11 @@ def write_children(connection, entry_id: int, entry: dict) -> None:
         care = entry["care"]
         connection.execute(
             """
-            INSERT INTO care (entry_id, action, product, problem, amount, unit)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO care (entry_id, action, product, amount, unit)
+            VALUES (?, ?, ?, ?, ?)
             ON CONFLICT(entry_id) DO UPDATE SET
                 action = excluded.action,
                 product = excluded.product,
-                problem = excluded.problem,
                 amount = excluded.amount,
                 unit = excluded.unit
             """,
@@ -333,13 +357,34 @@ def write_children(connection, entry_id: int, entry: dict) -> None:
                 entry_id,
                 care["action"],
                 care["product"],
-                care["problem"],
                 care["amount"],
                 care["unit"],
             ),
         )
     else:
         connection.execute("DELETE FROM care WHERE entry_id = ?", (entry_id,))
+    if entry["kind"] == "pest":
+        treated = entry["pest"]
+        connection.execute(
+            """
+            INSERT INTO pest (entry_id, problem, product, amount, unit)
+            VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(entry_id) DO UPDATE SET
+                problem = excluded.problem,
+                product = excluded.product,
+                amount = excluded.amount,
+                unit = excluded.unit
+            """,
+            (
+                entry_id,
+                treated["problem"],
+                treated["product"],
+                treated["amount"],
+                treated["unit"],
+            ),
+        )
+    else:
+        connection.execute("DELETE FROM pest WHERE entry_id = ?", (entry_id,))
     if entry["kind"] == "harvest":
         harvest = entry["harvest"]
         connection.execute(
@@ -360,6 +405,17 @@ def write_children(connection, entry_id: int, entry: dict) -> None:
         )
     else:
         connection.execute("DELETE FROM harvest WHERE entry_id = ?", (entry_id,))
+
+
+def occupy_from_sowing(connection, entry: dict) -> None:
+    """A done sowing in a bed puts that crop there when the bed does not hold it."""
+    if entry["kind"] != "sowing" or entry["status"] != "done":
+        return
+    if entry["bed_id"] is None or not entry["crop"]:
+        return
+    from beds_crops import place_crop
+
+    place_crop(connection, entry["bed_id"], entry["crop"], entry["date"])
 
 
 def create_entry(body: dict) -> dict:
@@ -385,6 +441,7 @@ def create_entry(body: dict) -> dict:
             )
             entry_id = cursor.lastrowid
             write_children(connection, entry_id, entry)
+            occupy_from_sowing(connection, entry)
             connection.commit()
             return entry_json(fetch_entry(connection, entry_id))
         except HTTPException:
@@ -456,6 +513,7 @@ def remove_entry(entry_id: int) -> None:
         try:
             connection.execute("DELETE FROM harvest WHERE entry_id = ?", (entry_id,))
             connection.execute("DELETE FROM care WHERE entry_id = ?", (entry_id,))
+            connection.execute("DELETE FROM pest WHERE entry_id = ?", (entry_id,))
             connection.execute("DELETE FROM calendar_entry WHERE id = ?", (entry_id,))
             connection.commit()
         except Exception:
