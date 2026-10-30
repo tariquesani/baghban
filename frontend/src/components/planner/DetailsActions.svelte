@@ -1,38 +1,27 @@
-<script>
-  /**
-   * @param {HTMLElement} element
-   * @param {string} hostId
-   */
-  function place(element, hostId) {
-    const host = document.getElementById(hostId);
-    if (!host) return;
-    host.replaceWith(element);
-    return () => element.remove();
+<script lang="ts">
+  import CopyIcon from '@lucide/svelte/icons/copy';
+  import Trash2Icon from '@lucide/svelte/icons/trash-2';
+  import { Button } from '$lib/components/ui/button';
+  import { section } from './inspector';
+
+  function duplicate() {
+    const duplicateSelected = (globalThis as { duplicateSelected?: () => void }).duplicateSelected;
+    duplicateSelected?.();
+  }
+
+  function remove() {
+    const deleteSelected = (globalThis as { deleteSelected?: () => void }).deleteSelected;
+    deleteSelected?.();
   }
 </script>
 
-<button
-  type="button"
-  class="btn btn-sm btn-secondary close-panel"
-  title="Close panel"
-  {@attach (element) => place(element, 'closePanelHost')}
-  onclick={() => globalThis.select(null)}
->✕</button>
-
-<div class="panel-actions" {@attach (element) => place(element, 'panelActionsHost')}>
-  <button
-    type="button"
-    class="btn btn-sm btn-secondary"
-    title="Duplicate (makes a copy offset by 1 ft)"
-    onclick={() => globalThis.duplicateSelected()}
-  >📋 Duplicate</button>
-  <button type="button" class="btn btn-sm btn-danger" onclick={() => globalThis.deleteSelected()}>🗑 Remove</button>
+<div class="{section} flex gap-1.5">
+  <Button type="button" variant="outline" size="sm" class="h-7 flex-1 text-xs" onclick={duplicate}>
+    <CopyIcon data-icon="inline-start" />
+    Duplicate
+  </Button>
+  <Button type="button" variant="destructive" size="sm" class="h-7 flex-1 text-xs" onclick={remove}>
+    <Trash2Icon data-icon="inline-start" />
+    Remove
+  </Button>
 </div>
-
-<style>
-  .close-panel {
-    padding: 4px 8px;
-    font-size: 13px;
-    line-height: 1;
-  }
-</style>

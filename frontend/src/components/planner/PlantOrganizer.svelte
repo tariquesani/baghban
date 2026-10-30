@@ -1,22 +1,5 @@
 <script>
   let open = $state(false);
-  let showForBed = $state(false);
-
-  /**
-   * @param {HTMLElement} element
-   * @param {string} hostId
-   */
-  function place(element, hostId) {
-    const host = document.getElementById(hostId);
-    if (!host) return;
-    host.replaceWith(element);
-    return () => element.remove();
-  }
-
-  /** @param {CustomEvent} event */
-  function noteDetails(event) {
-    showForBed = Boolean(event.detail?.showPlants);
-  }
 
   function noteOpen() {
     if (open) globalThis.switchTab('plant');
@@ -39,20 +22,9 @@
 </script>
 
 <svelte:document
-  onselectiondetails={noteDetails}
   onorganizeropen={noteOpen}
   onorganizerclose={noteClose}
 />
-
-<div
-  class="organizer-row"
-  hidden={!showForBed}
-  {@attach (element) => place(element, 'organizerHost')}
->
-  <button type="button" class="btn btn-primary open-organizer" onclick={() => globalThis.openReport()}>
-    🌱 Open Plant Organizer
-  </button>
-</div>
 
 {#if open}
   <div
@@ -77,14 +49,3 @@
   </div>
 {/if}
 
-<style>
-  .organizer-row {
-    padding: 8px 14px;
-    border-bottom: 1px solid #ddeadd;
-  }
-  .open-organizer {
-    width: 100%;
-    padding: 9px;
-    font-size: 14px;
-  }
-</style>

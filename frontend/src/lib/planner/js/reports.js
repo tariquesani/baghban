@@ -159,7 +159,6 @@ function confirmNewGarden() {
   colorIdx  = 0;
   selectedObj = null;
   undoStack.length = 0;
-  document.getElementById('rightPanel').classList.remove('open');
   document.querySelector('.app')?.classList.remove('panel-open');
   select(null);
   setTool('select');

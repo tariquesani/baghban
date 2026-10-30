@@ -1,10 +1,6 @@
 <script>
   import { onDestroy } from 'svelte';
-  import BedPlants from '../components/planner/BedPlants.svelte';
-  import DetailsActions from '../components/planner/DetailsActions.svelte';
-  import DetailsForm from '../components/planner/DetailsForm.svelte';
-  import DetailsProperties from '../components/planner/DetailsProperties.svelte';
-  import DetailsTip from '../components/planner/DetailsTip.svelte';
+  import DetailsDrawer from '../components/planner/DetailsDrawer.svelte';
   import PlantOrganizer from '../components/planner/PlantOrganizer.svelte';
   import GardenSettings from '../components/planner/GardenSettings.svelte';
   import SetupChoice from '../components/planner/SetupChoice.svelte';
@@ -45,26 +41,6 @@
   /** @param {CustomEvent} event */
   function noteDetails(event) {
     details = event.detail;
-  }
-
-  /** @param {string} value */
-  function rename(value) {
-    globalThis.updateProp('name', value);
-  }
-
-  /** @param {string} value */
-  function resizeWidth(value) {
-    globalThis.updateProp('w', +value);
-  }
-
-  /** @param {string} value */
-  function resizeLength(value) {
-    globalThis.updateProp('h', +value);
-  }
-
-  /** @param {string} value */
-  function reviseNotes(value) {
-    globalThis.updateProp('notes', value);
   }
 
   /** @param {CustomEvent} event */
@@ -400,17 +376,7 @@
     {/if}
   </section>
 {/if}
-<DetailsActions />
-<DetailsForm
-  {details}
-  onName={rename}
-  onWidth={resizeWidth}
-  onLength={resizeLength}
-  onNotes={reviseNotes}
-/>
-<DetailsProperties {details} />
-<BedPlants {details} />
-<DetailsTip />
+<DetailsDrawer {details} />
 
 <style>
   .setup-column {

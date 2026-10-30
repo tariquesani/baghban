@@ -1,4 +1,4 @@
-// PLANT_CATALOG is loaded from js/catalog.js.
+// PLANT_CATALOG is passed in by the host, in the same shape as the old catalogue.
 const PLANT_DATA = {};
 for (const plant of PLANT_CATALOG) {
   const { name, category, ...fields } = plant;

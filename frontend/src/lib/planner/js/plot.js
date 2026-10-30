@@ -410,11 +410,7 @@ function clampPolygonMove(bed, points, pivot, dx, dy) {
   return { dx, dy };
 }
 
-function updatePolyPanel() {
-  const item = getSelected();
-  const stats = document.getElementById('polyStats');
-  const note = document.getElementById('neighborNote');
-  if (!item || !isPolygon(item) || !stats) return;
+function polygonSummary(item) {
   let edgeNote = '';
   const n = item.points.length;
   if (selectedVertex >= 0 && selectedVertex < n) {
@@ -426,12 +422,14 @@ function updatePolyPanel() {
     const b = formatFeetInches(Math.hypot(next.x - cur.x, next.y - cur.y));
     edgeNote = ` · edges ${a} and ${b}`;
   }
-  stats.textContent = `${bedArea(item).toFixed(1)} sq ft · ${item.points.length} corners${edgeNote}`;
-  const msg = neighborWarning(item);
-  if (note) {
-    note.style.display = msg ? 'block' : 'none';
-    note.textContent = msg;
-  }
+  return {
+    stats: `${bedArea(item).toFixed(1)} sq ft · ${item.points.length} corners${edgeNote}`,
+    neighbor: neighborWarning(item) || '',
+  };
+}
+
+function updatePolyPanel() {
+  if (detailsOpen) publishDetails();
 }
 
 function drawCalibLine(a, b, label, activeEnd, showHandles) {

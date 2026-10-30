@@ -1,4 +1,4 @@
-    * { box-sizing: border-box; margin: 0; padding: 0; }
+    .app, .app * { box-sizing: border-box; margin: 0; padding: 0; }
 
     body {
       font-family: -apple-system, BlinkMacSystemFont, sans-serif;
@@ -252,17 +252,6 @@
       cursor: grab;
     }
 
-    /* ── Right Panel ── */
-    .right-panel {
-      width: 220px; flex-shrink: 0;
-      background: #fafdf8;
-      border-left: 1px solid #c6d9c6;
-      display: none;
-      flex-direction: column;
-      overflow-y: auto;
-    }
-    .right-panel.open { display: flex; }
-
     .panel-header {
       padding: 12px 14px; border-bottom: 1px solid #ddeadd;
       display: flex; align-items: center; justify-content: space-between;
@@ -477,21 +466,4 @@
       .canvas-area { padding: 0; }
       .app.is-setup .main,
       .app.is-settings .main { margin-left: 0; padding-top: 42vh; }
-
-      /* Right panel slides up from bottom */
-      .right-panel {
-        position: fixed; bottom: 0; left: 0; right: 0;
-        width: 100% !important; max-height: 62vh;
-        transform: translateY(100%);
-        transition: transform 0.3s ease;
-        border-left: none;
-        border-top: 2px solid #c6d9c6;
-        border-radius: 14px 14px 0 0;
-        box-shadow: 0 -4px 20px rgba(0,0,0,0.15);
-        display: flex !important;
-        overflow-y: auto;
-        pointer-events: none;
-        z-index: 180;
-      }
-      .right-panel.open { transform: translateY(0); pointer-events: auto; }
     }

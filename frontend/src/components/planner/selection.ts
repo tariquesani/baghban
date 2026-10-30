@@ -1,0 +1,26 @@
+export type SelectionDetails = {
+  title: string;
+  name: string;
+  width: number;
+  length: number;
+  notes: string;
+  x: number;
+  y: number;
+  rotation: number;
+  diameter: number;
+  planterLength: number;
+  planterWidth: number;
+  plants: string[];
+  polyStats: string;
+  neighborNote: string;
+  plantWarn: string;
+  showSize: boolean;
+  showNotes: boolean;
+  showPot: boolean;
+  showPlanter: boolean;
+  showRotation: boolean;
+  showPosition: boolean;
+  showPlants: boolean;
+  showPoly: boolean;
+  focusName: boolean;
+};

@@ -3,15 +3,21 @@ function markDetailsOpen(open) {
   document.querySelector('.app')?.classList.toggle('panel-open', open);
 }
 
+let detailsOpen = false;
+
 function select(id, type, openPanel = true) {
   const clearing = id == null;
   const same = clearing ? selectedObj == null : isSelected(selectedObj, type, id);
   if (!same) selectedVertex = -1;
   selectedObj = clearing ? null : { type, id };
-  const panel = document.getElementById('rightPanel');
-  if (!clearing && openPanel) { panel.classList.add('open'); syncPanel(); }
-  else if (clearing)          { panel.classList.remove('open'); publishDetails(); }
-  markDetailsOpen(panel.classList.contains('open'));
+  if (!clearing && openPanel) {
+    detailsOpen = true;
+    syncPanel();
+  } else if (clearing) {
+    detailsOpen = false;
+    publishDetails();
+  }
+  markDetailsOpen(detailsOpen);
   draw(); renderLists();
 }
 
@@ -37,30 +43,6 @@ function syncPanel() {
   const item = getSelected();
   if (!item) return;
   _propHistorySaved = false; // reset so next edit on this item saves a fresh snapshot
-  const isBed = isBedSelected();
-
-  const isPot     = isBed && item.type === 'pot';
-  const isPlanter = isBed && item.type === 'planter';
-  const poly      = isBed && isPolygon(item);
-  document.getElementById('panelTitle').textContent =
-    isPlanter ? '🍱 Planter' : isPot ? '🪴 Pot' : isBed ? '🌿 Bed Details' : '⬛ Obstacle Details';
-  const _vp = visualPos(item);
-  document.getElementById('propX').value    = Math.round(_vp.x * 10) / 10;
-  document.getElementById('propY').value    = Math.round(_vp.y * 10) / 10;
-
-  document.getElementById('polySection').style.display    = poly ? '' : 'none';
-  if (poly) updatePolyPanel();
-  if (isPlanter) {
-    document.getElementById('propPlanterL').value = Math.round(item.w * 12);
-    document.getElementById('propPlanterW').value = Math.round(item.h * 12);
-    syncPlanterPreset();
-  }
-  if (!isPot) document.getElementById('propRot').value = rotationDegrees(item.rotation);
-
-  if (isBed) {
-    if (isPot) document.getElementById('propDiam').value = item.diam || 1;
-    renderPlantTags(item);
-  }
   publishDetails();
 }
 
@@ -78,12 +60,25 @@ function publishDetails() {
   const isPot = isBed && item.type === 'pot';
   const isPlanter = isBed && item.type === 'planter';
   const poly = isBed && isPolygon(item);
+  const pos = visualPos(item);
+  const summary = poly ? polygonSummary(item) : null;
   document.dispatchEvent(new CustomEvent('selectiondetails', {
     detail: {
+      title: isPlanter ? 'Planter' : isPot ? 'Pot' : isBed ? 'Bed' : 'Obstacle',
       name: item.name,
       width: item.w,
       length: item.h,
       notes: item.notes || '',
+      x: Math.round(pos.x * 10) / 10,
+      y: Math.round(pos.y * 10) / 10,
+      rotation: isPot ? 0 : rotationDegrees(item.rotation),
+      diameter: isPot ? (item.diam || 1) : 0,
+      planterLength: isPlanter ? Math.round(item.w * 12) : 0,
+      planterWidth: isPlanter ? Math.round(item.h * 12) : 0,
+      plants: isBed ? [...(item.plants || [])] : [],
+      polyStats: summary ? summary.stats : '',
+      neighborNote: summary ? summary.neighbor : '',
+      plantWarn,
       showSize: !(isPot || isPlanter || poly),
       showNotes: isBed,
       showPot: isPot,
@@ -91,6 +86,7 @@ function publishDetails() {
       showRotation: !isPot,
       showPosition: !poly,
       showPlants: isBed,
+      showPoly: poly,
       focusName,
     },
   }));
@@ -104,10 +100,7 @@ function rotationDegrees(rot) {
 }
 
 function syncRotationField() {
-  const item = getSelected();
-  const el = document.getElementById('propRot');
-  if (!item || !el || item.type === 'pot') return;
-  el.value = rotationDegrees(item.rotation);
+  if (detailsOpen) publishDetails();
 }
 
 function updateRotation(deg) {
@@ -146,11 +139,7 @@ function applyVisualPos(item, vx, vy) {
 }
 
 function syncPositionFields() {
-  const item = getSelected();
-  if (!item) return;
-  const vp = visualPos(item);
-  document.getElementById('propX').value = Math.round(vp.x * 10) / 10;
-  document.getElementById('propY').value = Math.round(vp.y * 10) / 10;
+  if (detailsOpen) publishDetails();
 }
 
 function updateProp(field, value) {
@@ -166,20 +155,12 @@ function updateProp(field, value) {
 }
 
 // ─── Plants ───────────────────────────────────────────────────────────────────
-function renderPlantTags(bed) {
-  const c = document.getElementById('plantTags');
-  c.innerHTML = '';
-  (bed.plants || []).forEach(p => {
-    const s = document.createElement('span');
-    s.className = 'plant-tag';
-    s.innerHTML = `${p}<span class="rm" onclick="removePlant('${p}')"> ×</span>`;
-    c.appendChild(s);
-  });
-}
+let plantWarn = '';
+let plantWarnTimer = 0;
 
-function addPlant() {
-  const sel = document.getElementById('plantSelect');
-  const p = sel.value; if (!p) return;
+function addPlant(name) {
+  const p = String(name || '').trim();
+  if (!p) return;
   const bed = selectedBed(); if (!bed) return;
 
   const pd = PLANT_DATA[p];
@@ -188,34 +169,38 @@ function addPlant() {
     const L = Math.floor(bed.h), W = Math.floor(bed.w);
     if (L < rowSpan || W < colSpan) {
       showPlantWarn(`This bed (${bed.w}×${bed.h} ft) is too small for ${p} — needs at least ${colSpan}×${rowSpan} ft.`);
-      sel.value = '';
       return;
     }
   }
 
+  plantWarn = '';
+  clearTimeout(plantWarnTimer);
   if (!bed.plants.includes(p)) {
     saveHistory();
     bed.plants.push(p);
-    renderPlantTags(bed); draw();
+    draw();
     notePlanChanged();
   }
-  sel.value = '';
+  publishDetails();
 }
 
 function showPlantWarn(msg) {
-  let el = document.getElementById('plantAddWarn');
-  el.textContent = msg;
-  el.style.display = 'block';
-  clearTimeout(el._t);
-  el._t = setTimeout(() => { el.style.display = 'none'; }, 4000);
+  plantWarn = msg;
+  if (detailsOpen) publishDetails();
+  clearTimeout(plantWarnTimer);
+  plantWarnTimer = setTimeout(() => {
+    plantWarn = '';
+    if (detailsOpen) publishDetails();
+  }, 4000);
 }
 
 function removePlant(plant) {
   const bed = selectedBed(); if (!bed) return;
   saveHistory();
   bed.plants = bed.plants.filter(p => p !== plant);
-  renderPlantTags(bed); draw();
+  draw();
   notePlanChanged();
+  publishDetails();
 }
 
 // ─── Add / Remove ─────────────────────────────────────────────────────────────
@@ -252,8 +237,8 @@ function updatePlanterInches(axis, inches) {
   if (!Number.isFinite(n) || n < 4 || n > 240) return;
   if (!_propHistorySaved) { saveHistory(); _propHistorySaved = true; }
   bed[axis] = n / 12;
-  syncPlanterPreset();
   draw(); renderLists();
+  publishDetails();
 }
 
 function applyPlanterPreset(lengthIn, widthIn) {
@@ -262,22 +247,8 @@ function applyPlanterPreset(lengthIn, widthIn) {
   if (!_propHistorySaved) { saveHistory(); _propHistorySaved = true; }
   bed.w = lengthIn / 12;
   bed.h = widthIn / 12;
-  document.getElementById('propPlanterL').value = lengthIn;
-  document.getElementById('propPlanterW').value = widthIn;
-  syncPlanterPreset();
   draw(); renderLists();
-}
-
-function syncPlanterPreset() {
-  const bed = getSelected();
-  if (!bed || bed.type !== 'planter') return;
-  const lengthIn = Math.round(bed.w * 12);
-  const widthIn = Math.round(bed.h * 12);
-  document.querySelectorAll('.planter-preset').forEach(btn => {
-    const on = +btn.dataset.l === lengthIn && +btn.dataset.w === widthIn;
-    btn.classList.toggle('btn-primary', on);
-    btn.classList.toggle('btn-secondary', !on);
-  });
+  publishDetails();
 }
 
 function updatePotDiam(val) {
@@ -286,6 +257,7 @@ function updatePotDiam(val) {
   saveHistory();
   bed.diam = val; bed.w = val; bed.h = val;
   draw(); renderLists();
+  publishDetails();
 }
 
 function addObstacle() {

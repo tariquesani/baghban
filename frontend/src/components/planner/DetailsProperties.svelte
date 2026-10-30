@@ -1,84 +1,185 @@
-<script>
-  /**
-   * @param {{
-   *   details: {
-   *     showPot?: boolean,
-   *     showPlanter?: boolean,
-   *     showRotation?: boolean,
-   *     showPosition?: boolean
-   *   } | null
-   * }} props
-   */
-  let { details } = $props();
+<script lang="ts">
+  import * as Field from '$lib/components/ui/field';
+  import { Input } from '$lib/components/ui/input';
+  import * as Select from '$lib/components/ui/select';
+  import * as ToggleGroup from '$lib/components/ui/toggle-group';
+  import { control, field, fields, hint, label, pair, section } from './inspector';
+  import type { SelectionDetails } from './selection';
 
-  /**
-   * @param {HTMLElement} element
-   * @param {string} hostId
-   */
-  function place(element, hostId) {
-    const host = document.getElementById(hostId);
-    if (!host) return;
-    host.replaceWith(element);
-    return () => element.remove();
+  let { details }: { details: SelectionDetails } = $props();
+
+  const diameters = [
+    { value: '1', label: '1 ft (12")' },
+    { value: '1.5', label: '1.5 ft (18")' },
+    { value: '2', label: '2 ft (24")' },
+    { value: '2.5', label: '2.5 ft (30")' },
+    { value: '3', label: '3 ft (36")' },
+  ];
+
+  const presets = [
+    { length: 24, width: 8 },
+    { length: 36, width: 12 },
+    { length: 48, width: 16 },
+  ];
+
+  const preset = $derived.by(() => {
+    const match = presets.find(
+      (size) => size.length === details.planterLength && size.width === details.planterWidth,
+    );
+    return match ? `${match.length}x${match.width}` : '';
+  });
+
+  function setDiameter(value: string) {
+    const updatePotDiam = (globalThis as { updatePotDiam?: (val: number) => void }).updatePotDiam;
+    updatePotDiam?.(Number(value));
+  }
+
+  function setInches(axis: 'w' | 'h', value: string) {
+    const updatePlanterInches = (globalThis as {
+      updatePlanterInches?: (axis: 'w' | 'h', inches: string) => void;
+    }).updatePlanterInches;
+    updatePlanterInches?.(axis, value);
+  }
+
+  function applyPreset(value: string) {
+    const match = presets.find((size) => `${size.length}x${size.width}` === value);
+    if (!match) return;
+    const applyPlanterPreset = (globalThis as {
+      applyPlanterPreset?: (lengthIn: number, widthIn: number) => void;
+    }).applyPlanterPreset;
+    applyPlanterPreset?.(match.length, match.width);
+  }
+
+  function setRotation(value: string) {
+    const updateRotation = (globalThis as { updateRotation?: (deg: string) => void }).updateRotation;
+    updateRotation?.(value);
+  }
+
+  function setPosition(field: 'x' | 'y', value: string) {
+    const updateProp = (globalThis as { updateProp?: (field: string, value: number) => void }).updateProp;
+    updateProp?.(field, +value);
   }
 </script>
 
-<div {@attach (element) => place(element, 'propertiesHost')}>
-  <div class="field" id="potSection" hidden={!details?.showPot}>
-    <label for="propDiam">Diameter</label>
-    <select id="propDiam" onchange={(event) => globalThis.updatePotDiam(+event.currentTarget.value)}>
-      <option value="1">1 ft (12")</option>
-      <option value="1.5">1.5 ft (18")</option>
-      <option value="2">2 ft (24")</option>
-      <option value="2.5">2.5 ft (30")</option>
-      <option value="3">3 ft (36")</option>
-    </select>
-  </div>
+{#if details.showPoly || details.showPot || details.showPlanter || details.showRotation || details.showPosition}
+  <Field.FieldGroup class="{section} {fields}">
+    {#if details.showPoly}
+      <Field.Description class={hint}>{details.polyStats}</Field.Description>
+      {#if details.neighborNote}
+        <Field.Error class={hint}>{details.neighborNote}</Field.Error>
+      {/if}
+    {/if}
 
-  <div id="planterSection" hidden={!details?.showPlanter}>
-    <div class="field">
-      <p class="preset-label">Size presets</p>
-      <div class="preset-row">
-        <button type="button" class="btn btn-sm btn-secondary planter-preset" data-l="24" data-w="8" onclick={() => globalThis.applyPlanterPreset(24, 8)}>24×8"</button>
-        <button type="button" class="btn btn-sm btn-secondary planter-preset" data-l="36" data-w="12" onclick={() => globalThis.applyPlanterPreset(36, 12)}>36×12"</button>
-        <button type="button" class="btn btn-sm btn-secondary planter-preset" data-l="48" data-w="16" onclick={() => globalThis.applyPlanterPreset(48, 16)}>48×16"</button>
+    {#if details.showPot}
+      <Field.Field class={field}>
+        <Field.FieldLabel class={label} for="propDiam">Diameter</Field.FieldLabel>
+        <Select.Root type="single" value={String(details.diameter)} onValueChange={setDiameter}>
+          <Select.Trigger id="propDiam" class="{control} w-full">
+            <Select.Value />
+          </Select.Trigger>
+          <Select.Content>
+            <Select.Group>
+              {#each diameters as size (size.value)}
+                <Select.Item value={size.value} label={size.label}>{size.label}</Select.Item>
+              {/each}
+            </Select.Group>
+          </Select.Content>
+        </Select.Root>
+      </Field.Field>
+    {/if}
+
+    {#if details.showPlanter}
+      <Field.Field class={field}>
+        <Field.FieldLabel class={label}>Size presets</Field.FieldLabel>
+        <ToggleGroup.Root
+          type="single"
+          variant="outline"
+          size="sm"
+          class="w-full"
+          value={preset}
+          onValueChange={applyPreset}
+        >
+          {#each presets as size (`${size.length}x${size.width}`)}
+            <ToggleGroup.Item class="h-7 flex-1 px-1 text-xs" value="{size.length}x{size.width}">
+              {size.length}×{size.width}"
+            </ToggleGroup.Item>
+          {/each}
+        </ToggleGroup.Root>
+      </Field.Field>
+      <div class={pair}>
+        <Field.Field class="{field} min-w-0 flex-1">
+          <Field.FieldLabel class={label} for="propPlanterL">Length (in)</Field.FieldLabel>
+          <Input
+            id="propPlanterL"
+            class={control}
+            type="number"
+            min="4"
+            max="240"
+            step="1"
+            value={details.planterLength}
+            oninput={(event) => setInches('w', event.currentTarget.value)}
+          />
+        </Field.Field>
+        <Field.Field class="{field} min-w-0 flex-1">
+          <Field.FieldLabel class={label} for="propPlanterW">Width (in)</Field.FieldLabel>
+          <Input
+            id="propPlanterW"
+            class={control}
+            type="number"
+            min="4"
+            max="240"
+            step="1"
+            value={details.planterWidth}
+            oninput={(event) => setInches('h', event.currentTarget.value)}
+          />
+        </Field.Field>
       </div>
-    </div>
-    <div class="field-row">
-      <div class="field">
-        <label for="propPlanterL">Length (in)</label>
-        <input id="propPlanterL" type="number" min="4" max="240" step="1" oninput={(event) => globalThis.updatePlanterInches('w', event.currentTarget.value)} />
+    {/if}
+
+    {#if details.showRotation}
+      <Field.Field class={field}>
+        <Field.FieldLabel class={label} for="propRot">Angle (°)</Field.FieldLabel>
+        <Input
+          id="propRot"
+          class={control}
+          type="number"
+          min="0"
+          max="359"
+          step="1"
+          value={details.rotation}
+          oninput={(event) => setRotation(event.currentTarget.value)}
+        />
+        <Field.Description class={hint}>Drag the turn handle. Hold Shift to snap to 15°.</Field.Description>
+      </Field.Field>
+    {/if}
+
+    {#if details.showPosition}
+      <div class={pair}>
+        <Field.Field class="{field} min-w-0 flex-1">
+          <Field.FieldLabel class={label} for="propX">X from left (ft)</Field.FieldLabel>
+          <Input
+            id="propX"
+            class={control}
+            type="number"
+            min="0"
+            step="0.1"
+            value={details.x}
+            oninput={(event) => setPosition('x', event.currentTarget.value)}
+          />
+        </Field.Field>
+        <Field.Field class="{field} min-w-0 flex-1">
+          <Field.FieldLabel class={label} for="propY">Y from top (ft)</Field.FieldLabel>
+          <Input
+            id="propY"
+            class={control}
+            type="number"
+            min="0"
+            step="0.1"
+            value={details.y}
+            oninput={(event) => setPosition('y', event.currentTarget.value)}
+          />
+        </Field.Field>
       </div>
-      <div class="field">
-        <label for="propPlanterW">Width (in)</label>
-        <input id="propPlanterW" type="number" min="4" max="240" step="1" oninput={(event) => globalThis.updatePlanterInches('h', event.currentTarget.value)} />
-      </div>
-    </div>
-  </div>
-
-  <div class="field" id="rotRow" hidden={!details?.showRotation}>
-    <label for="propRot">Angle (°)</label>
-    <input id="propRot" type="number" min="0" max="359" step="1" oninput={(event) => globalThis.updateRotation(event.currentTarget.value)} />
-    <p class="plot-note">Drag the ↻ handle to turn. Hold Shift to snap to 15°.</p>
-  </div>
-
-  <div class="field-row" id="posRow" hidden={!details?.showPosition}>
-    <div class="field">
-      <label for="propX">X from left (ft)</label>
-      <input id="propX" type="number" min="0" step="0.1" oninput={(event) => globalThis.updateProp('x', +event.currentTarget.value)} />
-    </div>
-    <div class="field">
-      <label for="propY">Y from top (ft)</label>
-      <input id="propY" type="number" min="0" step="0.1" oninput={(event) => globalThis.updateProp('y', +event.currentTarget.value)} />
-    </div>
-  </div>
-</div>
-
-<style>
-  .preset-label {
-    display: block;
-    margin-bottom: 2px;
-    color: #4a6b4b;
-    font-size: 11px;
-  }
-</style>
+    {/if}
+  </Field.FieldGroup>
+{/if}

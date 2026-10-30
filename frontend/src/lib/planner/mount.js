@@ -1,8 +1,9 @@
+import { listCrops } from '$lib/api/crops.js';
+import { plantCatalogFromCrops } from '$lib/domain/plant-catalog.js';
 import { stampStandIn } from '$lib/domain/row-save.js';
 import { isSelected } from '$lib/domain/selection.js';
 import { gardenScene } from '$lib/domain/scene.js';
 import editorHtml from './editor.html?raw';
-import catalogSource from './js/catalog.js?raw';
 import plantLookupSource from './js/plant_lookup.js?raw';
 import stateSource from './js/state.js?raw';
 import geometrySource from './js/geometry.js?raw';
@@ -15,7 +16,6 @@ import mainSource from './js/main.js?raw';
 const lucideUrl = 'https://unpkg.com/lucide@1.59.0/dist/umd/lucide.min.js';
 
 const programSource = [
-  catalogSource,
   plantLookupSource,
   stateSource,
   geometrySource,
@@ -34,6 +34,7 @@ const program = new Function(
   'gardenScene',
   'isSelected',
   'stampStandIn',
+  'PLANT_CATALOG',
   'let visitOpen = true;\n'
   + 'function finishVisit() { visitOpen = false; }\n'
   + programSource
@@ -74,7 +75,10 @@ function optionsWithSignal(options, signal) {
   return { signal };
 }
 
-function openSession() {
+/**
+ * @param {unknown[]} plantCatalog
+ */
+function openSession(plantCatalog) {
   const controller = new AbortController();
   /** @type {ResizeObserver[]} */
   const observers = [];
@@ -92,7 +96,7 @@ function openSession() {
   };
 
   try {
-    const api = program(gardenScene, isSelected, stampStandIn);
+    const api = program(gardenScene, isSelected, stampStandIn, plantCatalog);
     for (const name of publishedNames) globalThis[name] = api[name];
     return {
       finish() {
@@ -134,7 +138,14 @@ export function mountPlanner(element) {
     if (cancelled) return;
     await loadLucide();
     if (cancelled) return;
-    session = openSession();
+    let plantCatalog = [];
+    try {
+      plantCatalog = plantCatalogFromCrops(await listCrops());
+    } catch (error) {
+      console.error(error);
+    }
+    if (cancelled) return;
+    session = openSession(plantCatalog);
   })();
 
   ready.catch((error) => {

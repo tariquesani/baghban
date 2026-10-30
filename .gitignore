@@ -107,3 +107,4 @@ vite.config.ts.timestamp-*
 *.sw?
 pyrightconfig.json
 backend/convert_old_plan.py
+.agents/skills/shadcn-svelte/*

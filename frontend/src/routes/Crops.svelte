@@ -1,6 +1,8 @@
 <script>
   import { archiveCrop, createCrop, listCrops, saveCrop } from '$lib/api/crops.js';
+  import { toast } from 'svelte-sonner';
   import { cloneCrop, cropPayload, emptyCrop } from '$lib/domain/crop.js';
+  import ArchiveCropDialog from '../components/crops/ArchiveCropDialog.svelte';
   import CropForm from '../components/crops/CropForm.svelte';
   import CropList from '../components/crops/CropList.svelte';
 
@@ -21,6 +23,7 @@
   let companionQuery = $state('');
   let avoidQuery = $state('');
   let busy = $state(false);
+  let archiveAsk = $state(false);
   let error = $state('');
   let listError = $state('');
   let ready = $state(false);
@@ -106,6 +109,7 @@
       if (!saved.archived) showArchived = false;
       await loadChoices();
       await loadList();
+      toast.success(`Saved ${saved.name}`);
     } catch (err) {
       error = err instanceof Error ? err.message : 'Could not save this crop';
     } finally {
@@ -113,9 +117,13 @@
     }
   }
 
+  function askArchive() {
+    archiveAsk = true;
+  }
+
   async function archiveOpen() {
-    const name = draft.name.trim() || 'this crop';
-    if (!confirm(`Archive ${name}? It leaves the list and stays on file.`)) return;
+    if (busy) return;
+    archiveAsk = false;
     busy = true;
     error = '';
     try {
@@ -145,6 +153,7 @@
       showArchived = false;
       await loadChoices();
       await loadList();
+      toast.success(`Restored ${saved.name}`);
     } catch (err) {
       error = err instanceof Error ? err.message : 'Could not restore this crop';
     } finally {
@@ -186,7 +195,7 @@
     {/if}
     {#if showForm}
       <CropForm
-        {draft}
+        bind:draft
         {creating}
         {choices}
         {busy}
@@ -196,7 +205,7 @@
         bind:companionQuery
         bind:avoidQuery
         onSave={saveDraft}
-        onArchive={archiveOpen}
+        onArchive={askArchive}
         onRestore={restoreOpen}
         onBack={closeForm}
       />
@@ -204,6 +213,12 @@
       <p class="prompt">Select a crop, or add one.</p>
     {/if}
   </div>
+  <ArchiveCropDialog
+    bind:open={archiveAsk}
+    name={draft.name.trim() || 'this crop'}
+    {busy}
+    onConfirm={archiveOpen}
+  />
 </div>
 
 <style>
@@ -215,7 +230,6 @@
     flex-direction: column;
     gap: 12px;
     padding: 8px 24px 24px;
-    font-family: Roboto, sans-serif;
     color: #191d17;
   }
 
@@ -224,14 +238,16 @@
     min-height: 0;
     display: grid;
     grid-template-columns: minmax(260px, 340px) minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
     gap: 20px;
-    align-items: start;
   }
 
-  .workspace > :global(.list),
-  .workspace > :global(form) {
-    max-height: 100%;
-    overflow: auto;
+  .workspace > :global(.list) {
+    min-height: 0;
+  }
+
+  .workspace > :global([data-slot='card']) {
+    min-height: 0;
   }
 
   .prompt {

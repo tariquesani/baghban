@@ -1,4 +1,6 @@
 <script>
+  import './app.css';
+  import { Toaster } from '$lib/components/ui/sonner';
   import AppSidebar from './components/AppSidebar.svelte';
   import Calendar from './routes/Calendar.svelte';
   import Crops from './routes/Crops.svelte';
@@ -100,6 +102,7 @@
 <svelte:document onclick={followLink} onsidebaropen={openDrawer} />
 
 <div class="shell" style:--rail-width={railWidth}>
+  <Toaster position="top-right" />
   {#if drawerOpen}
     <button
       type="button"
