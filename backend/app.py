@@ -8,18 +8,20 @@ assembles the bed and obstacle rows. Run from this directory:
 """
 
 import json
+import math
 import os
 import re
 import sqlite3
 from contextlib import asynccontextmanager, closing
 from datetime import datetime, timezone
 from pathlib import Path
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse, Response
 
 from beds import create_scene_tables, drop_plant_grid, garden_contents, router as beds_router
-from beds_crops import copy_document_plants, create_beds_crops
+from beds_crops import archive_bed_crops, copy_document_plants, create_beds_crops
 from calendar_entries import create_calendar_tables, router as calendar_router
 from crops import create_crop_tables, seed_crops, router as crops_router
 
@@ -120,10 +122,16 @@ def init_db() -> None:
                 height_px       INTEGER,
                 feet_per_pixel  REAL,
                 calibration     TEXT,
+                name            TEXT NOT NULL DEFAULT '',
+                subtitle        TEXT NOT NULL DEFAULT '',
+                latitude        REAL,
+                longitude       REAL,
+                timezone        TEXT NOT NULL DEFAULT '',
                 saved_at        TEXT NOT NULL
             )
             """
         )
+        ensure_garden_identity(connection)
         create_scene_tables(connection)
         create_calendar_tables(connection)
         create_crop_tables(connection)
@@ -132,6 +140,21 @@ def init_db() -> None:
         drop_plant_grid(connection)
         copy_document_plants(connection)
         connection.commit()
+
+
+def ensure_garden_identity(connection) -> None:
+    """Add name and place columns to a garden row created before them."""
+    columns = {row[1] for row in connection.execute("PRAGMA table_info(garden_plan)")}
+    additions = (
+        ("name", "TEXT NOT NULL DEFAULT ''"),
+        ("subtitle", "TEXT NOT NULL DEFAULT ''"),
+        ("latitude", "REAL"),
+        ("longitude", "REAL"),
+        ("timezone", "TEXT NOT NULL DEFAULT ''"),
+    )
+    for name, declaration in additions:
+        if name not in columns:
+            connection.execute(f"ALTER TABLE garden_plan ADD COLUMN {name} {declaration}")
 
 
 def json_real(value):
@@ -162,6 +185,11 @@ def assemble(connection, row) -> dict:
             "scale": row["scale"],
             "widthText": row["width_text"],
             "heightText": row["height_text"],
+            "name": row["name"] or "",
+            "subtitle": row["subtitle"] or "",
+            "latitude": json_real(row["latitude"]),
+            "longitude": json_real(row["longitude"]),
+            "timezone": row["timezone"] or "",
         },
         "plot": {
             "plotId": row["plot_id"],
@@ -181,7 +209,7 @@ def fetch_garden(connection):
         """
         SELECT width, height, scale, width_text, height_text,
                plot_id, photo_url, width_px, height_px, feet_per_pixel,
-               calibration
+               calibration, name, subtitle, latitude, longitude, timezone
         FROM garden_plan
         WHERE id = 1
         """
@@ -202,6 +230,11 @@ def empty_garden() -> dict:
         "height_px": None,
         "feet_per_pixel": None,
         "calibration": None,
+        "name": "",
+        "subtitle": "",
+        "latitude": None,
+        "longitude": None,
+        "timezone": "",
     }
 
 
@@ -325,6 +358,184 @@ def parse_settings(body: dict) -> tuple:
     return garden_columns(body.get("garden")), plot_columns(body.get("plot"))
 
 
+def identity_text(body: dict, key: str, limit: int) -> str:
+    if key not in body or body[key] is None:
+        return ""
+    value = body[key]
+    if not isinstance(value, str):
+        raise HTTPException(status_code=400, detail=f"{key} must be text")
+    value = value.strip()
+    if len(value) > limit:
+        raise HTTPException(status_code=400, detail=f"{key} is too long")
+    return value
+
+
+def coordinate_field(value, name: str, low: float, high: float) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise HTTPException(status_code=400, detail=f"{name} must be a number")
+    number = float(value)
+    if not math.isfinite(number) or number < low or number > high:
+        raise HTTPException(
+            status_code=400,
+            detail=f"{name} must be between {low:g} and {high:g}",
+        )
+    return number
+
+
+_timezone_finder = None
+
+
+def known_timezone(value: str) -> str:
+    try:
+        ZoneInfo(value)
+    except ZoneInfoNotFoundError:
+        raise HTTPException(status_code=400, detail="timezone is not a known IANA name") from None
+    return value
+
+
+def timezone_for_coordinates(latitude: float, longitude: float) -> str:
+    """IANA name for a point. The client does not choose it."""
+    global _timezone_finder
+    if _timezone_finder is None:
+        from timezonefinder import TimezoneFinder
+
+        _timezone_finder = TimezoneFinder()
+    name = _timezone_finder.timezone_at(lng=longitude, lat=latitude)
+    if not name:
+        raise HTTPException(status_code=400, detail="No timezone matches this place")
+    return known_timezone(name)
+
+
+def parse_identity(body: dict) -> dict:
+    required = {"name", "subtitle", "latitude", "longitude"}
+    allowed = required | {"timezone"}
+    if any(key not in body for key in required):
+        raise HTTPException(
+            status_code=400,
+            detail="Garden identity needs name, subtitle, latitude, and longitude",
+        )
+    extra = [key for key in body if key not in allowed]
+    if extra:
+        raise HTTPException(
+            status_code=400,
+            detail="Garden identity accepts name, subtitle, latitude, and longitude only",
+        )
+    name = identity_text(body, "name", 80)
+    subtitle = identity_text(body, "subtitle", 160)
+    latitude = body.get("latitude")
+    longitude = body.get("longitude")
+    if latitude is None and longitude is None:
+        return {
+            "name": name,
+            "subtitle": subtitle,
+            "latitude": None,
+            "longitude": None,
+            "timezone": "",
+        }
+    if latitude is None or longitude is None:
+        raise HTTPException(
+            status_code=400,
+            detail="A place needs a latitude and a longitude",
+        )
+    lat = coordinate_field(latitude, "latitude", -90, 90)
+    lon = coordinate_field(longitude, "longitude", -180, 180)
+    return {
+        "name": name,
+        "subtitle": subtitle,
+        "latitude": lat,
+        "longitude": lon,
+        "timezone": timezone_for_coordinates(lat, lon),
+    }
+
+
+def save_identity(body: dict) -> dict:
+    identity = parse_identity(body)
+    saved_at = datetime.now(timezone.utc).isoformat()
+    values = (
+        identity["name"],
+        identity["subtitle"],
+        identity["latitude"],
+        identity["longitude"],
+        identity["timezone"],
+        saved_at,
+    )
+    with closing(connect()) as connection:
+        existing = connection.execute("SELECT id FROM garden_plan WHERE id = 1").fetchone()
+        if existing is None:
+            connection.execute(
+                """
+                INSERT INTO garden_plan (
+                    id, name, subtitle, latitude, longitude, timezone, saved_at
+                ) VALUES (1, ?, ?, ?, ?, ?, ?)
+                """,
+                values,
+            )
+        else:
+            connection.execute(
+                """
+                UPDATE garden_plan SET
+                    name = ?,
+                    subtitle = ?,
+                    latitude = ?,
+                    longitude = ?,
+                    timezone = ?,
+                    saved_at = ?
+                WHERE id = 1
+                """,
+                values,
+            )
+        row = fetch_garden(connection)
+        payload = assemble(connection, row)
+        connection.commit()
+    return payload
+
+
+def discard_plot_photo(plot_id: str | None) -> None:
+    if not plot_id or not PHOTO_ID.fullmatch(plot_id):
+        return
+    found = find_photo(plot_id)
+    if found is not None:
+        found.unlink()
+
+
+def reset_garden() -> dict | None:
+    """Clear the plan and its scale. The name and place stay."""
+    saved_at = datetime.now(timezone.utc).isoformat()
+    plot_id = None
+    with closing(connect()) as connection:
+        row = connection.execute(
+            "SELECT plot_id FROM garden_plan WHERE id = 1"
+        ).fetchone()
+        if row is not None:
+            plot_id = row["plot_id"]
+            connection.execute(
+                """
+                UPDATE garden_plan SET
+                    width = NULL,
+                    height = NULL,
+                    scale = NULL,
+                    width_text = '',
+                    height_text = '',
+                    plot_id = NULL,
+                    photo_url = NULL,
+                    width_px = NULL,
+                    height_px = NULL,
+                    feet_per_pixel = NULL,
+                    calibration = NULL,
+                    saved_at = ?
+                WHERE id = 1
+                """,
+                (saved_at,),
+            )
+        for bed in connection.execute("SELECT id FROM bed WHERE removed = 0"):
+            connection.execute("UPDATE bed SET removed = 1 WHERE id = ?", (bed["id"],))
+            archive_bed_crops(connection, int(bed["id"]))
+        connection.execute("DELETE FROM obstacle")
+        connection.commit()
+    discard_plot_photo(plot_id)
+    return read_garden()
+
+
 def save_settings(garden: tuple, plot: tuple) -> dict:
     saved_at = datetime.now(timezone.utc).isoformat()
     with closing(connect()) as connection:
@@ -397,6 +608,20 @@ async def put_garden(request: Request) -> dict:
     raw = await limited_body(request, MAX_BYTES, "Plan is larger than 2 MB")
     garden, plot = parse_settings(read_json_object(raw))
     return save_settings(garden, plot)
+
+
+@app.put("/api/garden/identity")
+async def put_garden_identity(request: Request) -> dict:
+    raw = await limited_body(request, MAX_BYTES, "Plan is larger than 2 MB")
+    return save_identity(read_json_object(raw))
+
+
+@app.post("/api/garden/reset")
+def post_garden_reset() -> Response:
+    payload = reset_garden()
+    if payload is None:
+        return Response(status_code=204)
+    return JSONResponse(payload)
 
 
 def reject_oversized(request: Request, raw: bytes, limit: int, message: str) -> None:

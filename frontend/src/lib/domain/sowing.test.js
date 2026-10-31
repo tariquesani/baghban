@@ -6,6 +6,9 @@ import {
   localDate,
   matchingCropName,
   photoProblem,
+  bedsHoldingCrop,
+  bedsWithCrops,
+  plantCropName,
   sowingBedChoices,
   sowingCropChoices,
   sowingDraft,
@@ -89,6 +92,31 @@ test('a sowing request needs a crop and a date', () => {
       },
     },
   );
+});
+
+test('care beds are the ones growing that crop', () => {
+  assert.equal(plantCropName('🍅 Tomatoes'), 'Tomatoes');
+  assert.equal(plantCropName('Cherry Tomatoes'), 'Cherry Tomatoes');
+  const beds = bedsWithCrops(
+    [
+      { id: 2, name: 'East', removed: false },
+      { id: 1, name: 'Gone', removed: true },
+      { id: 3, name: 'Herbs', removed: false },
+      { id: 4, name: 'North', removed: false },
+    ],
+    [
+      { id: 2, plants: ['🍅 Tomatoes', '🌿 Basil'] },
+      { id: 3, plants: ['Basil'] },
+      { id: 4, plants: [] },
+      { id: 1, plants: ['Tomatoes'] },
+    ],
+  );
+  assert.deepEqual(bedsHoldingCrop(beds, 'Tomatoes'), [{ id: 2, name: 'East' }]);
+  assert.deepEqual(
+    bedsHoldingCrop(beds, 'basil').map((bed) => bed.name),
+    ['East', 'Herbs'],
+  );
+  assert.deepEqual(bedsHoldingCrop(beds, ''), []);
 });
 
 test('removed beds stay out of the list, and a photo must be a small image', () => {

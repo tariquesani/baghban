@@ -1,5 +1,6 @@
 // ─── Selection ────────────────────────────────────────────────────────────────
 function markDetailsOpen(open) {
+  if (pickOnly) return;
   document.querySelector('.app')?.classList.toggle('panel-open', open);
 }
 
@@ -49,6 +50,7 @@ function syncPanel() {
 let focusDetailsName = false;
 
 function publishDetails() {
+  if (pickOnly) return;
   const item = getSelected();
   const focusName = focusDetailsName;
   focusDetailsName = false;
@@ -357,6 +359,7 @@ function currentLists() {
 }
 
 function publishLists() {
+  if (pickOnly) return;
   document.dispatchEvent(new CustomEvent('listschange', { detail: currentLists() }));
 }
 

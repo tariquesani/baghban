@@ -322,8 +322,10 @@ function adoptPlotDataUrl(dataUrl, opts = {}) {
     fitView();
     draw();
     notePlanChanged();
-    document.dispatchEvent(new CustomEvent('plotimage'));
-    if (!opts.quiet) document.dispatchEvent(new CustomEvent('plotphoto'));
+    if (!pickOnly) {
+      document.dispatchEvent(new CustomEvent('plotimage'));
+      if (!opts.quiet) document.dispatchEvent(new CustomEvent('plotphoto'));
+    }
   };
   img.src = dataUrl;
 }

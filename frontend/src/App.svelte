@@ -6,13 +6,14 @@
   import Crops from './routes/Crops.svelte';
   import Home from './routes/Home.svelte';
   import Planner from './routes/Planner.svelte';
+  import Setup from './routes/Setup.svelte';
 
   const screens = {
     '/': Home,
     '/planner': Planner,
     '/calendar': Calendar,
     '/crops': Crops,
-    '/settings': Planner,
+    '/settings': Setup,
   };
 
   const railKey = 'sidebar-collapsed';
@@ -45,8 +46,9 @@
   let pageTitle = $derived(
     path === '/calendar' ? 'Calendar'
     : path === '/crops' ? 'Crops'
-    : path === '/planner' || path === '/settings' ? 'Planner'
-    : 'Home',
+    : path === '/planner' ? 'Planner'
+    : path === '/settings' ? 'Setup'
+    : 'Dashboard',
   );
 
   function syncPath() {
@@ -139,8 +141,10 @@
       <h1>{pageTitle}</h1>
     </header>
     <div class="page-body">
-      {#if path === '/planner' || path === '/settings'}
-        <Planner {search} panel={path === '/settings' ? 'settings' : 'planner'} onCanvas={noteCanvas} />
+      {#if path === '/planner'}
+        <Planner {search} onCanvas={noteCanvas} />
+      {:else if path === '/settings'}
+        <Setup />
       {:else if path === '/calendar'}
         <Calendar bind:entryOpen {entrySession} {entryKind} />
       {:else if path === '/crops'}

@@ -60,6 +60,61 @@ export function sowingBedChoices(beds) {
 }
 
 /**
+ * The catalogue name on a bed. Plants are stored as "Tomatoes" or "🍅 Tomatoes".
+ * @param {unknown} label
+ */
+export function plantCropName(label) {
+  if (typeof label !== 'string') return '';
+  const text = label.trim();
+  const space = text.indexOf(' ');
+  if (space <= 0) return text;
+  const head = text.slice(0, space);
+  if (/^\p{L}/u.test(head)) return text;
+  return text.slice(space + 1).trim();
+}
+
+/**
+ * Attach the crops currently growing in each bed. `planted` is the garden's beds.
+ * @param {unknown} beds
+ * @param {unknown} planted
+ * @returns {{ id: number, name: string, plants: string[] }[]}
+ */
+export function bedsWithCrops(beds, planted) {
+  /** @type {Map<number, string[]>} */
+  const plants = new Map();
+  if (Array.isArray(planted)) {
+    for (const bed of planted) {
+      if (!bed || typeof bed !== 'object' || typeof bed.id !== 'number') continue;
+      const names = Array.isArray(bed.plants)
+        ? bed.plants.filter((name) => typeof name === 'string')
+        : [];
+      plants.set(bed.id, names);
+    }
+  }
+  return sowingBedChoices(beds).map((bed) => ({
+    id: bed.id,
+    name: bed.name,
+    plants: plants.get(bed.id) ?? [],
+  }));
+}
+
+/**
+ * Beds that currently hold this crop, by catalogue name.
+ * @param {{ plants?: unknown }[]} beds
+ * @param {string} crop
+ * @returns {{ id: number, name: string }[]}
+ */
+export function bedsHoldingCrop(beds, crop) {
+  const wanted = crop.trim().toLowerCase();
+  if (!wanted || !Array.isArray(beds)) return [];
+  return sowingBedChoices(beds).filter((bed) => {
+    const source = beds.find((row) => row && typeof row === 'object' && row.id === bed.id);
+    const plants = source && Array.isArray(source.plants) ? source.plants : [];
+    return plants.some((label) => plantCropName(label).toLowerCase() === wanted);
+  });
+}
+
+/**
  * @param {{ name: string }[]} crops
  * @param {string} selected
  */

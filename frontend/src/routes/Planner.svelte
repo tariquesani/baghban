@@ -2,7 +2,6 @@
   import { onDestroy } from 'svelte';
   import DetailsDrawer from '../components/planner/DetailsDrawer.svelte';
   import PlantOrganizer from '../components/planner/PlantOrganizer.svelte';
-  import GardenSettings from '../components/planner/GardenSettings.svelte';
   import SetupChoice from '../components/planner/SetupChoice.svelte';
   import SetupDimensions from '../components/planner/SetupDimensions.svelte';
   import SetupPlan from '../components/planner/SetupPlan.svelte';
@@ -14,7 +13,7 @@
   import { mountPlanner } from '$lib/planner/mount';
   import plannerStyles from '$lib/planner/styles.css?inline';
 
-  let { search = '', panel = 'planner', onCanvas } = $props();
+  let { search = '', onCanvas } = $props();
 
   let activeTool = $state('select');
   let details = $state(null);
@@ -142,9 +141,7 @@
     globalThis.beginCalibration();
   }
 
-  let settingsColumn = $derived(panel === 'settings' && setupMode === null);
-  let settingsOpen = $derived(settingsColumn && !!scale);
-  let canvasReady = $derived(toolsReady && setupMode === null && panel !== 'settings');
+  let canvasReady = $derived(toolsReady && setupMode === null);
 
   const toolActions = {
     addBed() { globalThis.addBed(); },
@@ -168,26 +165,11 @@
     onCanvas?.({ ready: false, activeTool: 'select', actions: null });
   });
 
-  function resetFromSettings() {
-    globalThis.confirmNewGarden();
-    setupMode = 'choice';
-    ignorePlanQuery = true;
-    history.pushState(null, '', '/planner');
-    window.dispatchEvent(new PopStateEvent('popstate'));
-  }
-
-  function recalibrateFromSettings() {
-    const snapshot = globalThis.currentPlan();
-    const hasPhoto = photoReady || !!(snapshot.plot && (snapshot.plot.photoUrl || snapshot.plot.plotId));
-    openPlanSetup(hasPhoto);
-  }
-
   $effect(() => {
     if (!plannerReady) return;
     const app = document.querySelector('.map-host .app');
     app?.classList.toggle('is-setup', setupMode !== null);
-    app?.classList.toggle('is-settings', settingsColumn);
-    if (panel !== 'settings' && scale) toolsReady = true;
+    if (scale) toolsReady = true;
     if (window.lucide) window.lucide.createIcons();
     const wantsPlan = !ignorePlanQuery && new URLSearchParams(search).get('setup') === 'plan';
     if (wantsPlan && scale === 'plan' && setupMode !== 'plan') {
@@ -326,7 +308,7 @@
 
 <div class="map-host" {@attach mountGarden}></div>
 
-<Toolbar showMenu={setupMode === null && !settingsColumn} />
+<Toolbar showMenu={setupMode === null} />
 {#if toolsReady}
   <PlantOrganizer />
 {/if}
@@ -359,21 +341,6 @@
       />
     {/if}
     </div>
-  </section>
-{:else if settingsColumn}
-  <section class="setup-column">
-    {#if settingsOpen}
-      <div class="setup-body">
-        <GardenSettings
-          {scale}
-          {sizeLabel}
-          widthText={dimensionWidth}
-          heightText={dimensionHeight}
-          onRecalibrate={recalibrateFromSettings}
-          onReset={resetFromSettings}
-        />
-      </div>
-    {/if}
   </section>
 {/if}
 <DetailsDrawer {details} />

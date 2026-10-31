@@ -4,6 +4,8 @@
   import { listBeds } from '$lib/api/beds.js';
   import { createCalendarEntry, removePhoto, storePhoto, updateCalendarEntry } from '$lib/api/calendar.js';
   import { listCrops } from '$lib/api/crops.js';
+  import { readGarden } from '$lib/api/garden.js';
+  import BedField from '../beds/BedField.svelte';
   import { Button } from '$lib/components/ui/button';
   import { Calendar } from '$lib/components/ui/calendar';
   import * as Dialog from '$lib/components/ui/dialog';
@@ -26,6 +28,8 @@
   import {
     formatSowingDate,
     localDate,
+    bedsHoldingCrop,
+    bedsWithCrops,
     matchingCropName,
     photoProblem,
     sowingBedChoices,
@@ -80,7 +84,8 @@
   let statusChosen = $state(false);
   let cropEdited = $state(false);
   let cropChoices = $state<{ id: number; name: string; emoji: string }[]>([]);
-  let bedChoices = $state<{ id: number; name: string }[]>([]);
+  let bedRows = $state<{ id: number; name: string; plants: string[] }[]>([]);
+  let bedsLoaded = $state(false);
   let loading = $state(false);
   let busy = $state(false);
   let listError = $state('');
@@ -103,10 +108,18 @@
       label: choice.emoji ? `${choice.emoji} ${choice.name}` : choice.name,
     })),
   );
-  const bedItems = $derived([
-    { value: 'none', label: 'Not in a bed' },
-    ...bedChoices.map((choice) => ({ value: String(choice.id), label: choice.name })),
-  ]);
+  const bedChoices = $derived(sowingBedChoices(bedRows));
+  const cropBeds = $derived(recording === 'care' || recording === 'pest' || recording === 'harvest');
+  const offeredBeds = $derived(cropBeds ? bedsHoldingCrop(bedRows, crop) : bedChoices);
+  const bedItems = $derived(
+    cropBeds
+      ? offeredBeds.map((choice) => ({ value: String(choice.id), label: choice.name }))
+      : [
+          { value: 'none', label: 'Not in a bed' },
+          ...bedChoices.map((choice) => ({ value: String(choice.id), label: choice.name })),
+        ],
+  );
+  const bedLocked = $derived(cropBeds && offeredBeds.length <= 1);
 
   function asKind(value: string): EntryKind {
     return isEntryKind(value) ? value : 'sowing';
@@ -250,15 +263,30 @@
   });
 
   $effect(() => {
+    if (!bedsLoaded || !cropBeds) return;
+    const next = offeredBeds.length === 1
+      ? String(offeredBeds[0].id)
+      : offeredBeds.some((bed) => String(bed.id) === bedId)
+        ? bedId
+        : offeredBeds.length === 0
+          ? 'none'
+          : '';
+    if (next !== bedId) bedId = next;
+  });
+
+  $effect(() => {
     if (!open) return;
     let cancel = false;
     loading = true;
+    bedsLoaded = false;
     listError = '';
-    Promise.all([listCrops(), listBeds()])
-      .then(([cropRows, bedRows]) => {
+    Promise.all([listCrops(), listBeds(), readGarden().catch(() => null)])
+      .then(([cropRows, listed, plan]) => {
         if (cancel) return;
         cropChoices = sowingCropChoices(cropRows);
-        bedChoices = sowingBedChoices(bedRows);
+        const planted = plan && typeof plan === 'object' && Array.isArray(plan.beds) ? plan.beds : [];
+        bedRows = bedsWithCrops(listed, planted);
+        bedsLoaded = true;
         loading = false;
       })
       .catch((error: unknown) => {
@@ -427,22 +455,14 @@
         </Field.Field>
       {/if}
 
-      <Field.Field>
-        <Field.Label for="{recording}-bed">Bed</Field.Label>
-        <Select.Root type="single" name="bed" items={bedItems} bind:value={bedId}>
-          <Select.Trigger id="{recording}-bed" class="w-full">
-            <Select.Value />
-          </Select.Trigger>
-          <Select.Content>
-            <Select.Group>
-              {#each bedItems as item (item.value)}
-                <Select.Item value={item.value} label={item.label}>{item.label}</Select.Item>
-              {/each}
-            </Select.Group>
-          </Select.Content>
-        </Select.Root>
-        <Field.Description>{copy.bedHint}</Field.Description>
-      </Field.Field>
+      <BedField
+        id="{recording}-bed"
+        items={bedItems}
+        bind:value={bedId}
+        disabled={bedLocked}
+        emptyLabel={crop.trim() ? 'Not in a bed' : 'Choose a crop first'}
+        hint={cropBeds ? '' : copy.bedHint}
+      />
 
       {#if recording === 'care'}
         <Field.Field data-invalid={fieldError === 'action' || undefined}>

@@ -89,6 +89,7 @@ function gardenReady() {
 }
 
 function publishScale() {
+  if (pickOnly) return;
   document.dispatchEvent(new CustomEvent('scalechange', {
     detail: {
       scale: garden.scale || null,

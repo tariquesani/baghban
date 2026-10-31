@@ -1,4 +1,5 @@
 import { listCrops } from '$lib/api/crops.js';
+import { readGarden } from '$lib/api/garden.js';
 import { plantCatalogFromCrops } from '$lib/domain/plant-catalog.js';
 import { stampStandIn } from '$lib/domain/row-save.js';
 import { isSelected } from '$lib/domain/selection.js';
@@ -35,8 +36,12 @@ const program = new Function(
   'isSelected',
   'stampStandIn',
   'PLANT_CATALOG',
+  'plannerRoot',
+  'pickOnlyFlag',
   'let visitOpen = true;\n'
+  + 'let pickOnly = !!pickOnlyFlag;\n'
   + 'function finishVisit() { visitOpen = false; }\n'
+  + 'function plannerElement(id) { return plannerRoot.querySelector("#" + id); }\n'
   + programSource
   + '\nreturn { finishVisit, '
   + publishedNames.join(', ')
@@ -77,8 +82,11 @@ function optionsWithSignal(options, signal) {
 
 /**
  * @param {unknown[]} plantCatalog
+ * @param {HTMLElement} root
+ * @param {{ publish?: boolean, pick?: boolean }} options
  */
-function openSession(plantCatalog) {
+function openSession(plantCatalog, root, options) {
+  const publish = options.publish !== false;
   const controller = new AbortController();
   /** @type {ResizeObserver[]} */
   const observers = [];
@@ -96,13 +104,17 @@ function openSession(plantCatalog) {
   };
 
   try {
-    const api = program(gardenScene, isSelected, stampStandIn, plantCatalog);
-    for (const name of publishedNames) globalThis[name] = api[name];
+    const api = program(gardenScene, isSelected, stampStandIn, plantCatalog, root, options.pick === true);
+    if (publish) {
+      for (const name of publishedNames) globalThis[name] = api[name];
+    }
     return {
+      api,
       finish() {
         api.finishVisit();
         controller.abort();
         for (const observer of observers) observer.disconnect();
+        if (!publish) return;
         for (const name of publishedNames) {
           if (globalThis[name] === api[name]) delete globalThis[name];
         }
@@ -119,13 +131,10 @@ function openSession(plantCatalog) {
 }
 
 /**
- * Insert the planner into a host that is already in the document.
- * Each call runs the planner program again. `destroy` drops that visit.
- * `ready` resolves when the program has finished starting.
  * @param {HTMLElement} element
- * @returns {{ destroy: () => void, ready: Promise<void> }}
+ * @param {{ publish: boolean, pick: boolean }} options
  */
-export function mountPlanner(element) {
+function startPlanner(element, options) {
   element.innerHTML = editorHtml;
 
   let cancelled = false;
@@ -145,7 +154,20 @@ export function mountPlanner(element) {
       console.error(error);
     }
     if (cancelled) return;
-    session = openSession(plantCatalog);
+    session = openSession(plantCatalog, element, options);
+    if (!options.pick || cancelled) return;
+    let plan = null;
+    try {
+      plan = await readGarden();
+    } catch (error) {
+      console.error(error);
+    }
+    if (cancelled || !plan) return;
+    try {
+      session.api.applyPlan(plan);
+    } catch (error) {
+      console.error(error);
+    }
   })();
 
   ready.catch((error) => {
@@ -154,6 +176,28 @@ export function mountPlanner(element) {
 
   return {
     ready,
+    /**
+     * Highlight a bed already chosen on the form. `none` clears the highlight.
+     * @param {string} bedId
+     */
+    showBed(bedId) {
+      const api = session?.api;
+      if (!api) return;
+      if (bedId === '' || bedId === 'none') {
+        api.select(null);
+        return;
+      }
+      const id = Number(bedId);
+      if (!Number.isInteger(id)) return;
+      api.select(id, 'bed', false);
+    },
+    /**
+     * Zoom the pick view about the center of the canvas.
+     * @param {number} factor
+     */
+    zoom(factor) {
+      session?.api?.adjustZoom(factor);
+    },
     destroy() {
       if (destroyed) return;
       destroyed = true;
@@ -162,4 +206,28 @@ export function mountPlanner(element) {
       element.replaceChildren();
     },
   };
+}
+
+/**
+ * Insert the planner into a host that is already in the document.
+ * Each call runs the planner program again. `destroy` drops that visit.
+ * `ready` resolves when the program has finished starting.
+ * @param {HTMLElement} element
+ * @returns {{ destroy: () => void, ready: Promise<void> }}
+ */
+export function mountPlanner(element) {
+  const visit = startPlanner(element, { publish: true, pick: false });
+  return {
+    ready: visit.ready,
+    destroy: () => visit.destroy(),
+  };
+}
+
+/**
+ * A private planner visit. It draws the saved garden and emits `bedpick`
+ * on its canvas when a bed is clicked. It does not publish functions or save.
+ * @param {HTMLElement} element
+ */
+export function mountBedPicker(element) {
+  return startPlanner(element, { publish: false, pick: true });
 }

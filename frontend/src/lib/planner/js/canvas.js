@@ -1,5 +1,5 @@
 // ─── Canvas setup ────────────────────────────────────────────────────────────
-const canvas = document.getElementById('gardenCanvas');
+const canvas = plannerElement('gardenCanvas');
 const ctx    = canvas.getContext('2d');
 function initCanvas() {
   const area = canvas.parentElement;
@@ -117,7 +117,7 @@ function drawObstacle(o) {
   ctx.restore();
 
   // Rotation handle
-  if (sel) {
+  if (sel && !pickOnly) {
     const handleDist = 22 / viewZoom;
     const handleR    = 7  / viewZoom;
     const sin = Math.sin(rot), cos = Math.cos(rot);
@@ -302,7 +302,7 @@ function drawPolygonBed(b) {
   ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
   ctx.restore();
 
-  if (sel) {
+  if (sel && !pickOnly) {
     pts.forEach((p, i) => {
       const active = i === selectedVertex;
       ctx.beginPath();
@@ -316,7 +316,7 @@ function drawPolygonBed(b) {
     drawVertexEdgeLabels(b);
   }
   ctx.restore();
-  if (sel) drawPolygonTurnHandle(b);
+  if (sel && !pickOnly) drawPolygonTurnHandle(b);
 }
 
 function drawVertexEdgeLabels(b) {
@@ -474,7 +474,7 @@ function drawBed(b) {
   ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
   ctx.restore(); // end rotation transform
 
-  if (sel) {
+  if (sel && !pickOnly) {
     const handleDist = 22 / viewZoom;
     const sin = Math.sin(rot), cos = Math.cos(rot);
     const topCX = cx + (h/2) * sin;
@@ -601,6 +601,12 @@ function rememberPointer(event) {
 }
 
 function pointerCursor() {
+  if (pickOnly) {
+    if (!pointerWorld) return 'grab';
+    const hit = hitTest(pointerWorld.x, pointerWorld.y);
+    if (hit && hit.type === 'bed' && hit.item.type !== 'pot') return 'pointer';
+    return 'grab';
+  }
   if (spacePan) return 'grab';
   if (tool === 'draw-bed') return 'crosshair';
   if (tool === 'calibrate') {
@@ -667,9 +673,70 @@ function finishPointerGesture(event) {
   draw();
 }
 
+function offerBed(item) {
+  if (!item || item.type === 'pot') return;
+  canvas.dispatchEvent(new CustomEvent('bedpick', {
+    bubbles: true,
+    detail: { id: item.id },
+  }));
+}
+
+let pickPointer = null;
+
+function beginPickPointer(event) {
+  const bounds = canvas.getBoundingClientRect();
+  const sx = event.clientX - bounds.left;
+  const sy = event.clientY - bounds.top;
+  const { x: wpx, y: wpy } = screenToWorld(sx, sy);
+  pickPointer = {
+    x: event.clientX,
+    y: event.clientY,
+    sx,
+    sy,
+    hit: hitTest(wpx, wpy),
+    moved: false,
+  };
+}
+
+function movePickPointer(event) {
+  if (!pickPointer) return;
+  rememberPointer(event);
+  const bounds = canvas.getBoundingClientRect();
+  const sx = event.clientX - bounds.left;
+  const sy = event.clientY - bounds.top;
+  const dx = event.clientX - pickPointer.x;
+  const dy = event.clientY - pickPointer.y;
+  if (!pickPointer.moved && Math.hypot(dx, dy) > 5) {
+    pickPointer.moved = true;
+    isPanning = true;
+    panStart = { x: pickPointer.sx - viewX, y: pickPointer.sy - viewY };
+  }
+  if (pickPointer.moved) {
+    viewX = sx - panStart.x;
+    viewY = sy - panStart.y;
+    draw();
+  }
+  refreshCursor();
+}
+
+function finishPickPointer(event) {
+  if (!pickPointer) return;
+  const gesture = pickPointer;
+  pickPointer = null;
+  isPanning = false;
+  if (!gesture.moved && gesture.hit && gesture.hit.type === 'bed') offerBed(gesture.hit.item);
+  if (event) rememberPointer(event);
+  refreshCursor();
+}
+
 // ─── Mouse events ─────────────────────────────────────────────────────────────
 canvas.addEventListener('mousedown', e => {
   if (e.button === 2) return;
+  if (pickOnly) {
+    if (e.button !== 0) return;
+    beginPickPointer(e);
+    return;
+  }
   rememberPointer(e);
   const r  = canvas.getBoundingClientRect();
   const sx = e.clientX - r.left, sy = e.clientY - r.top;
@@ -751,6 +818,11 @@ canvas.addEventListener('mousedown', e => {
 
 canvas.addEventListener('mousemove', e => {
   rememberPointer(e);
+  if (pickOnly) {
+    if (pickPointer) movePickPointer(e);
+    else refreshCursor();
+    return;
+  }
   const r  = canvas.getBoundingClientRect();
   const sx = e.clientX - r.left, sy = e.clientY - r.top;
   const { x: wpx, y: wpy } = screenToWorld(sx, sy);
@@ -803,6 +875,10 @@ canvas.addEventListener('mousemove', e => {
 });
 
 document.addEventListener('mousemove', e => {
+  if (pickOnly && pickPointer && e.target !== canvas) {
+    movePickPointer(e);
+    return;
+  }
   if (!calibDrag) return;
   const r = canvas.getBoundingClientRect();
   const sx = e.clientX - r.left, sy = e.clientY - r.top;
@@ -813,12 +889,22 @@ document.addEventListener('mousemove', e => {
 });
 
 document.addEventListener('mouseup', e => {
+  if (pickOnly) {
+    if (e.target !== canvas) finishPickPointer(e);
+    return;
+  }
   if (e.target === canvas) return;
   if (!calibDrag && !isPanning && !dragging && !isRotating) return;
   finishPointerGesture(e);
 });
 
-canvas.addEventListener('mouseup', e => finishPointerGesture(e));
+canvas.addEventListener('mouseup', e => {
+  if (pickOnly) {
+    finishPickPointer(e);
+    return;
+  }
+  finishPointerGesture(e);
+});
 
 // Touch support:
 //  • 1 finger on item  → tap = select, drag = move item
@@ -844,6 +930,20 @@ canvas.addEventListener('mouseup', e => finishPointerGesture(e));
   }
 
   canvas.addEventListener('touchstart', e => {
+    if (pickOnly) {
+      e.preventDefault();
+      if (e.touches.length !== 1) {
+        touchHit = null;
+        return;
+      }
+      const bounds = canvas.getBoundingClientRect();
+      const touch = e.touches[0];
+      touchStart = { x: touch.clientX, y: touch.clientY };
+      touchMoved = false;
+      const { x: wpx, y: wpy } = screenToWorld(touch.clientX - bounds.left, touch.clientY - bounds.top);
+      touchHit = hitTest(wpx, wpy);
+      return;
+    }
     e.preventDefault();
     const r = canvas.getBoundingClientRect();
 
@@ -936,6 +1036,29 @@ canvas.addEventListener('mouseup', e => finishPointerGesture(e));
   }, { passive: false });
 
   canvas.addEventListener('touchmove', e => {
+    if (pickOnly) {
+      e.preventDefault();
+      const touch = e.touches[0];
+      if (!touch || !touchStart) return;
+      const dx = touch.clientX - touchStart.x;
+      const dy = touch.clientY - touchStart.y;
+      if (!touchMoved && Math.hypot(dx, dy) > 5) {
+        touchMoved = true;
+        isPanning = true;
+        const bounds = canvas.getBoundingClientRect();
+        panStart = {
+          x: touchStart.x - bounds.left - viewX,
+          y: touchStart.y - bounds.top - viewY,
+        };
+      }
+      if (touchMoved) {
+        const bounds = canvas.getBoundingClientRect();
+        viewX = touch.clientX - bounds.left - panStart.x;
+        viewY = touch.clientY - bounds.top - panStart.y;
+        draw();
+      }
+      return;
+    }
     e.preventDefault();
     const r = canvas.getBoundingClientRect();
 
@@ -985,6 +1108,13 @@ canvas.addEventListener('mouseup', e => finishPointerGesture(e));
   }, { passive: false });
 
   canvas.addEventListener('touchend', e => {
+    if (pickOnly) {
+      e.preventDefault();
+      if (!touchMoved && touchHit && touchHit.type === 'bed') offerBed(touchHit.item);
+      touchHit = null;
+      isPanning = false;
+      return;
+    }
     e.preventDefault();
     pinchDist = null;
     if (calibDrag) {
@@ -1044,6 +1174,7 @@ canvas.addEventListener('wheel', e => {
 }, { passive: false });
 
 canvas.addEventListener('dblclick', e => {
+  if (pickOnly) return;
   if (tool === 'draw-bed') {
     if (draftPoints.length >= 2) {
       const a = draftPoints[draftPoints.length - 1];
@@ -1063,6 +1194,7 @@ canvas.addEventListener('dblclick', e => {
 
 // ─── Keyboard shortcuts ───────────────────────────────────────────────────────
 document.addEventListener('keydown', e => {
+  if (pickOnly) return;
   // Ctrl+Z / Cmd+Z — undo (always active, even when typing)
   if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
     e.preventDefault();
@@ -1098,6 +1230,7 @@ document.addEventListener('keydown', e => {
 });
 
 document.addEventListener('keyup', e => {
+  if (pickOnly) return;
   if (e.code === 'Space') releaseSpace();
 });
 

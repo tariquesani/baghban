@@ -80,7 +80,7 @@ function currentPlan() {
 }
 
 function notePlanChanged() {
-  if (!visitOpen || applyingPlan) return;
+  if (!visitOpen || applyingPlan || pickOnly) return;
   document.dispatchEvent(new CustomEvent('planchange'));
 }
 
@@ -125,7 +125,7 @@ function applyPlan(plan) {
   } finally {
     applyingPlan = false;
   }
-  if (!scene.plot.plotId && !scene.plot.photoUrl && !scene.plot.imageDataUrl) {
+  if (!pickOnly && !scene.plot.plotId && !scene.plot.photoUrl && !scene.plot.imageDataUrl) {
     document.dispatchEvent(new CustomEvent('plotphoto'));
   }
 }

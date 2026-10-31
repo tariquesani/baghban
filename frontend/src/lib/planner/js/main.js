@@ -9,5 +9,6 @@ new ResizeObserver(() => {
   const area = canvas.parentElement;
   canvas.width  = area.clientWidth;
   canvas.height = area.clientHeight;
+  if (pickOnly && canvas.width && canvas.height) fitView();
   draw();
 }).observe(canvas.parentElement);

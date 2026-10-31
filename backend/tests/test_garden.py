@@ -7,6 +7,22 @@ from fastapi.testclient import TestClient
 from app import app, connect
 
 CALIBRATION = {"x1": 10, "y1": 20, "x2": 110, "y2": 20, "lengthFt": 8}
+IDENTITY = {
+    "name": "",
+    "subtitle": "",
+    "latitude": None,
+    "longitude": None,
+    "timezone": "",
+}
+
+
+def opened(body, beds=None, obstacles=None):
+    return {
+        **body,
+        "garden": {**IDENTITY, **body["garden"]},
+        "beds": [] if beds is None else beds,
+        "obstacles": [] if obstacles is None else obstacles,
+    }
 
 
 def settings():
@@ -79,12 +95,12 @@ def test_garden_settings_round_trip(tmp_path, monkeypatch):
 
         saved = client.put("/api/garden", json=body)
         assert saved.status_code == 200
-        assert saved.json() == {**body, "beds": [], "obstacles": []}
+        assert saved.json() == opened(body)
         assert saved.json()["plot"]["calibration"] == CALIBRATION
 
         loaded = client.get("/api/garden")
         assert loaded.status_code == 200
-        assert loaded.json() == {**body, "beds": [], "obstacles": []}
+        assert loaded.json() == opened(body)
 
         replaced = client.put("/api/garden", json=partial)
         assert replaced.status_code == 200
@@ -95,6 +111,7 @@ def test_garden_settings_round_trip(tmp_path, monkeypatch):
             "scale": None,
             "widthText": "",
             "heightText": "",
+            **IDENTITY,
         }
         assert loaded["plot"] == {**empty_plot(), "plotId": "plot-1"}
         assert "plants" not in loaded
@@ -289,4 +306,136 @@ def test_document_plants_move_into_beds_crops(tmp_path, monkeypatch, caplog):
         """
     ).fetchall()
     assert [row[0] for row in stored] == ["Tomatoes"]
+    assert "name" in garden_columns
+    connection.close()
+
+
+def identity_body(**overrides):
+    body = {
+        "name": "SANI's garden",
+        "subtitle": "A small plot at home",
+        "latitude": 22.5,
+        "longitude": 88.25,
+        "timezone": "Asia/Kolkata",
+    }
+    body.update(overrides)
+    return body
+
+
+def test_identity_stays_when_the_plan_is_saved(tmp_path, monkeypatch):
+    monkeypatch.setenv("BAGHBAN_DB", str(tmp_path / "baghban.db"))
+    with TestClient(app) as client:
+        first = client.put("/api/garden/identity", json=identity_body())
+        assert first.status_code == 200
+        garden = first.json()["garden"]
+        assert garden["name"] == "SANI's garden"
+        assert garden["subtitle"] == "A small plot at home"
+        assert garden["latitude"] == 22.5
+        assert garden["longitude"] == 88.25
+        assert garden["timezone"] == "Asia/Kolkata"
+        assert garden["scale"] is None
+
+        partial = client.put(
+            "/api/garden/identity",
+            json=identity_body(latitude=22.5, longitude=None, timezone=""),
+        )
+        assert partial.status_code == 400
+        assert client.get("/api/garden").json()["garden"]["timezone"] == "Asia/Kolkata"
+
+        supplied = client.put(
+            "/api/garden/identity",
+            json=identity_body(timezone="Europe/London"),
+        )
+        assert supplied.status_code == 200
+        assert supplied.json()["garden"]["timezone"] == "Asia/Kolkata"
+
+        omitted = client.put(
+            "/api/garden/identity",
+            json={key: value for key, value in identity_body().items() if key != "timezone"},
+        )
+        assert omitted.status_code == 200
+        assert omitted.json()["garden"]["timezone"] == "Asia/Kolkata"
+
+        sized = client.put(
+            "/api/garden",
+            json={
+                "garden": {
+                    "width": 24,
+                    "height": 12,
+                    "scale": "dimensions",
+                    "widthText": "24",
+                    "heightText": "12",
+                },
+                "plot": None,
+            },
+        )
+        assert sized.status_code == 200
+        kept = sized.json()["garden"]
+        assert kept["width"] == 24
+        assert kept["name"] == "SANI's garden"
+        assert kept["latitude"] == 22.5
+        assert kept["timezone"] == "Asia/Kolkata"
+
+        cleared = client.put(
+            "/api/garden/identity",
+            json=identity_body(latitude=None, longitude=None, timezone=""),
+        )
+        assert cleared.status_code == 200
+        assert cleared.json()["garden"]["name"] == "SANI's garden"
+        assert cleared.json()["garden"]["latitude"] is None
+        assert cleared.json()["garden"]["timezone"] == ""
+
+
+def test_reset_keeps_the_name_and_the_calendar(tmp_path, monkeypatch):
+    monkeypatch.setenv("BAGHBAN_DB", str(tmp_path / "baghban.db"))
+    with TestClient(app) as client:
+        assert client.put("/api/garden", json=settings()).status_code == 200
+        assert client.put("/api/garden/identity", json=identity_body()).status_code == 200
+        add_bed(4)
+        assert client.put(
+            "/api/obstacles",
+            json={"name": "Shed", "x": 1, "y": 1, "w": 2, "h": 2, "rotation": 0, "color": ""},
+        ).status_code == 200
+        with closing(connect()) as connection:
+            connection.execute(
+                """
+                INSERT INTO calendar_entry (kind, date, bed_id, crop, status)
+                VALUES ('sowing', '2026-10-01', 4, 'Tomato', 'done')
+                """
+            )
+            connection.execute(
+                """
+                INSERT INTO beds_crops (bed_id, crop_id, created_on)
+                SELECT 4, id, '2026-10-01' FROM crop WHERE name = 'Tomatoes'
+                """
+            )
+            connection.commit()
+
+        reset = client.post("/api/garden/reset")
+        assert reset.status_code == 200
+        body = reset.json()
+        assert body["beds"] == []
+        assert body["obstacles"] == []
+        assert body["plot"]["plotId"] is None
+        assert body["garden"]["scale"] is None
+        assert body["garden"]["width"] is None
+        assert body["garden"]["name"] == "SANI's garden"
+        assert body["garden"]["timezone"] == "Asia/Kolkata"
+
+        crops = client.get("/api/crops")
+        assert crops.status_code == 200
+        assert any(crop["name"] == "Tomatoes" for crop in crops.json())
+
+    connection = sqlite3.connect(tmp_path / "baghban.db")
+    bed = connection.execute("SELECT removed FROM bed WHERE id = 4").fetchone()
+    assert bed[0] == 1
+    archived = connection.execute(
+        "SELECT archived_on FROM beds_crops WHERE bed_id = 4"
+    ).fetchone()
+    assert archived[0]
+    sowing = connection.execute(
+        "SELECT crop FROM calendar_entry WHERE bed_id = 4"
+    ).fetchone()
+    assert sowing[0] == "Tomato"
+    assert connection.execute("SELECT COUNT(*) FROM obstacle").fetchone()[0] == 0
     connection.close()

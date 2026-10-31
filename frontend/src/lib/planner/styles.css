@@ -9,10 +9,8 @@
     }
 
     .app { display: flex; height: 100vh; }
-    .app.is-setup .sidebar,
-    .app.is-settings .sidebar { display: none; }
-    .app.is-setup .main,
-    .app.is-settings .main { margin-left: 280px; }
+    .app.is-setup .sidebar { display: none; }
+    .app.is-setup .main { margin-left: 280px; }
 
     /* ── Sidebar (Material 3 type, Lucide rail) ── */
     .sidebar {
@@ -464,6 +462,5 @@
       .report-bed-header { flex-wrap: wrap; gap: 2px; }
 
       .canvas-area { padding: 0; }
-      .app.is-setup .main,
-      .app.is-settings .main { margin-left: 0; padding-top: 42vh; }
+      .app.is-setup .main { margin-left: 0; padding-top: 42vh; }
     }

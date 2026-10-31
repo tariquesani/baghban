@@ -34,13 +34,13 @@
   } = $props();
 
   const entries = [
-    { id: 'home', label: 'Home', icon: 'house', href: '/' },
+    { id: 'home', label: 'Dashboard', icon: 'layout-dashboard', href: '/' },
     { id: 'calendar', label: 'Calendar', icon: 'calendar', href: '/calendar' },
     { id: 'crops', label: 'Crops', icon: 'leaf', href: '/crops' },
     { id: 'planner', label: 'Planner', icon: 'map', href: '/planner' },
     { id: 'planter', label: 'Planter', icon: 'layout-grid' },
     { id: 'inventory', label: 'Inventory', icon: 'package' },
-    { id: 'setup', label: 'Setup', icon: 'ruler' },
+    { id: 'setup', label: 'Setup', icon: 'ruler', href: '/settings' },
     { id: 'help', label: 'Help', icon: 'circle-help' },
   ];
 
@@ -50,7 +50,6 @@
 
   /** @param {string} href */
   function current(href) {
-    if (href === '/planner') return path === '/planner' || path === '/settings';
     return path === href;
   }
 
