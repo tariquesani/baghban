@@ -146,7 +146,7 @@
       {:else if path === '/settings'}
         <Setup />
       {:else if path === '/calendar'}
-        <Calendar bind:entryOpen {entrySession} {entryKind} />
+        <Calendar bind:entryOpen {entrySession} {entryKind} {search} />
       {:else if path === '/crops'}
         <Crops />
       {:else}

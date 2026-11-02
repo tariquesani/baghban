@@ -1,36 +1,41 @@
 <script lang="ts">
-  import { untrack } from 'svelte';
+  import { tick, untrack } from 'svelte';
   import CalendarDayPanel from '../components/calendar/CalendarDayPanel.svelte';
   import CalendarGrid from '../components/calendar/CalendarGrid.svelte';
   import CalendarKindFilter from '../components/calendar/CalendarKindFilter.svelte';
   import EntryDialog from '../components/calendar/EntryDialog.svelte';
   import RecordDialog from '../components/calendar/RecordDialog.svelte';
-  import { listBeds } from '$lib/api/beds.js';
+  import { listAssignments, listBeds } from '$lib/api/beds.js';
   import { listCalendarEntries } from '$lib/api/calendar.js';
-  import { calendarRows, dayEntries, type CalendarEntry } from '$lib/domain/calendar.js';
+  import { calendarRows, dayEntries, type BedCrop, type CalendarEntry } from '$lib/domain/calendar.js';
   import { calendarRecord, isEntryKind } from '$lib/domain/entryForm.js';
 
   let {
     entryOpen = $bindable(false),
     entrySession = 0,
     entryKind = 'sowing',
+    search = '',
   }: {
     entryOpen?: boolean;
     entrySession?: number;
     entryKind?: string;
+    search?: string;
   } = $props();
 
   let year = $state(new Date().getFullYear());
+  let appliedSearch = $state('');
+  let filledQuery = $state('');
   let kind = $state('');
   let selected = $state<{ date: string; crop: string } | null>(null);
   let saved = $state<CalendarEntry[]>([]);
-  let grid = $state<{ showOctober: () => void } | null>(null);
+  let plantings = $state.raw<BedCrop[]>([]);
+  let grid = $state<{ showCurrentMonth: () => void } | null>(null);
   let detail = $state<CalendarEntry | null>(null);
   let formEntry = $state<CalendarEntry | null>(null);
   let editSession = $state(0);
 
   const entries = $derived(saved);
-  const rows = $derived(calendarRows(entries, year));
+  const rows = $derived(calendarRows(entries, year, plantings));
   const shown = $derived(
     selected ? dayEntries(entries, selected.date, selected.crop, kind) : [],
   );
@@ -43,8 +48,14 @@
     selected = null;
   }
 
-  function showOctober() {
-    grid?.showOctober();
+  async function showCurrentMonth() {
+    const today = new Date().getFullYear();
+    if (year !== today) {
+      year = today;
+      selected = null;
+    }
+    await tick();
+    grid?.showCurrentMonth();
   }
 
   function addSowing(entry: CalendarEntry) {
@@ -61,6 +72,18 @@
 
   function forgetEntry(id: string) {
     saved = saved.filter((item) => item.id !== id);
+  }
+
+  function bedCrop(row: Record<string, unknown>): BedCrop | null {
+    if (typeof row.name !== 'string' || typeof row.createdOn !== 'string') return null;
+    const name = row.name.trim();
+    if (!name) return null;
+    const archived = row.archivedOn;
+    return {
+      name,
+      createdOn: row.createdOn,
+      archivedOn: typeof archived === 'string' && archived ? archived : null,
+    };
   }
 
   function storedEntry(row: Record<string, unknown>, bedName: string): CalendarEntry | null {
@@ -82,10 +105,42 @@
   }
 
   $effect(() => {
+    const query = search;
+    if (query === appliedSearch) return;
+    appliedSearch = query;
+    const date = new URLSearchParams(query).get('date') ?? '';
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return;
+    year = Number(date.slice(0, 4));
+    const crop = untrack(() => saved.find((entry) => entry.date === date)?.crop ?? '');
+    selected = { date, crop };
+  });
+
+  $effect(() => {
+    const date = new URLSearchParams(search).get('date') ?? '';
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || filledQuery === date) return;
+    if (selected?.date !== date) return;
+    if (selected.crop) {
+      filledQuery = date;
+      return;
+    }
+    const crop = saved.find((entry) => entry.date === date && entry.crop)?.crop ?? '';
+    if (!crop) return;
+    selected = { date, crop };
+    filledQuery = date;
+  });
+
+  $effect(() => {
     let cancel = false;
-    Promise.all([listCalendarEntries(), listBeds()])
-      .then(([rows, beds]) => {
-        if (cancel || !Array.isArray(rows)) return;
+    Promise.all([listCalendarEntries(), listBeds(), listAssignments().catch(() => [])])
+      .then(([rows, beds, assignmentRows]) => {
+        if (cancel) return;
+        plantings = Array.isArray(assignmentRows)
+          ? assignmentRows.flatMap((row) => {
+              const planting = row && typeof row === 'object' ? bedCrop(row as Record<string, unknown>) : null;
+              return planting ? [planting] : [];
+            })
+          : [];
+        if (!Array.isArray(rows)) return;
         const names = new Map<number, string>();
         if (Array.isArray(beds)) {
           for (const bed of beds) {
@@ -115,7 +170,7 @@
 
 <main class="calendar">
   <div class="top">
-    <CalendarKindFilter {kind} onKind={(value) => (kind = value)} onShowOctober={showOctober} />
+    <CalendarKindFilter {kind} onKind={(value) => (kind = value)} onShowCurrentMonth={showCurrentMonth} />
     <p class="year">
       <button type="button" onclick={() => showYear(year - 1)}>{year - 1}</button>
       <strong>{year}</strong>

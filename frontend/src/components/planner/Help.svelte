@@ -35,7 +35,8 @@
           <li>Drag the ↻ handle to rotate; hold Shift to snap to 15°</li>
           <li>Recalibrate a plan from Setup if the scale looks wrong</li>
           <li>Plot a bed by clicking corners</li>
-          <li>Double-click to close a polygon or rename an item</li>
+          <li>Double-click to close a polygon</li>
+          <li>Double-click an edge of a selected bed to add a corner</li>
         </ul>
       </div>
     </div>

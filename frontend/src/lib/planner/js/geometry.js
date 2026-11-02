@@ -150,12 +150,39 @@ function polygonCellInside(bed, r, c) {
   return pointInPolygon(bed.x + c + 0.5, bed.y + r + 0.5, bed.points);
 }
 
-function pointSegDist(p, a, b) {
-  const dx = b.x - a.x, dy = b.y - a.y;
+function closestPointOnSegment(point, start, end) {
+  const dx = end.x - start.x, dy = end.y - start.y;
   const len2 = dx * dx + dy * dy;
-  let t = len2 ? ((p.x - a.x) * dx + (p.y - a.y) * dy) / len2 : 0;
+  let t = len2 ? ((point.x - start.x) * dx + (point.y - start.y) * dy) / len2 : 0;
   t = Math.max(0, Math.min(1, t));
-  return Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy));
+  return { x: start.x + t * dx, y: start.y + t * dy };
+}
+
+function pointSegDist(p, a, b) {
+  const closest = closestPointOnSegment(p, a, b);
+  return Math.hypot(p.x - closest.x, p.y - closest.y);
+}
+
+// `radius` uses the same units as `points`. Each end of the edge is left for
+// the corner handle, but never more than 30% of that edge, so a short edge
+// still has a middle that can take a new corner.
+function polygonEdgeInsertPoint(points, point, radius) {
+  let best = null;
+  for (let i = 0; i < points.length; i++) {
+    const start = points[i];
+    const end = points[(i + 1) % points.length];
+    const projected = closestPointOnSegment(point, start, end);
+    const distance = Math.hypot(point.x - projected.x, point.y - projected.y);
+    if (distance > radius) continue;
+    const edgeLength = Math.hypot(end.x - start.x, end.y - start.y);
+    const keepOff = Math.min(radius, edgeLength * 0.3);
+    if (Math.hypot(projected.x - start.x, projected.y - start.y) <= keepOff) continue;
+    if (Math.hypot(projected.x - end.x, projected.y - end.y) <= keepOff) continue;
+    if (!best || distance < best.distance) {
+      best = { index: i, point: { x: projected.x, y: projected.y }, distance };
+    }
+  }
+  return best;
 }
 
 function segmentsIntersect(a, b, c, d) {

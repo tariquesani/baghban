@@ -97,6 +97,44 @@ def _assignment(row, crop) -> dict:
     }
 
 
+def list_active_assignments() -> list:
+    """Crops still in a bed, with the date and maturity the home page reads."""
+    with closing(connect()) as connection:
+        rows = connection.execute(
+            """
+            SELECT
+                beds_crops.id,
+                beds_crops.bed_id,
+                beds_crops.created_on,
+                bed.name AS bed_name,
+                crop.name AS crop_name,
+                crop.emoji,
+                crop.days_to_maturity
+            FROM beds_crops
+            JOIN bed ON bed.id = beds_crops.bed_id
+            JOIN crop ON crop.id = beds_crops.crop_id
+            WHERE beds_crops.archived_on IS NULL
+              AND bed.removed = 0
+            ORDER BY beds_crops.id
+            """
+        ).fetchall()
+    assignments = []
+    for row in rows:
+        maturity = row["days_to_maturity"]
+        assignments.append(
+            {
+                "id": int(row["id"]),
+                "bedId": int(row["bed_id"]),
+                "bedName": row["bed_name"] or "",
+                "name": row["crop_name"],
+                "emoji": row["emoji"] or "",
+                "createdOn": row["created_on"],
+                "daysToMaturity": None if maturity is None else int(maturity),
+            }
+        )
+    return assignments
+
+
 def active_names(connection) -> dict[int, list[str]]:
     """Catalogue names of crops still in each bed, in the order they were added."""
     grouped: dict[int, list[str]] = {}

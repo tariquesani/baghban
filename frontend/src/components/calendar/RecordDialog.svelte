@@ -1,6 +1,8 @@
 <script lang="ts">
   import { parseDate, type DateValue } from '@internationalized/date';
   import CalendarIcon from '@lucide/svelte/icons/calendar';
+  import ChevronDownIcon from '@lucide/svelte/icons/chevron-down';
+  import { tick } from 'svelte';
   import { listBeds } from '$lib/api/beds.js';
   import { createCalendarEntry, removePhoto, storePhoto, updateCalendarEntry } from '$lib/api/calendar.js';
   import { listCrops } from '$lib/api/crops.js';
@@ -8,6 +10,7 @@
   import BedField from '../beds/BedField.svelte';
   import { Button } from '$lib/components/ui/button';
   import { Calendar } from '$lib/components/ui/calendar';
+  import * as Command from '$lib/components/ui/command';
   import * as Dialog from '$lib/components/ui/dialog';
   import * as Field from '$lib/components/ui/field';
   import { Input } from '$lib/components/ui/input';
@@ -25,11 +28,13 @@
     formFields,
     isEntryKind,
   } from '$lib/domain/entryForm.js';
+  import { cn } from '$lib/utils.js';
   import {
     formatSowingDate,
     localDate,
     bedsHoldingCrop,
     bedsWithCrops,
+    cropsForNames,
     matchingCropName,
     photoProblem,
     sowingBedChoices,
@@ -47,6 +52,9 @@
     entry = null,
     selectedDate,
     selectedCrop,
+    lockedBedId = null,
+    lockedBedName = '',
+    cropNames = null,
     onSaved,
   }: {
     open?: boolean;
@@ -56,6 +64,9 @@
     entry?: CalendarEntry | null;
     selectedDate: string;
     selectedCrop: string;
+    lockedBedId?: number | null;
+    lockedBedName?: string;
+    cropNames?: string[] | null;
     onSaved: (entry: CalendarEntry) => void;
   } = $props();
 
@@ -69,6 +80,9 @@
   let dateValue = $state<DateValue | undefined>();
   let pickerMonth = $state<DateValue | undefined>();
   let pickerOpen = $state(false);
+  let cropOpen = $state(false);
+  let cropQuery = $state('');
+  let cropTrigger = $state<HTMLButtonElement | null>(null);
   let crop = $state('');
   let status = $state<'planned' | 'done'>('done');
   let bedId = $state('none');
@@ -102,24 +116,28 @@
   let seenEdit = 0;
 
   const copy = $derived(entryCopy(recording));
+  const offeredCrops = $derived(cropsForNames(cropChoices, cropNames));
   const cropItems = $derived(
-    cropChoices.map((choice) => ({
+    offeredCrops.map((choice) => ({
       value: choice.name,
       label: choice.emoji ? `${choice.emoji} ${choice.name}` : choice.name,
     })),
   );
+  const cropLabel = $derived(cropItems.find((item) => item.value === crop)?.label ?? crop);
   const bedChoices = $derived(sowingBedChoices(bedRows));
   const cropBeds = $derived(recording === 'care' || recording === 'pest' || recording === 'harvest');
   const offeredBeds = $derived(cropBeds ? bedsHoldingCrop(bedRows, crop) : bedChoices);
   const bedItems = $derived(
-    cropBeds
-      ? offeredBeds.map((choice) => ({ value: String(choice.id), label: choice.name }))
-      : [
-          { value: 'none', label: 'Not in a bed' },
-          ...bedChoices.map((choice) => ({ value: String(choice.id), label: choice.name })),
-        ],
+    lockedBedId != null
+      ? [{ value: String(lockedBedId), label: lockedBedName || 'This bed' }]
+      : cropBeds
+        ? offeredBeds.map((choice) => ({ value: String(choice.id), label: choice.name }))
+        : [
+            { value: 'none', label: 'Not in a bed' },
+            ...bedChoices.map((choice) => ({ value: String(choice.id), label: choice.name })),
+          ],
   );
-  const bedLocked = $derived(cropBeds && offeredBeds.length <= 1);
+  const bedLocked = $derived(lockedBedId != null || (cropBeds && offeredBeds.length <= 1));
 
   function asKind(value: string): EntryKind {
     return isEntryKind(value) ? value : 'sowing';
@@ -129,6 +147,15 @@
     if (fieldError !== name) return;
     fieldError = '';
     formError = '';
+  }
+
+  function chooseCrop(name: string) {
+    crop = name;
+    cropEdited = true;
+    clearField('crop');
+    cropOpen = false;
+    cropQuery = '';
+    tick().then(() => cropTrigger?.focus());
   }
 
   function clearPhoto() {
@@ -198,11 +225,13 @@
     dateValue = parseDate(draft.date);
     pickerMonth = dateValue;
     pickerOpen = false;
+    cropOpen = false;
+    cropQuery = '';
     crop = '';
     cropEdited = false;
     status = draft.status;
     statusChosen = recording === 'diary';
-    bedId = draft.bedId;
+    bedId = lockedBedId != null ? String(lockedBedId) : draft.bedId;
     note = '';
     applyMeasures(draft);
     todayStamp = today;
@@ -227,6 +256,8 @@
     dateValue = parseDate(source.date);
     pickerMonth = dateValue;
     pickerOpen = false;
+    cropOpen = false;
+    cropQuery = '';
     crop = source.crop;
     cropEdited = true;
     status = recording === 'diary' ? 'done' : source.status;
@@ -257,12 +288,17 @@
   });
 
   $effect(() => {
-    const match = matchingCropName(cropChoices, selectedCrop);
+    const match = matchingCropName(offeredCrops, selectedCrop);
     if (!open || cropEdited || crop || !match) return;
     crop = match;
   });
 
   $effect(() => {
+    if (lockedBedId != null) {
+      const next = String(lockedBedId);
+      if (next !== bedId) bedId = next;
+      return;
+    }
     if (!bedsLoaded || !cropBeds) return;
     const next = offeredBeds.length === 1
       ? String(offeredBeds[0].id)
@@ -371,28 +407,51 @@
       <div class="grid gap-4">
       <Field.Field data-invalid={fieldError === 'crop' || undefined}>
         <Field.Label for="{recording}-crop">Crop</Field.Label>
-        <Select.Root
-          type="single"
-          name="crop"
-          items={cropItems}
-          value={crop}
-          onValueChange={(value) => {
-            crop = value;
-            cropEdited = true;
-            clearField('crop');
+        <Popover.Root
+          bind:open={cropOpen}
+          onOpenChange={(next) => {
+            if (!next) cropQuery = '';
           }}
         >
-          <Select.Trigger id="{recording}-crop" class="w-full" aria-invalid={fieldError === 'crop' || undefined}>
-            <Select.Value placeholder="Choose a crop" />
-          </Select.Trigger>
-          <Select.Content>
-            <Select.Group>
-              {#each cropItems as item (item.value)}
-                <Select.Item value={item.value} label={item.label}>{item.label}</Select.Item>
-              {/each}
-            </Select.Group>
-          </Select.Content>
-        </Select.Root>
+          <Popover.Trigger bind:ref={cropTrigger}>
+            {#snippet child({ props })}
+              <Button
+                {...props}
+                id="{recording}-crop"
+                type="button"
+                variant="outline"
+                class="w-full justify-between font-normal"
+                role="combobox"
+                aria-expanded={cropOpen}
+                aria-invalid={fieldError === 'crop' || undefined}
+              >
+                <span class={cn('min-w-0 flex-1 truncate text-left', !cropLabel && 'text-muted-foreground')}>
+                  {cropLabel || 'Choose a crop'}
+                </span>
+                <ChevronDownIcon data-icon="inline-end" />
+              </Button>
+            {/snippet}
+          </Popover.Trigger>
+          <Popover.Content class="w-(--bits-popover-anchor-width) gap-0 p-0" align="start">
+            <Command.Root>
+              <Command.Input placeholder="Search crops..." bind:value={cropQuery} />
+              <Command.List>
+                <Command.Empty>No crops found.</Command.Empty>
+                <Command.Group>
+                  {#each cropItems as item (item.value)}
+                    <Command.Item
+                      value={item.value}
+                      data-checked={crop === item.value}
+                      onSelect={() => chooseCrop(item.value)}
+                    >
+                      {item.label}
+                    </Command.Item>
+                  {/each}
+                </Command.Group>
+              </Command.List>
+            </Command.Root>
+          </Popover.Content>
+        </Popover.Root>
         {#if fieldError === 'crop'}<Field.Error>{formError}</Field.Error>{/if}
       </Field.Field>
 

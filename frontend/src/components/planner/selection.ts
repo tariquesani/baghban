@@ -1,4 +1,5 @@
 export type SelectionDetails = {
+  id: number | string;
   title: string;
   name: string;
   width: number;

@@ -6,11 +6,11 @@
   let {
     kind,
     onKind,
-    onShowOctober,
+    onShowCurrentMonth,
   }: {
     kind: string;
     onKind: (kind: string) => void;
-    onShowOctober: () => void;
+    onShowCurrentMonth: () => void;
   } = $props();
 
   const choice = $derived(kind || 'all');
@@ -38,7 +38,7 @@
       <ToggleGroup.Item value={name} class={chipClass}>{kindLabel(name)}</ToggleGroup.Item>
     {/each}
   </ToggleGroup.Root>
-  <Button variant="link" class="px-2" onclick={onShowOctober}>Go to October</Button>
+  <Button variant="link" class="px-2" onclick={onShowCurrentMonth}>Go to current month</Button>
 </div>
 
 <style>

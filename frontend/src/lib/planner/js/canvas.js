@@ -199,6 +199,62 @@ function hitPolygonVertex(bed, wx, wy, radiusWorld) {
   return hitVertex(ft(local.x), ft(local.y), bed.points, radiusWorld);
 }
 
+// Narrower than a corner handle, so the middle of a bed is not treated as its outline.
+function edgeInsertRadiusFeet() {
+  return (8 / viewZoom) / SCALE;
+}
+
+function polygonPressTarget(wx, wy) {
+  const selected = getSelected();
+  if (selected && isPolygon(selected)) {
+    if (hitPolygonVertex(selected, wx, wy, 12 / viewZoom) >= 0) return selected;
+    const local = polygonLocalFeet(selected, wx / SCALE, wy / SCALE);
+    if (polygonEdgeInsertPoint(selected.points, local, edgeInsertRadiusFeet())) return selected;
+  }
+  const hit = hitTest(wx, wy);
+  if (hit && hit.type === 'bed' && isPolygon(hit.item)) return hit.item;
+  return null;
+}
+
+// The second press of a double-click must keep the first press's decision.
+// A later click is a new gesture, so selecting a bed and then double-clicking
+// its edge can still add a corner.
+function rememberEdgeInsertPress(bed) {
+  const now = performance.now();
+  if (!bed) {
+    edgeInsertPressAt = now;
+    edgeInsertPressBedId = null;
+    edgeInsertPressCount = 0;
+    edgeInsertBedId = null;
+    return;
+  }
+  const continuation = bed.id === edgeInsertPressBedId
+    && edgeInsertPressCount === 1
+    && (now - edgeInsertPressAt) < 1000;
+  edgeInsertPressAt = now;
+  edgeInsertPressBedId = bed.id;
+  if (continuation) {
+    edgeInsertPressCount = 2;
+    return;
+  }
+  edgeInsertPressCount = 1;
+  const selected = getSelected();
+  edgeInsertBedId = (selected && isPolygon(selected) && selected.id === bed.id) ? bed.id : null;
+}
+
+function addCornerAtPointer(bed, wx, wy) {
+  const local = polygonLocalFeet(bed, wx / SCALE, wy / SCALE);
+  const edge = polygonEdgeInsertPoint(bed.points, local, edgeInsertRadiusFeet());
+  if (!edge) return;
+  saveHistory();
+  bed.points.splice(edge.index + 1, 0, edge.point);
+  selectedVertex = edge.index + 1;
+  syncPolygonBounds(bed);
+  updatePolyPanel();
+  renderLists();
+  draw();
+}
+
 function polygonFitsGarden(bed, rotation) {
   const previous = bed.rotation;
   bed.rotation = rotation;
@@ -218,6 +274,11 @@ function rotationInsideGarden(bed, target, fallback) {
     else far = mid;
   }
   return near;
+}
+
+function bedIsEmpty(bed) {
+  if (!showOccupancy) return false;
+  return !(bed.plants || []).some(name => String(name).trim());
 }
 
 function cropEmojis(plants) {
@@ -266,22 +327,30 @@ function drawPolygonBed(b) {
     ctx.closePath();
   };
 
+  const empty = bedIsEmpty(b);
   ctx.save();
-  ctx.shadowColor = sel ? 'rgba(255,159,10,0.4)' : 'rgba(0,0,0,0.18)';
-  ctx.shadowBlur = sel ? 12 : 5;
-  ctx.shadowOffsetX = 2; ctx.shadowOffsetY = 2;
-  ctx.fillStyle = b.color;
+  ctx.shadowColor = empty ? 'transparent' : (sel ? 'rgba(255,159,10,0.4)' : 'rgba(0,0,0,0.18)');
+  ctx.shadowBlur = empty ? 0 : (sel ? 12 : 5);
+  ctx.shadowOffsetX = empty ? 0 : 2; ctx.shadowOffsetY = empty ? 0 : 2;
+  ctx.fillStyle = empty ? 'rgba(255,255,255,0.55)' : b.color;
   path(); ctx.fill();
   ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0;
   ctx.shadowOffsetX = 0; ctx.shadowOffsetY = 0;
 
-  ctx.strokeStyle = sel ? '#ff9f0a' : 'rgba(0,0,0,0.28)';
-  ctx.lineWidth = sel ? 3 : 1.5;
+  if (empty) {
+    ctx.setLineDash([8, 5]);
+    ctx.strokeStyle = '#8a9384';
+    ctx.lineWidth = 1.5;
+  } else {
+    ctx.strokeStyle = sel ? '#ff9f0a' : 'rgba(0,0,0,0.28)';
+    ctx.lineWidth = sel ? 3 : 1.5;
+  }
   path(); ctx.stroke();
+  ctx.setLineDash([]);
 
   const label = polygonLabelPoint(b.points);
   const area = bedArea(b);
-  ctx.fillStyle = '#fff';
+  ctx.fillStyle = empty ? '#3d4742' : '#fff';
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   ctx.font = `bold ${clamp(10, 13, ft(Math.min(b.w, b.h)) / 5)}px sans-serif`;
   ctx.fillText(b.name, ft(label.x), ft(label.y) - 8);
@@ -289,16 +358,20 @@ function drawPolygonBed(b) {
   ctx.globalAlpha = 0.85;
   ctx.fillText(`${area.toFixed(1)} sq ft`, ft(label.x), ft(label.y) + 8);
   ctx.globalAlpha = 1;
-  ctx.save();
-  path(); ctx.clip();
-  drawCropEmojis(
-    cropEmojis(b.plants),
-    ft(label.x),
-    ft(label.y) + 18,
-    Math.max(12, ft(Math.min(b.w, b.h)) * 0.8),
-    Math.max(12, ft(Math.min(b.w, b.h)) * 0.45),
-  );
-  ctx.restore();
+  if (empty) {
+    ctx.fillText('Empty', ft(label.x), ft(label.y) + 24);
+  } else {
+    ctx.save();
+    path(); ctx.clip();
+    drawCropEmojis(
+      cropEmojis(b.plants),
+      ft(label.x),
+      ft(label.y) + 18,
+      Math.max(12, ft(Math.min(b.w, b.h)) * 0.8),
+      Math.max(12, ft(Math.min(b.w, b.h)) * 0.45),
+    );
+    ctx.restore();
+  }
   ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
   ctx.restore();
 
@@ -362,6 +435,7 @@ function drawBed(b) {
   const sel = isSelected(selectedObj, 'bed', b.id);
   const isPot     = b.type === 'pot';
   const isPlanter = b.type === 'planter';
+  const empty = bedIsEmpty(b);
 
   // Apply rotation transform around bed center
   ctx.save();
@@ -371,11 +445,11 @@ function drawBed(b) {
   const x = 0, y = 0; // local origin = bed top-left
 
   // Shadow
-  ctx.shadowColor = sel ? 'rgba(255,159,10,0.4)' : 'rgba(0,0,0,0.18)';
-  ctx.shadowBlur  = sel ? 12 : 5;
-  ctx.shadowOffsetX = 2; ctx.shadowOffsetY = 2;
+  ctx.shadowColor = empty ? 'transparent' : (sel ? 'rgba(255,159,10,0.4)' : 'rgba(0,0,0,0.18)');
+  ctx.shadowBlur  = empty ? 0 : (sel ? 12 : 5);
+  ctx.shadowOffsetX = empty ? 0 : 2; ctx.shadowOffsetY = empty ? 0 : 2;
 
-  ctx.fillStyle = b.color;
+  ctx.fillStyle = empty ? 'rgba(255,255,255,0.55)' : b.color;
   roundRect(x, y, w, h, 5); ctx.fill();
 
   ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0;
@@ -384,32 +458,38 @@ function drawBed(b) {
   if (isPot) {
     const r  = ft(b.diam) / 2;
     const potCx = x + r, potCy = y + r;
-    // Shadow
-    ctx.shadowColor = sel ? 'rgba(255,159,10,0.4)' : 'rgba(0,0,0,0.18)';
-    ctx.shadowBlur = sel ? 12 : 5;
-    ctx.shadowOffsetX = 2; ctx.shadowOffsetY = 2;
-    ctx.fillStyle = b.color;
+    ctx.shadowColor = empty ? 'transparent' : (sel ? 'rgba(255,159,10,0.4)' : 'rgba(0,0,0,0.18)');
+    ctx.shadowBlur = empty ? 0 : (sel ? 12 : 5);
+    ctx.shadowOffsetX = empty ? 0 : 2; ctx.shadowOffsetY = empty ? 0 : 2;
+    ctx.fillStyle = empty ? 'rgba(255,255,255,0.55)' : b.color;
     ctx.beginPath(); ctx.arc(potCx, potCy, r, 0, Math.PI*2); ctx.fill();
     ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0;
     ctx.shadowOffsetX = 0; ctx.shadowOffsetY = 0;
+    if (empty) {
+      ctx.setLineDash([6, 4]);
+      ctx.beginPath(); ctx.arc(potCx, potCy, r, 0, Math.PI*2);
+      ctx.strokeStyle = '#8a9384'; ctx.lineWidth = 1.5; ctx.stroke();
+      ctx.setLineDash([]);
+    }
     // Inner rim ring
     ctx.beginPath(); ctx.arc(potCx, potCy, r * 0.82, 0, Math.PI*2);
-    ctx.strokeStyle = 'rgba(0,0,0,0.2)'; ctx.lineWidth = 2; ctx.stroke();
+    ctx.strokeStyle = empty ? '#8a9384' : 'rgba(0,0,0,0.2)'; ctx.lineWidth = 2; ctx.stroke();
     // Selection ring
     if (sel) {
       ctx.beginPath(); ctx.arc(potCx, potCy, r + 3, 0, Math.PI*2);
       ctx.strokeStyle = '#ff9f0a'; ctx.lineWidth = 3; ctx.stroke();
     }
     // Name + diameter labels
-    ctx.fillStyle = '#fff';
+    ctx.fillStyle = empty ? '#3d4742' : '#fff';
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    const hasPlants = b.plants && b.plants.length;
+    const hasPlants = !empty && b.plants && b.plants.length;
     ctx.font = `bold ${clamp(9, 12, r / 2)}px sans-serif`;
-    ctx.fillText(b.name, potCx, hasPlants ? potCy - r * 0.45 : potCy - r * 0.18);
+    ctx.fillText(b.name, potCx, hasPlants || empty ? potCy - r * 0.45 : potCy - r * 0.18);
     ctx.font = `${clamp(8, 10, r / 3)}px sans-serif`;
     ctx.globalAlpha = 0.75;
-    ctx.fillText(`${b.diam * 12}"`, potCx, hasPlants ? potCy - r * 0.18 : potCy + r * 0.32);
+    ctx.fillText(`${b.diam * 12}"`, potCx, hasPlants || empty ? potCy - r * 0.18 : potCy + r * 0.32);
     ctx.globalAlpha = 1;
+    if (empty) ctx.fillText('Empty', potCx, potCy + r * 0.28);
     if (hasPlants && r > 16) {
       drawCropEmojis(cropEmojis(b.plants), potCx, potCy + r * 0.08, r * 1.5, r * 0.7);
     }
@@ -418,7 +498,13 @@ function drawBed(b) {
     return;
   }
 
-  if (isPlanter) {
+  if (empty) {
+    ctx.setLineDash([8, 5]);
+    ctx.strokeStyle = '#8a9384';
+    ctx.lineWidth = 1.5;
+    roundRect(x, y, w, h, 5); ctx.stroke();
+    ctx.setLineDash([]);
+  } else if (isPlanter) {
     const inset = Math.max(3, Math.min(w, h) * 0.12);
     roundRect(x + inset, y + inset, Math.max(1, w - inset * 2), Math.max(1, h - inset * 2), 4);
     ctx.strokeStyle = 'rgba(255,255,255,0.45)';
@@ -444,23 +530,24 @@ function drawBed(b) {
     ctx.save();
     roundRect(x, y, w, h, 5);
     ctx.clip();
-    ctx.fillStyle = '#fff';
+    ctx.fillStyle = empty ? '#3d4742' : '#fff';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    const nameY = emojis.length ? y + h * 0.28 : y + h / 2 - 6;
+    const nameY = empty || emojis.length ? y + h * 0.28 : y + h / 2 - 6;
     ctx.font = `bold ${nameFs}px sans-serif`;
     ctx.fillText(b.name, x + w / 2, nameY);
     ctx.font = `${sizeFs}px sans-serif`;
     ctx.globalAlpha = 0.8;
     ctx.fillText(sizeLabel, x + w / 2, nameY + nameFs);
     ctx.globalAlpha = 1;
-    drawCropEmojis(emojis, x + w / 2, y + h * 0.52, w - 10, h * 0.42);
+    if (empty) ctx.fillText('Empty', x + w / 2, nameY + nameFs + sizeFs + 2);
+    else drawCropEmojis(emojis, x + w / 2, y + h * 0.52, w - 10, h * 0.42);
     ctx.restore();
   }
 
   if (!isPlanter) {
   const dimLabel = `${b.w}×${b.h} · ${b.w*b.h} sqft`;
-  ctx.fillStyle = '#fff';
+  ctx.fillStyle = empty ? '#3d4742' : '#fff';
   ctx.font = `bold ${clamp(10, 13, w / 5)}px sans-serif`;
   ctx.textAlign = 'center'; ctx.textBaseline = 'top';
   ctx.fillText(b.name, x + w/2, y + 7);
@@ -468,7 +555,8 @@ function drawBed(b) {
   ctx.globalAlpha = 0.8;
   ctx.fillText(dimLabel, x + w/2, y + 22);
   ctx.globalAlpha = 1;
-  drawCropEmojis(cropEmojis(b.plants), x + w / 2, y + 36, Math.max(12, w - 8), Math.max(12, h - 42));
+  if (empty) ctx.fillText('Empty', x + w/2, y + 38);
+  else drawCropEmojis(cropEmojis(b.plants), x + w / 2, y + 36, Math.max(12, w - 8), Math.max(12, h - 42));
   }
 
   ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
@@ -759,12 +847,22 @@ canvas.addEventListener('mousedown', e => {
   }
   if (tool === 'draw-bed') { onDrawClick(wpx, wpy); return; }
 
+  const pressTarget = polygonPressTarget(wpx, wpy);
+  rememberEdgeInsertPress(pressTarget);
+
   // Check rotation handle of selected item first
   const selItem = getSelected();
   if (selItem && isPolygon(selItem) && hitPolygonRotateHandle(wpx, wpy, selItem)) {
     beginRotate(selItem, wpx, wpy);
     refreshCursor();
     return;
+  }
+  if (pressTarget && selItem && pressTarget.id === selItem.id && isPolygon(selItem)) {
+    const local = polygonLocalFeet(selItem, wpx / SCALE, wpy / SCALE);
+    if (polygonEdgeInsertPoint(selItem.points, local, edgeInsertRadiusFeet())) {
+      refreshCursor();
+      return;
+    }
   }
   if (selItem && isPolygon(selItem)) {
     const vi = hitPolygonVertex(selItem, wpx, wpy, 12 / viewZoom);
@@ -1184,12 +1282,11 @@ canvas.addEventListener('dblclick', e => {
     if (draftPoints.length >= 3) closeDraft();
     return;
   }
-  const r   = canvas.getBoundingClientRect();
-  const sx  = e.clientX - r.left, sy = e.clientY - r.top;
-  const hit = hitTest(...Object.values(screenToWorld(sx, sy)));
-  if (!hit) return;
-  const name = prompt('Rename:', hit.item.name);
-  if (name) { hit.item.name = name; draw(); renderLists(); syncPanel(); }
+  const bed = selectedBed();
+  if (!bed || !isPolygon(bed) || bed.id !== edgeInsertBedId) return;
+  const r = canvas.getBoundingClientRect();
+  const { x: wpx, y: wpy } = screenToWorld(e.clientX - r.left, e.clientY - r.top);
+  addCornerAtPointer(bed, wpx, wpy);
 });
 
 // ─── Keyboard shortcuts ───────────────────────────────────────────────────────

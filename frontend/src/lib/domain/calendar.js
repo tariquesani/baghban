@@ -4,7 +4,12 @@ export const CALENDAR_KINDS = ['sowing', 'care', 'pest', 'harvest', 'diary'];
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-const KIND_LABEL = {
+/** Short month name used on the year grid. Defaults to today. */
+export function monthName(date = new Date()) {
+  return MONTHS[date.getMonth()];
+}
+
+export const KIND_LABEL = {
   sowing: 'Sowing',
   care: 'Care',
   pest: 'Pest',
@@ -189,13 +194,61 @@ export function dayMarks(entries, kindFilter) {
 }
 
 /**
- * Crops that have an entry in the year. The garden row leads when it has entries,
- * and it is the only row in an empty year.
+ * A crop placed in a bed. `archivedOn` is empty while it is still there.
+ * @typedef {Object} BedCrop
+ * @property {string} name Catalogue name, the same text an entry stores.
+ * @property {string} createdOn The day it was placed, `YYYY-MM-DD`.
+ * @property {string | null} [archivedOn] The day it left the bed.
+ */
+
+/**
+ * Crop rows for these entries. The garden row leads when an entry has no crop,
+ * and it is the only row when nothing was recorded.
  * @param {CalendarEntry[]} entries
- * @param {number} year
  * @returns {string[]}
  */
-export function calendarRows(entries, year) {
+export function entryRows(entries) {
+  /** @type {Set<string>} */
+  const crops = new Set();
+  let garden = false;
+  for (const entry of entries) {
+    if (entry.crop) crops.add(entry.crop);
+    else garden = true;
+  }
+  const names = [...crops].sort((left, right) => left.localeCompare(right));
+  if (garden || names.length === 0) return ['', ...names];
+  return names;
+}
+
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * The assignment overlaps this year when it was placed on or before the last
+ * day, and it had not already left before the first day.
+ * @param {BedCrop} assignment
+ * @param {number} year
+ */
+function occupiesYear(assignment, year) {
+  const created = assignment.createdOn;
+  if (typeof created !== 'string' || !ISO_DATE.test(created)) return false;
+  const start = `${year}-01-01`;
+  const end = `${year}-12-31`;
+  if (created > end) return false;
+  const archived = assignment.archivedOn;
+  return !(typeof archived === 'string' && ISO_DATE.test(archived) && archived < start);
+}
+
+/**
+ * Crop lanes for one year. A lane comes from an entry dated in that year, or
+ * from a bed assignment that overlaps the year. The same catalogue name is
+ * one lane. The garden lane leads when an entry has no crop, and it is the
+ * only lane when the year has neither.
+ * @param {CalendarEntry[]} entries
+ * @param {number} year
+ * @param {BedCrop[]} [assignments]
+ * @returns {string[]}
+ */
+export function calendarRows(entries, year, assignments = []) {
   const prefix = `${year}-`;
   /** @type {Set<string>} */
   const crops = new Set();
@@ -205,9 +258,64 @@ export function calendarRows(entries, year) {
     if (entry.crop) crops.add(entry.crop);
     else garden = true;
   }
+  for (const assignment of assignments) {
+    const name = typeof assignment.name === 'string' ? assignment.name.trim() : '';
+    if (!name || !occupiesYear(assignment, year)) continue;
+    crops.add(name);
+  }
   const names = [...crops].sort((left, right) => left.localeCompare(right));
   if (garden || names.length === 0) return ['', ...names];
   return names;
+}
+
+/**
+ * @param {string} date
+ * @param {number} days
+ */
+function shiftDate(date, days) {
+  const [year, month, day] = date.split('-').map(Number);
+  const next = new Date(Date.UTC(year, month - 1, day + days));
+  const y = next.getUTCFullYear();
+  const m = String(next.getUTCMonth() + 1).padStart(2, '0');
+  const d = String(next.getUTCDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+/**
+ * Inclusive day columns for a calendar span. Column 1 is `start`.
+ * @param {string} start
+ * @param {string} end
+ * @returns {{ date: string, column: number }[]}
+ */
+export function spanDays(start, end) {
+  /** @type {{ date: string, column: number }[]} */
+  const days = [];
+  let column = 1;
+  let cursor = start;
+  while (cursor <= end && column <= 400) {
+    days.push({ date: cursor, column });
+    cursor = shiftDate(cursor, 1);
+    column += 1;
+  }
+  return days;
+}
+
+/**
+ * Month headings for a span, in the same shape as a year.
+ * @param {string} start
+ * @param {string} end
+ * @returns {{ name: string, column: number, days: number }[]}
+ */
+export function spanMonths(start, end) {
+  /** @type {{ name: string, column: number, days: number }[]} */
+  const months = [];
+  for (const day of spanDays(start, end)) {
+    const name = MONTHS[Number(day.date.slice(5, 7)) - 1];
+    const last = months[months.length - 1];
+    if (!last || last.name !== name) months.push({ name, column: day.column, days: 1 });
+    else last.days += 1;
+  }
+  return months;
 }
 
 /**

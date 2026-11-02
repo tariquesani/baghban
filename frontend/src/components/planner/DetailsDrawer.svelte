@@ -68,7 +68,9 @@
         <DetailsForm {details} />
         <DetailsProperties {details} />
         {#if details.showPlants}
-          <BedPlants {details} />
+          {#key details.id}
+            <BedPlants {details} />
+          {/key}
         {/if}
       {/if}
     </ScrollArea.Root>

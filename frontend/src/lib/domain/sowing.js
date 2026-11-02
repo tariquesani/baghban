@@ -126,6 +126,87 @@ export function matchingCropName(crops, selected) {
 }
 
 /**
+ * Catalogue names of the crops in one bed. Emoji labels become the name after the emoji.
+ * @param {unknown} plants
+ * @returns {string[]}
+ */
+export function bedCropNames(plants) {
+  if (!Array.isArray(plants)) return [];
+  /** @type {string[]} */
+  const names = [];
+  const seen = new Set();
+  for (const label of plants) {
+    const name = plantCropName(label);
+    const key = name.toLowerCase();
+    if (!name || seen.has(key)) continue;
+    seen.add(key);
+    names.push(name);
+  }
+  return names;
+}
+
+/**
+ * Catalogue crops that are not already growing in the bed.
+ * @param {unknown} crops
+ * @param {unknown} planted
+ * @returns {{ id: number, name: string, emoji: string, aliases: string[] }[]}
+ */
+export function cropsNotInBed(crops, planted) {
+  if (!Array.isArray(crops)) return [];
+  const taken = new Set(bedCropNames(planted).map((name) => name.toLowerCase()));
+  return crops
+    .filter((crop) => {
+      if (!crop || typeof crop !== 'object' || crop.archived) return false;
+      if (typeof crop.name !== 'string' || !crop.name.trim()) return false;
+      return !taken.has(crop.name.trim().toLowerCase());
+    })
+    .map((crop) => ({
+      id: typeof crop.id === 'number' ? crop.id : 0,
+      name: crop.name.trim(),
+      emoji: typeof crop.emoji === 'string' ? crop.emoji : '',
+      aliases: Array.isArray(crop.aliases)
+        ? crop.aliases.filter((alias) => typeof alias === 'string')
+        : [],
+    }))
+    .sort((left, right) => left.name.localeCompare(right.name));
+}
+
+/**
+ * Crops the combobox may offer. `null` keeps the whole catalogue.
+ * A name that is not in the catalogue stays, so a bed crop can still be chosen.
+ * @param {{ id: number, name: string, emoji: string }[]} crops
+ * @param {string[] | null | undefined} names
+ */
+export function cropsForNames(crops, names) {
+  if (names == null) return crops;
+  if (!Array.isArray(crops)) return [];
+  /** @type {{ text: string, key: string }[]} */
+  const wanted = [];
+  const seen = new Set();
+  for (const name of names) {
+    const text = typeof name === 'string' ? name.trim() : '';
+    const key = text.toLowerCase();
+    if (!text || seen.has(key)) continue;
+    seen.add(key);
+    wanted.push({ text, key });
+  }
+  /** @type {{ id: number, name: string, emoji: string }[]} */
+  const matched = [];
+  const used = new Set();
+  for (const crop of crops) {
+    if (!crop || typeof crop.name !== 'string') continue;
+    const key = crop.name.toLowerCase();
+    if (!wanted.some((name) => name.key === key) || used.has(key)) continue;
+    matched.push(crop);
+    used.add(key);
+  }
+  const missing = wanted
+    .filter((name) => !used.has(name.key))
+    .map((name) => ({ id: 0, name: name.text, emoji: '' }));
+  return [...matched, ...missing];
+}
+
+/**
  * @param {{ date: string, crop: string, today: string, crops: { name: string }[] }} input
  */
 export function sowingDraft(input) {

@@ -6,7 +6,10 @@ import {
   dayMarks,
   dayReading,
   dayWedges,
+  monthName,
   storedEntryId,
+  spanDays,
+  spanMonths,
   yearDayCount,
   yearDays,
   yearMonths,
@@ -17,6 +20,12 @@ test('a saved entry is addressed by its number', () => {
   assert.equal(storedEntryId('12'), 12);
   assert.equal(storedEntryId('Tomato-2026-10-23-harvest'), null);
   assert.equal(storedEntryId(''), null);
+});
+
+test('the year grid uses the short name of the current month', () => {
+  assert.equal(monthName(new Date(2026, 10, 2)), 'Nov');
+  assert.equal(monthName(new Date(2026, 0, 1)), 'Jan');
+  assert.equal(yearMonths(2026).some((month) => month.name === monthName(new Date(2026, 10, 2))), true);
 });
 
 test('a leap year shifts March past 29 February', () => {
@@ -102,7 +111,45 @@ test('a planned sowing stays hollow', () => {
   assert.equal(marks[0].intensity, null);
 });
 
+test('a three month span starts its columns at the first day', () => {
+  const days = spanDays('2026-10-01', '2026-12-31');
+  assert.equal(days.length, 92);
+  assert.equal(days[0].date, '2026-10-01');
+  assert.equal(days.find((day) => day.date === '2026-11-02')?.column, 33);
+  assert.deepEqual(
+    spanMonths('2026-10-01', '2026-12-31').map((month) => [month.name, month.days]),
+    [
+      ['Oct', 31],
+      ['Nov', 30],
+      ['Dec', 31],
+    ],
+  );
+});
+
 test('rows put the garden first, then crops by name', () => {
   assert.deepEqual(calendarRows(SAMPLE_ENTRIES, 2026), ['', 'Bhindi', 'Coriander', 'Methi', 'Tomato']);
   assert.deepEqual(calendarRows(SAMPLE_ENTRIES, 2025), ['']);
+});
+
+test('a crop in a bed keeps a lane through the years it occupies', () => {
+  const beds = [
+    { name: 'Radish', createdOn: '2026-11-01', archivedOn: null },
+    { name: 'Tomato', createdOn: '2024-03-01', archivedOn: null },
+    { name: '  Fenugreek  ', createdOn: '2026-01-02', archivedOn: '2026-04-01' },
+    { name: 'Basil', createdOn: '2025-05-01', archivedOn: '2025-09-01' },
+    { name: 'Mint', createdOn: '2027-02-01', archivedOn: null },
+  ];
+  assert.deepEqual(calendarRows([], 2026, beds), ['Fenugreek', 'Radish', 'Tomato']);
+  assert.deepEqual(calendarRows([], 2025, beds), ['Basil', 'Tomato']);
+  assert.deepEqual(calendarRows([], 2024, beds), ['Tomato']);
+  assert.deepEqual(calendarRows([], 2023, beds), ['']);
+  assert.deepEqual(calendarRows(SAMPLE_ENTRIES, 2026, beds), [
+    '',
+    'Bhindi',
+    'Coriander',
+    'Fenugreek',
+    'Methi',
+    'Radish',
+    'Tomato',
+  ]);
 });

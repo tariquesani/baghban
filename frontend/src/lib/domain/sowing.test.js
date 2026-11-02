@@ -8,6 +8,9 @@ import {
   photoProblem,
   bedsHoldingCrop,
   bedsWithCrops,
+  bedCropNames,
+  cropsForNames,
+  cropsNotInBed,
   plantCropName,
   sowingBedChoices,
   sowingCropChoices,
@@ -135,6 +138,30 @@ test('removed beds stay out of the list, and a photo must be a small image', () 
   assert.equal(photoProblem({ type: 'image/gif', size: 10 }), 'Use a JPEG, PNG, or WebP.');
   assert.equal(photoProblem({ type: 'image/jpeg', size: 16 * 1024 * 1024 }), 'Photo is larger than 15 MB.');
   assert.equal(photoProblem({ type: 'image/png', size: 100 }), '');
+});
+
+test('a bed lists each crop once, and the catalogue hides crops already there', () => {
+  assert.deepEqual(bedCropNames(['🍅 Tomatoes', 'Tomatoes', 'Basil']), ['Tomatoes', 'Basil']);
+  assert.deepEqual(
+    cropsNotInBed(
+      [
+        { id: 2, name: 'Tomatoes', emoji: '🍅', aliases: ['tomato'] },
+        { id: 1, name: 'Basil', emoji: '🌿', aliases: [] },
+        { id: 4, name: 'Lettuce', emoji: '🥬', aliases: ['salad'] },
+      ],
+      ['🍅 Tomatoes'],
+    ).map((crop) => crop.name),
+    ['Basil', 'Lettuce'],
+  );
+});
+
+test('a bed entry offers only the crops in that bed', () => {
+  const catalogue = sowingCropChoices(crops);
+  assert.equal(cropsForNames(catalogue, null), catalogue);
+  assert.deepEqual(
+    cropsForNames(catalogue, ['basil', 'Fenugreek']).map((crop) => crop.name),
+    ['Basil', 'Fenugreek'],
+  );
 });
 
 test('a saved sowing becomes a calendar row', () => {

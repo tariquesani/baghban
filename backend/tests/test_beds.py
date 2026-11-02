@@ -239,3 +239,19 @@ def test_rows_save_one_at_a_time(tmp_path, monkeypatch):
         assert saved.json()["bedId"] == bed_id
         assert "bedName" not in client.get(f"/api/calendar/{saved.json()['id']}").json()
         assert client.get("/api/beds").json()[0]["name"] == "Mint"
+
+
+def test_active_assignments_keep_the_crop_date_and_maturity(tmp_path, monkeypatch):
+    monkeypatch.setenv("BAGHBAN_DB", str(tmp_path / "baghban.db"))
+    with TestClient(app) as client:
+        bed = client.put("/api/beds", json=herbs()).json()
+        assigned = client.put(f"/api/beds/{bed['id']}/crops", json={"name": TOMATO})
+        assert assigned.status_code == 200
+        rows = client.get("/api/beds/crops").json()
+        assert len(rows) == 1
+        assert rows[0]["bedId"] == bed["id"]
+        assert rows[0]["bedName"] == "Herbs"
+        assert rows[0]["name"] == "Tomatoes"
+        assert rows[0]["emoji"] == "🍅"
+        assert rows[0]["createdOn"]
+        assert "daysToMaturity" in rows[0]

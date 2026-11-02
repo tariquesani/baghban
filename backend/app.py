@@ -24,6 +24,7 @@ from beds import create_scene_tables, drop_plant_grid, garden_contents, router a
 from beds_crops import archive_bed_crops, copy_document_plants, create_beds_crops
 from calendar_entries import create_calendar_tables, router as calendar_router
 from crops import create_crop_tables, seed_crops, router as crops_router
+import sky
 
 MAX_BYTES = 2 * 1024 * 1024
 MAX_PHOTO_BYTES = 15 * 1024 * 1024
@@ -593,6 +594,13 @@ async def limited_body(request: Request, limit: int, too_big: str) -> bytes:
     if len(raw) > limit:
         raise HTTPException(status_code=413, detail=too_big)
     return raw
+
+
+@app.get("/api/sky")
+def get_sky(timezone: str = "") -> dict:
+    payload = read_garden()
+    garden = payload["garden"] if payload else {}
+    return sky.sky_reading(garden, timezone, sky.fetch_yr)
 
 
 @app.get("/api/garden")

@@ -38,8 +38,10 @@ const program = new Function(
   'PLANT_CATALOG',
   'plannerRoot',
   'pickOnlyFlag',
+  'occupancyFlag',
   'let visitOpen = true;\n'
   + 'let pickOnly = !!pickOnlyFlag;\n'
+  + 'let showOccupancy = !!occupancyFlag;\n'
   + 'function finishVisit() { visitOpen = false; }\n'
   + 'function plannerElement(id) { return plannerRoot.querySelector("#" + id); }\n'
   + programSource
@@ -83,7 +85,7 @@ function optionsWithSignal(options, signal) {
 /**
  * @param {unknown[]} plantCatalog
  * @param {HTMLElement} root
- * @param {{ publish?: boolean, pick?: boolean }} options
+ * @param {{ publish?: boolean, pick?: boolean, occupancy?: boolean }} options
  */
 function openSession(plantCatalog, root, options) {
   const publish = options.publish !== false;
@@ -104,7 +106,15 @@ function openSession(plantCatalog, root, options) {
   };
 
   try {
-    const api = program(gardenScene, isSelected, stampStandIn, plantCatalog, root, options.pick === true);
+    const api = program(
+      gardenScene,
+      isSelected,
+      stampStandIn,
+      plantCatalog,
+      root,
+      options.pick === true,
+      options.occupancy === true,
+    );
     if (publish) {
       for (const name of publishedNames) globalThis[name] = api[name];
     }
@@ -132,7 +142,7 @@ function openSession(plantCatalog, root, options) {
 
 /**
  * @param {HTMLElement} element
- * @param {{ publish: boolean, pick: boolean }} options
+ * @param {{ publish: boolean, pick: boolean, occupancy?: boolean }} options
  */
 function startPlanner(element, options) {
   element.innerHTML = editorHtml;
@@ -226,8 +236,14 @@ export function mountPlanner(element) {
 /**
  * A private planner visit. It draws the saved garden and emits `bedpick`
  * on its canvas when a bed is clicked. It does not publish functions or save.
+ * `occupancy` paints beds with a crop as planted and the rest as empty.
  * @param {HTMLElement} element
+ * @param {{ occupancy?: boolean }} [options]
  */
-export function mountBedPicker(element) {
-  return startPlanner(element, { publish: false, pick: true });
+export function mountBedPicker(element, options = {}) {
+  return startPlanner(element, {
+    publish: false,
+    pick: true,
+    occupancy: options.occupancy === true,
+  });
 }

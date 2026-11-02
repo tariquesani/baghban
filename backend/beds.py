@@ -539,6 +539,13 @@ def get_beds() -> list:
     return list_beds()
 
 
+@router.get("/beds/crops")
+def get_bed_crops() -> list:
+    from beds_crops import list_active_assignments
+
+    return list_active_assignments()
+
+
 @router.put("/beds")
 async def put_bed(request: Request) -> dict:
     return create_bed(parse_body(await request.body()))

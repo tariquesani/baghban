@@ -3,6 +3,9 @@
     cropLabel,
     dayMarks,
     dayReading,
+    monthName,
+    spanDays,
+    spanMonths,
     yearDays,
     yearMonths,
     type CalendarEntry,
@@ -16,6 +19,8 @@
     kind,
     selectedDate,
     selectedCrop,
+    from = '',
+    to = '',
     onSelect,
   }: {
     year: number;
@@ -24,30 +29,33 @@
     kind: string;
     selectedDate: string;
     selectedCrop: string;
+    from?: string;
+    to?: string;
     onSelect: (day: { date: string; crop: string }) => void;
   } = $props();
 
   let scroll = $state<HTMLDivElement | null>(null);
 
-  const months = $derived(yearMonths(year));
-  const days = $derived(yearDays(year));
+  const bounded = $derived(from !== '' && to !== '');
+  const months = $derived(bounded ? spanMonths(from, to) : yearMonths(year));
+  const days = $derived(bounded ? spanDays(from, to) : yearDays(year));
 
-  function revealOctober(node: ParentNode | null | undefined) {
-    const october = node?.querySelector('[data-month="Oct"]');
-    if (october instanceof HTMLElement) {
-      october.scrollIntoView({ inline: 'start', block: 'nearest' });
+  function revealCurrentMonth(node: ParentNode | null | undefined) {
+    const month = node?.querySelector(`[data-month="${monthName()}"]`);
+    if (month instanceof HTMLElement) {
+      month.scrollIntoView({ inline: 'start', block: 'nearest' });
     }
   }
 
-  export function showOctober() {
-    revealOctober(scroll);
+  export function showCurrentMonth() {
+    revealCurrentMonth(scroll);
   }
 
   const byDay = $derived.by(() => {
     const grouped = new Map<string, CalendarEntry[]>();
     const prefix = `${year}-`;
     for (const entry of entries) {
-      if (!entry.date.startsWith(prefix)) continue;
+      if (!bounded && !entry.date.startsWith(prefix)) continue;
       const key = `${entry.crop}\n${entry.date}`;
       const list = grouped.get(key);
       if (list) list.push(entry);
@@ -57,7 +65,7 @@
   });
 </script>
 
-<div class="board" style:--rows={rows.length} style:--days={days.length}>
+<div class="board" class:bare={bounded} style:--rows={rows.length} style:--days={days.length}>
   <div class="names">
     <div class="label head">Crop</div>
     <div class="date-gap" aria-hidden="true"></div>
@@ -65,9 +73,9 @@
       <div class="label">{cropLabel(crop)}</div>
     {/each}
   </div>
-  <div class="scroll" bind:this={scroll} {@attach revealOctober}>
+  <div class="scroll" bind:this={scroll} {@attach (node) => { if (!bounded) revealCurrentMonth(node); }}>
     <div class="grid">
-      {#each months as month (month.name)}
+      {#each months as month (month.column)}
         <div
           class="month"
           data-month={month.name}
@@ -105,8 +113,15 @@
 </div>
 
 <style>
+  .board.bare {
+    padding: 0;
+    border: 0;
+    background: transparent;
+  }
+
   .board {
     display: grid;
+    min-width: 0;
     grid-template-columns: 160px minmax(0, 1fr);
     column-gap: 16px;
     align-items: start;

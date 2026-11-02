@@ -4,3 +4,4 @@ httpx
 pytest
 tzdata
 timezonefinder
+astral

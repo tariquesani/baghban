@@ -66,6 +66,7 @@ function publishDetails() {
   const summary = poly ? polygonSummary(item) : null;
   document.dispatchEvent(new CustomEvent('selectiondetails', {
     detail: {
+      id: item.id,
       title: isPlanter ? 'Planter' : isPot ? 'Pot' : isBed ? 'Bed' : 'Obstacle',
       name: item.name,
       width: item.w,
@@ -162,8 +163,8 @@ let plantWarnTimer = 0;
 
 function addPlant(name) {
   const p = String(name || '').trim();
-  if (!p) return;
-  const bed = selectedBed(); if (!bed) return;
+  if (!p) return false;
+  const bed = selectedBed(); if (!bed) return false;
 
   const pd = PLANT_DATA[p];
   if (pd && bed.type !== 'planter') {
@@ -171,7 +172,7 @@ function addPlant(name) {
     const L = Math.floor(bed.h), W = Math.floor(bed.w);
     if (L < rowSpan || W < colSpan) {
       showPlantWarn(`This bed (${bed.w}×${bed.h} ft) is too small for ${p} — needs at least ${colSpan}×${rowSpan} ft.`);
-      return;
+      return false;
     }
   }
 
@@ -184,6 +185,7 @@ function addPlant(name) {
     notePlanChanged();
   }
   publishDetails();
+  return true;
 }
 
 function showPlantWarn(msg) {
