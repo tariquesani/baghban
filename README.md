@@ -1,6 +1,6 @@
-# Baghban
+# Baghban: Personal Garden Management System
 
-Baghban is a personal garden planner for one garden. It keeps the plot, the crops in each bed, and a calendar of sowings, care, pests, harvests, and notes. The home page is a briefing: the weather at that place, what is in the ground, and what the next two weeks ask for.
+Baghban is a personal garden management system  for a vegetable garden. It keeps track of the plot, the crops in each bed, and a calendar of sowings, care, pests, harvests, and notes. The home page is a briefing: the weather at that place, what is in the ground, and what the next two weeks ask for.
 
 ## What you can do
 
@@ -11,6 +11,17 @@ Baghban is a personal garden planner for one garden. It keeps the plot, the crop
 - **Setup** — garden name, size, and latitude and longitude. The server derives the timezone from that point.
 
 Weather comes from [Yr](https://developer.yr.no/), through the Norwegian Meteorological Institute's location forecast. No API key is required. Sunrise, sunset, and the moon are calculated on the server. The home-page map is a static [OpenStreetMap](https://www.openstreetmap.org/) thumbnail of the saved coordinates.
+
+## Coming Soon
+
+- **Seed inventory** — variety, supplier, quantity on hand, and how long a packet stays viable.
+- **Succession sowing** — repeated sowings for crops picked over several weeks, such as coriander, radish, and beans.
+- **Crop rotation** — the plant family that grew in each bed, with a warning when the same family returns too soon.
+- **Sun and shade** — full sun, partial shade, and shade marked on the plan.
+- **Season plans** — a saved layout for each growing season, kept alongside the one before it.
+- **Local planting windows** — suggested sowing and transplanting dates for this garden's climate.
+- **Weather-aware care** — a watering task held back when rain is already on the way.
+- **Backup** — export and restore the garden as a file, separate from the database.
 
 ## Stack
 
