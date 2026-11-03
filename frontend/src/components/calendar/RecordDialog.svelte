@@ -19,6 +19,7 @@
   import * as Select from '$lib/components/ui/select';
   import { Textarea } from '$lib/components/ui/textarea';
   import { storedEntryId, type CalendarEntry } from '$lib/domain/calendar.js';
+  import { calendarPhotoId } from '$lib/domain/photoId.js';
   import {
     CARE_ACTIONS,
     calendarRecord,
@@ -364,7 +365,7 @@
     try {
       let photoUrl = photoCleared ? '' : keptPhotoUrl;
       if (photoFile) {
-        photoId = `${recording}-${crypto.randomUUID()}`;
+        photoId = calendarPhotoId(recording);
         const stored = await storePhoto(photoId, photoFile);
         photoUrl = stored && typeof stored.url === 'string' ? stored.url : '';
         if (!photoUrl) throw new Error('Could not store the photo.');
