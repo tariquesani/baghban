@@ -138,10 +138,24 @@
     activeTool={canvas.activeTool}
     actions={canvas.actions}
     onToggle={toggleRail}
+    onClose={() => drawerOpen = false}
     onAddEntry={askForEntry}
   />
   <div class="shell-main">
     <header class="page-head">
+      {#if !wide}
+        <button
+          type="button"
+          class="nav-menu"
+          aria-label="Open menu"
+          title="Open menu"
+          onclick={openDrawer}
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M4 6h16M4 12h16M4 18h16" />
+          </svg>
+        </button>
+      {/if}
       <h1>{pageTitle}</h1>
     </header>
     <div class="page-body">
@@ -186,7 +200,36 @@
     flex: 0 0 var(--page-head);
     height: var(--page-head);
     box-sizing: border-box;
-    padding: 8px 24px 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 24px;
+  }
+
+  .nav-menu {
+    display: grid;
+    place-items: center;
+    width: 40px;
+    height: 40px;
+    margin-left: -8px;
+    padding: 0;
+    border: 0;
+    border-radius: 20px;
+    background: transparent;
+    color: #2d3a2e;
+    cursor: pointer;
+    flex: 0 0 auto;
+  }
+
+  .nav-menu:hover { background: #e6eee2; }
+
+  .nav-menu svg {
+    width: 24px;
+    height: 24px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
   }
 
   .page-head h1 {

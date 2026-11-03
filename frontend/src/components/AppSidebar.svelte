@@ -18,6 +18,7 @@
    *     printPlan: () => void,
    *   },
    *   onToggle: () => void,
+   *   onClose: () => void,
    *   onAddEntry: (kind: string) => void,
    * }} props
    */
@@ -30,6 +31,7 @@
     activeTool,
     actions,
     onToggle,
+    onClose,
     onAddEntry,
   } = $props();
 
@@ -55,6 +57,12 @@
 
   function plotBed() {
     actions?.setTool(activeTool === 'draw-bed' ? 'select' : 'draw-bed');
+  }
+
+  /** @param {() => void} action */
+  function choose(action) {
+    if (!wide) onClose();
+    action();
   }
 
   $effect(() => {
@@ -113,23 +121,23 @@
       {/if}
       {#if entry.id === 'calendar' && path === '/calendar'}
         <div class="rail-tools">
-          <button type="button" class="rail-btn" title="Add Sowing" onclick={() => onAddEntry('sowing')}>
+          <button type="button" class="rail-btn" title="Add Sowing" onclick={() => choose(() => onAddEntry('sowing'))}>
             <i data-lucide="bean"></i>
             <span class="rail-label">Add Sowing</span>
           </button>
-          <button type="button" class="rail-btn" title="Add Care" onclick={() => onAddEntry('care')}>
+          <button type="button" class="rail-btn" title="Add Care" onclick={() => choose(() => onAddEntry('care'))}>
             <i data-lucide="hand-heart"></i>
             <span class="rail-label">Add Care</span>
           </button>
-          <button type="button" class="rail-btn" title="Add Harvest" onclick={() => onAddEntry('harvest')}>
+          <button type="button" class="rail-btn" title="Add Harvest" onclick={() => choose(() => onAddEntry('harvest'))}>
             <i data-lucide="groceries"></i>
             <span class="rail-label">Add Harvest</span>
           </button>
-          <button type="button" class="rail-btn" title="Add Pest Control" onclick={() => onAddEntry('pest')}>
+          <button type="button" class="rail-btn" title="Add Pest Control" onclick={() => choose(() => onAddEntry('pest'))}>
             <i data-lucide="bug-off"></i>
             <span class="rail-label">Add Pest Control</span>
           </button>
-          <button type="button" class="rail-btn" title="Add Diary Note" onclick={() => onAddEntry('diary')}>
+          <button type="button" class="rail-btn" title="Add Diary Note" onclick={() => choose(() => onAddEntry('diary'))}>
             <i data-lucide="notebook-pen"></i>
             <span class="rail-label">Add Diary Note</span>
           </button>
@@ -137,7 +145,7 @@
       {/if}
       {#if entry.id === 'planner' && showPlannerTools && actions}
         <div class="rail-tools">
-          <button type="button" class="rail-btn" title="Add bed" onclick={() => actions.addBed()}>
+          <button type="button" class="rail-btn" title="Add bed" onclick={() => choose(() => actions.addBed())}>
             <i data-lucide="square"></i>
             <span class="rail-label">Add rectangular bed</span>
           </button>
@@ -145,24 +153,24 @@
             type="button"
             class="rail-btn"
             title="Plot a bed"
-            onclick={plotBed}
+            onclick={() => choose(plotBed)}
           >
             <i data-lucide="vector-polygon"></i>
             <span class="rail-label">Add polygonal bed</span>
           </button>
-          <button type="button" class="rail-btn" title="Add pot" onclick={() => actions.addPot()}>
+          <button type="button" class="rail-btn" title="Add pot" onclick={() => choose(() => actions.addPot())}>
             <i data-lucide="circle"></i>
             <span class="rail-label">Add pot</span>
           </button>
-          <button type="button" class="rail-btn" title="Add planter" onclick={() => actions.addPlanter()}>
+          <button type="button" class="rail-btn" title="Add planter" onclick={() => choose(() => actions.addPlanter())}>
             <i data-lucide="rectangle-horizontal"></i>
             <span class="rail-label">Add planter</span>
           </button>
-          <button type="button" class="rail-btn" title="Add obstacle" onclick={() => actions.addObstacle()}>
+          <button type="button" class="rail-btn" title="Add obstacle" onclick={() => choose(() => actions.addObstacle())}>
             <i data-lucide="mountain"></i>
             <span class="rail-label">Add obstacle</span>
           </button>
-          <button type="button" class="rail-btn" title="Print plan" onclick={() => actions.printPlan()}>
+          <button type="button" class="rail-btn" title="Print plan" onclick={() => choose(() => actions.printPlan())}>
             <i data-lucide="printer"></i>
             <span class="rail-label">Print plan</span>
           </button>

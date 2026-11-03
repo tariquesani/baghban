@@ -308,7 +308,7 @@
 
 <div class="map-host" {@attach mountGarden}></div>
 
-<Toolbar showMenu={setupMode === null} />
+<Toolbar />
 {#if toolsReady}
   <PlantOrganizer />
 {/if}

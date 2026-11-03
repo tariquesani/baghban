@@ -1,7 +1,6 @@
 <script>
   import ToolbarButton from './ToolbarButton.svelte';
 
-  let { showMenu = true } = $props();
   let snapped = $state(true);
 
   /**
@@ -24,14 +23,6 @@
   class="map-tools"
   {@attach (element) => place(element, 'toolbarHost')}
 >
-  {#if showMenu}
-    <ToolbarButton
-      label="Open menu"
-      icon="menu"
-      variant="menu"
-      onPress={() => globalThis.openSidebar()}
-    />
-  {/if}
   <ToolbarButton
     id="snapToggle"
     label="Snap to ½ ft grid"
@@ -76,8 +67,7 @@
 
   .zoom:hover { background: #e0eee0; }
 
-  .map-tools :global(.tool-btn),
-  .map-tools :global(.menu-btn) {
+  .map-tools :global(.tool-btn) {
     width: 36px;
     height: 36px;
     border-radius: 8px;
