@@ -6,6 +6,7 @@ import {
   cropCount,
   formatWeight,
   growingCards,
+  galleryPhotos,
   harvestByCrop,
   latelyNote,
   monthWindow,
@@ -194,4 +195,58 @@ test('lately keeps the four newest done entries and the season sums weighed harv
     harvestByCrop(entries, '2026-11-01').map((row) => row.crop),
     ['Tomato', 'Methi'],
   );
+});
+
+test('gallery lists every photo newest first', () => {
+  const photos = Array.from({ length: 10 }, (_, index) => {
+    const day = String(index + 1).padStart(2, '0');
+    return entry({
+      id: String(index + 1),
+      date: `2026-10-${day}`,
+      photoUrl: `/api/photos/shot-${index + 1}`,
+    });
+  });
+  const entries = [
+    ...photos,
+    entry({ id: 'blank', date: '2026-11-03', photoUrl: '  ' }),
+    entry({ id: 'none', date: '2026-11-03' }),
+    entry({
+      id: '12',
+      date: '2026-10-10',
+      status: 'planned',
+      crop: '',
+      photoUrl: '/api/photos/later',
+    }),
+    entry({
+      id: '11',
+      date: '2026-10-10',
+      kind: 'harvest',
+      crop: 'Methi',
+      quantity: 4,
+      unit: 'bunches',
+      weightGrams: 1200,
+      note: 'First cut',
+      photoUrl: '/api/photos/earlier',
+    }),
+  ];
+  const gallery = galleryPhotos(entries);
+  assert.equal(gallery.length, 12);
+  assert.deepEqual(
+    gallery.map((photo) => photo.id),
+    ['12', '11', '10', '9', '8', '7', '6', '5', '4', '3', '2', '1'],
+  );
+  assert.equal(gallery[0].photoUrl, '/api/photos/later');
+  assert.equal(gallery[0].date, '10 Oct');
+  assert.equal(gallery[0].crop, 'Garden');
+  assert.equal(gallery[0].kind, 'Sowing');
+  assert.equal(gallery[0].status, 'Planned');
+  assert.equal(gallery[0].detail, '');
+  assert.equal(gallery[0].alt, '10 Oct');
+  assert.equal(gallery[1].alt, '10 Oct, Methi');
+  assert.equal(gallery[1].kind, 'Harvest');
+  assert.equal(gallery[1].status, 'Done');
+  assert.equal(gallery[1].bed, 'East bed');
+  assert.equal(gallery[1].detail, '4 bunches · 1200 g');
+  assert.equal(gallery[1].note, 'First cut');
+  assert.equal(galleryPhotos([]).length, 0);
 });

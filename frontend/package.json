@@ -26,6 +26,7 @@
     "vite": "^8.3.4"
   },
   "dependencies": {
-    "@bybas/weather-icons": "^2.0.0"
+    "@bybas/weather-icons": "^2.0.0",
+    "embla-carousel-svelte": "^8.6.0"
   }
 }

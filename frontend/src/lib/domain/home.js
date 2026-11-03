@@ -1,6 +1,7 @@
 /** Home briefing. Pure grouping of assignments, calendar entries, and dates. */
 
-import { aroundMonth, formatDay, kindLabel } from './calendar.js';
+import { aroundMonth, cropLabel, formatDay, kindLabel, markTitle } from './calendar.js';
+import { actionLabel, entryDetail } from './entryForm.js';
 
 /**
  * @typedef {{
@@ -16,8 +17,10 @@ import { aroundMonth, formatDay, kindLabel } from './calendar.js';
  *   unit: string,
  *   action: string,
  *   note?: string,
+ *   problem?: string,
  *   product?: string,
  *   amount?: number | null,
+ *   photoUrl?: string,
  * }} HomeEntry
  * @typedef {{
  *   id: number,
@@ -266,6 +269,67 @@ export function recentEntries(entries) {
     .filter((entry) => entry.status === 'done')
     .sort((left, right) => right.date.localeCompare(left.date) || right.id.localeCompare(left.id))
     .slice(0, 4);
+}
+
+/**
+ * Every calendar photo, newest first. Planned and done both count.
+ * The same day keeps the later-saved entry first.
+ * @param {HomeEntry[]} entries
+ * @returns {{
+ *   id: string,
+ *   photoUrl: string,
+ *   alt: string,
+ *   date: string,
+ *   crop: string,
+ *   kind: string,
+ *   status: string,
+ *   bed: string,
+ *   action: string,
+ *   problem: string,
+ *   product: string,
+ *   detail: string,
+ *   note: string,
+ * }[]}
+ */
+export function galleryPhotos(entries) {
+  return entries
+    .filter((entry) => typeof entry.photoUrl === 'string' && entry.photoUrl.trim() !== '')
+    .sort((left, right) => right.date.localeCompare(left.date) || compareIdDesc(left.id, right.id))
+    .map((entry) => ({
+      id: entry.id,
+      photoUrl: entry.photoUrl.trim(),
+      alt: galleryAlt(entry),
+      date: formatDay(entry.date),
+      crop: cropLabel(entry.crop),
+      kind: markTitle(entry.kind),
+      status: entry.status === 'planned' ? 'Planned' : 'Done',
+      bed: (entry.bed || '').trim(),
+      action: actionLabel(entry.action || ''),
+      problem: (entry.problem || '').trim(),
+      product: (entry.product || '').trim(),
+      detail: entryDetail(entry),
+      note: (entry.note || '').trim(),
+    }));
+}
+
+/**
+ * @param {string} left
+ * @param {string} right
+ */
+function compareIdDesc(left, right) {
+  const leftNum = /^\d+$/.test(left) ? Number(left) : null;
+  const rightNum = /^\d+$/.test(right) ? Number(right) : null;
+  if (leftNum !== null && rightNum !== null) return rightNum - leftNum;
+  return right.localeCompare(left);
+}
+
+/**
+ * @param {HomeEntry} entry
+ */
+function galleryAlt(entry) {
+  const day = formatDay(entry.date);
+  const crop = (entry.crop || '').trim();
+  return crop ? `${day}, ${crop}` : day;
 }
 
 /**

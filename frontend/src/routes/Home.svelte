@@ -1,5 +1,6 @@
 <script lang="ts">
   import ComingUp from '../components/home/ComingUp.svelte';
+  import Gallery from '../components/home/Gallery.svelte';
   import GardenHeader from '../components/home/GardenHeader.svelte';
   import GardenPlan from '../components/home/GardenPlan.svelte';
   import { listAssignments, listBeds } from '$lib/api/beds.js';
@@ -13,6 +14,7 @@
     comingEntries,
     cropCount,
     entryTitle,
+    galleryPhotos,
     growingCards,
     harvestByCrop,
     latelyNote,
@@ -98,6 +100,7 @@
   const lately = $derived(
     recentEntries(entries).map((entry) => ({ id: entry.id, ...latelyNote(entry) })),
   );
+  const gallery = $derived(galleryPhotos(entries));
   const season = $derived(seasonWeight(entries, today));
   const harvests = $derived(harvestByCrop(entries, today));
   const forecast = $derived(sky?.forecast ?? null);
@@ -292,6 +295,8 @@
             {/each}
           {/if}
         </section>
+
+        <Gallery photos={gallery} />
 
         <section class="card">
           <h2>Today's Forecast</h2>
