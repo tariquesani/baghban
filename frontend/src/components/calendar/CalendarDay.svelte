@@ -38,7 +38,7 @@
           <polygon
             points={mark.points}
             class="{mark.kind} {mark.status}"
-            style:--i={mark.intensity ?? undefined}
+            data-shade={mark.shade ?? undefined}
           />
         {/each}
       </svg>
@@ -86,7 +86,15 @@
   polygon.sowing.done { fill: #a9762c; }
   polygon.care.done { fill: #3d7ea6; }
   polygon.pest.done { fill: #7b4b8a; }
-  polygon.harvest.done { fill: rgb(16 185 129 / var(--i, 1)); }
+  polygon.harvest.done { fill: var(--harvest-5, #10b981); }
+  polygon.harvest.done[data-shade='1'] { fill: var(--harvest-1, #b6f0d4); }
+  polygon.harvest.done[data-shade='2'] { fill: var(--harvest-2, #86e4bc); }
+  polygon.harvest.done[data-shade='3'] { fill: var(--harvest-3, #54d4a4); }
+  polygon.harvest.done[data-shade='4'] { fill: var(--harvest-4, #2cc48e); }
+  polygon.harvest.done[data-shade='5'] { fill: var(--harvest-5, #10b981); }
+  polygon.harvest.done[data-shade='6'] { fill: var(--harvest-6, #059669); }
+  polygon.harvest.done[data-shade='7'] { fill: var(--harvest-7, #047857); }
+  polygon.harvest.done[data-shade='8'] { fill: var(--harvest-8, #064e3b); }
   polygon.diary.done { fill: #5f6b76; }
 
   polygon.planned {

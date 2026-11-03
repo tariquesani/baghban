@@ -51,10 +51,10 @@ test('a civil date follows the garden timezone', () => {
   assert.equal(civilDate(instant, 'UTC'), '2026-10-31');
 });
 
-test('the month window starts this month and runs through next month', () => {
-  assert.deepEqual(monthWindow('2026-11-01'), { start: '2026-11-01', end: '2026-12-31' });
-  assert.deepEqual(monthWindow('2026-01-15'), { start: '2026-01-01', end: '2026-02-28' });
-  assert.deepEqual(monthWindow('2026-12-02'), { start: '2026-12-01', end: '2027-01-31' });
+test('the month window keeps the previous month, this month, and the next', () => {
+  assert.deepEqual(monthWindow('2026-11-01'), { start: '2026-10-01', end: '2026-12-31' });
+  assert.deepEqual(monthWindow('2026-01-15'), { start: '2025-12-01', end: '2026-02-28' });
+  assert.deepEqual(monthWindow('2026-12-02'), { start: '2026-11-01', end: '2027-01-31' });
   assert.equal(shiftDate('2026-11-01', 14), '2026-11-15');
 });
 

@@ -3,6 +3,7 @@
     cropLabel,
     dayMarks,
     dayReading,
+    harvestPeaks,
     monthName,
     spanDays,
     spanMonths,
@@ -21,6 +22,8 @@
     selectedCrop,
     from = '',
     to = '',
+    focus = '',
+    reveal = '',
     onSelect,
   }: {
     year: number;
@@ -31,6 +34,8 @@
     selectedCrop: string;
     from?: string;
     to?: string;
+    focus?: string;
+    reveal?: string;
     onSelect: (day: { date: string; crop: string }) => void;
   } = $props();
 
@@ -41,21 +46,39 @@
   const days = $derived(bounded ? spanDays(from, to) : yearDays(year));
 
   function revealCurrentMonth(node: ParentNode | null | undefined) {
-    const month = node?.querySelector(`[data-month="${monthName()}"]`);
+    revealMonth(node, monthName());
+  }
+
+  export function showCurrentMonth() {
+    revealMonth(scroll, focus || monthName());
+  }
+
+  function revealMonth(node: ParentNode | null | undefined, name: string) {
+    const month = node?.querySelector(`[data-month="${name}"]`);
     if (month instanceof HTMLElement) {
       month.scrollIntoView({ inline: 'start', block: 'nearest' });
     }
   }
 
-  export function showCurrentMonth() {
-    revealCurrentMonth(scroll);
+  function revealDate(node: ParentNode | null | undefined, date: string) {
+    const day = node?.querySelector(`[data-date="${date}"]`);
+    if (day instanceof HTMLElement) {
+      day.scrollIntoView({ inline: 'center', block: 'nearest' });
+    }
   }
+
+  $effect(() => {
+    if (reveal) revealDate(scroll, reveal);
+    else if (focus) revealMonth(scroll, focus);
+  });
 
   const byDay = $derived.by(() => {
     const grouped = new Map<string, CalendarEntry[]>();
     const prefix = `${year}-`;
     for (const entry of entries) {
-      if (!bounded && !entry.date.startsWith(prefix)) continue;
+      if (bounded) {
+        if (entry.date < from || entry.date > to) continue;
+      } else if (!entry.date.startsWith(prefix)) continue;
       const key = `${entry.crop}\n${entry.date}`;
       const list = grouped.get(key);
       if (list) list.push(entry);
@@ -63,6 +86,8 @@
     }
     return grouped;
   });
+
+  const peaks = $derived(harvestPeaks(entries));
 </script>
 
 <div class="board" class:bare={bounded} style:--rows={rows.length} style:--days={days.length}>
@@ -73,7 +98,11 @@
       <div class="label">{cropLabel(crop)}</div>
     {/each}
   </div>
-  <div class="scroll" bind:this={scroll} {@attach (node) => { if (!bounded) revealCurrentMonth(node); }}>
+  <div class="scroll" bind:this={scroll} {@attach (node) => {
+    if (reveal) revealDate(node, reveal);
+    else if (focus) revealMonth(node, focus);
+    else if (!bounded) revealCurrentMonth(node);
+  }}>
     <div class="grid">
       {#each months as month (month.column)}
         <div
@@ -83,12 +112,12 @@
         >{month.name}</div>
       {/each}
       {#each days as day (day.date)}
-        <div class="date" style:grid-column={day.column}>{Number(day.date.slice(8, 10))}</div>
+        <div class="date" data-date={day.date} style:grid-column={day.column}>{Number(day.date.slice(8, 10))}</div>
       {/each}
       {#each rows as crop, rowIndex (crop || 'garden')}
         {#each days as day (`${crop}-${day.date}`)}
           {@const cell = byDay.get(`${crop}\n${day.date}`) ?? []}
-          {@const marks = dayMarks(cell, kind)}
+          {@const marks = dayMarks(cell, kind, peaks.get(crop) ?? 0)}
           <CalendarDay
             column={day.column}
             row={rowIndex + 3}
@@ -120,6 +149,14 @@
   }
 
   .board {
+    --harvest-1: #b6f0d4;
+    --harvest-2: #86e4bc;
+    --harvest-3: #54d4a4;
+    --harvest-4: #2cc48e;
+    --harvest-5: #10b981;
+    --harvest-6: #059669;
+    --harvest-7: #047857;
+    --harvest-8: #064e3b;
     display: grid;
     min-width: 0;
     grid-template-columns: 160px minmax(0, 1fr);
@@ -222,7 +259,19 @@
   .swatch.sowing { background: #a9762c; }
   .swatch.care { background: #3d7ea6; }
   .swatch.pest { background: #7b4b8a; }
-  .swatch.harvest { background: linear-gradient(90deg, rgb(16 185 129 / 0.35), rgb(16 185 129)); }
+  .swatch.harvest {
+    background: linear-gradient(
+      90deg,
+      var(--harvest-1) 0 12.5%,
+      var(--harvest-2) 12.5% 25%,
+      var(--harvest-3) 25% 37.5%,
+      var(--harvest-4) 37.5% 50%,
+      var(--harvest-5) 50% 62.5%,
+      var(--harvest-6) 62.5% 75%,
+      var(--harvest-7) 75% 87.5%,
+      var(--harvest-8) 87.5% 100%
+    );
+  }
   .swatch.diary { background: #5f6b76; }
   .swatch.planned {
     background:

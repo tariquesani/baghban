@@ -22,7 +22,11 @@
     search?: string;
   } = $props();
 
-  let year = $state(new Date().getFullYear());
+  const linkedDate = $derived.by(() => {
+    const date = new URLSearchParams(search).get('date') ?? '';
+    return /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : '';
+  });
+  let year = $state(linkedYear(search));
   let appliedSearch = $state('');
   let filledQuery = $state('');
   let kind = $state('');
@@ -42,6 +46,11 @@
   const recorded = $derived(
     selected ? dayEntries(entries, selected.date, selected.crop, '') : [],
   );
+
+  function linkedYear(query: string) {
+    const date = new URLSearchParams(query).get('date') ?? '';
+    return /^\d{4}-\d{2}-\d{2}$/.test(date) ? Number(date.slice(0, 4)) : new Date().getFullYear();
+  }
 
   function showYear(next: number) {
     year = next;
@@ -184,6 +193,7 @@
     {rows}
     {entries}
     {kind}
+    reveal={linkedDate}
     selectedDate={selected?.date ?? ''}
     selectedCrop={selected?.crop ?? ''}
     onSelect={(day) => (selected = day)}

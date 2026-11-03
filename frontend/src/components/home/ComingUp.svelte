@@ -1,6 +1,6 @@
 <script lang="ts">
   import CalendarGrid from '../calendar/CalendarGrid.svelte';
-  import { entryRows, formatDay, kindLabel } from '$lib/domain/calendar.js';
+  import { entryRows, formatDay, kindLabel, monthNameFromIso, shiftMonth } from '$lib/domain/calendar.js';
   import type { CalendarEntry } from '$lib/domain/calendar.js';
 
   type Brief = {
@@ -40,12 +40,13 @@
   <CalendarGrid
     {year}
     rows={rows}
-    entries={visible}
+    entries={entries}
     kind=""
     selectedDate=""
     selectedCrop=""
     from={start}
     to={end}
+    focus={monthNameFromIso(shiftMonth(start, 1))}
     onSelect={openDay}
   />
   {#if soon.length}

@@ -1,6 +1,6 @@
 /** Home briefing. Pure grouping of assignments, calendar entries, and dates. */
 
-import { daysInMonth, formatDay, kindLabel } from './calendar.js';
+import { aroundMonth, formatDay, kindLabel } from './calendar.js';
 
 /**
  * @typedef {{
@@ -72,24 +72,13 @@ export function shiftDate(date, days) {
 }
 
 /**
- * This month and next month around a civil date.
+ * Previous month, this month, and next month around a civil date.
  * @param {string} today
  * @returns {{ start: string, end: string }}
  */
 export function monthWindow(today) {
-  const [year, month] = today.split('-').map(Number);
-  let endMonth = month + 1;
-  let endYear = year;
-  if (endMonth > 12) {
-    endMonth = 1;
-    endYear += 1;
-  }
-  const endDay = daysInMonth(endYear, endMonth);
-  const pad = (value) => String(value).padStart(2, '0');
-  return {
-    start: `${year}-${pad(month)}-01`,
-    end: `${endYear}-${pad(endMonth)}-${pad(endDay)}`,
-  };
+  const span = aroundMonth(today);
+  return { start: span.start, end: span.end };
 }
 
 /**

@@ -9,6 +9,38 @@ export function monthName(date = new Date()) {
   return MONTHS[date.getMonth()];
 }
 
+/** Short month name from a `YYYY-MM-DD` date. */
+export function monthNameFromIso(date) {
+  return MONTHS[Number(String(date).slice(5, 7)) - 1] ?? '';
+}
+
+/**
+ * First day of the month `offset` months from this date.
+ * @param {string} date
+ * @param {number} offset
+ */
+export function shiftMonth(date, offset) {
+  const [year, month] = date.split('-').map(Number);
+  const next = new Date(Date.UTC(year, month - 1 + offset, 1));
+  const y = next.getUTCFullYear();
+  const m = String(next.getUTCMonth() + 1).padStart(2, '0');
+  return `${y}-${m}-01`;
+}
+
+/**
+ * Previous, current, and next month around a date.
+ * @param {string} date
+ * @returns {{ start: string, end: string, focus: string }}
+ */
+export function aroundMonth(date) {
+  const focus = shiftMonth(date, 0);
+  const start = shiftMonth(focus, -1);
+  const [year, month] = shiftMonth(focus, 1).split('-').map(Number);
+  const endDate = new Date(Date.UTC(year, month, 0));
+  const end = `${endDate.getUTCFullYear()}-${String(endDate.getUTCMonth() + 1).padStart(2, '0')}-${String(endDate.getUTCDate()).padStart(2, '0')}`;
+  return { start, end, focus };
+}
+
 export const KIND_LABEL = {
   sowing: 'Sowing',
   care: 'Care',
@@ -48,7 +80,6 @@ const WEDGES = [
  * @property {string} [unit]
  * @property {number | null} [quantity]
  * @property {number | null} [weightGrams]
- * @property {number} [intensity] Done harvest strength, from 0 to 1.
  * @property {string} [bed]
  * @property {string} [problem]
  * @property {string} [product]
@@ -74,7 +105,7 @@ export function storedEntryId(id) {
  * @property {string} kind
  * @property {string} points
  * @property {'planned' | 'done'} status
- * @property {number | null} intensity
+ * @property {number | null} shade Done harvest green, 1 lightest through 8 darkest. Null keeps the plain harvest green.
  */
 
 /**
@@ -164,12 +195,72 @@ export function dayWedges(kinds) {
   return present.map((kind, index) => ({ kind, points: points[index] ?? '' }));
 }
 
+/** Done harvest greens. The heaviest day is 8. */
+export const HARVEST_SHADES = 8;
+
+/**
+ * Grams from done harvests. A count with no weight adds nothing.
+ * @param {CalendarEntry[]} entries
+ */
+export function harvestGrams(entries) {
+  let grams = 0;
+  for (const entry of entries) {
+    if (entry.kind !== 'harvest' || entry.status !== 'done') continue;
+    if (typeof entry.weightGrams === 'number' && entry.weightGrams > 0) grams += entry.weightGrams;
+  }
+  return grams;
+}
+
+/**
+ * Which eighth of the heaviest day this weight reaches.
+ * A few grams beside a heavy day is 1. The heaviest day is 8.
+ * 1,000 g and 1,010 g share a shade when the peak is 1,010 g.
+ * @param {number} grams
+ * @param {number} peak
+ * @returns {number | null}
+ */
+export function harvestShade(grams, peak) {
+  if (!(grams > 0) || !(peak > 0)) return null;
+  const band = Math.floor((grams / peak) * HARVEST_SHADES) + 1;
+  return Math.min(HARVEST_SHADES, Math.max(1, band));
+}
+
+/**
+ * Heaviest done harvest day for each crop, in grams.
+ * Two pickings on one day are added first.
+ * @param {CalendarEntry[]} entries
+ * @returns {Map<string, number>}
+ */
+export function harvestPeaks(entries) {
+  /** @type {Map<string, Map<string, number>>} */
+  const byCrop = new Map();
+  for (const entry of entries) {
+    if (entry.kind !== 'harvest' || entry.status !== 'done') continue;
+    if (typeof entry.weightGrams !== 'number' || !(entry.weightGrams > 0)) continue;
+    let days = byCrop.get(entry.crop);
+    if (!days) {
+      days = new Map();
+      byCrop.set(entry.crop, days);
+    }
+    days.set(entry.date, (days.get(entry.date) || 0) + entry.weightGrams);
+  }
+  /** @type {Map<string, number>} */
+  const peaks = new Map();
+  for (const [crop, days] of byCrop) {
+    let peak = 0;
+    for (const grams of days.values()) peak = Math.max(peak, grams);
+    peaks.set(crop, peak);
+  }
+  return peaks;
+}
+
 /**
  * @param {CalendarEntry[]} entries
  * @param {string} kindFilter Empty shows every kind.
+ * @param {number} [harvestPeak] Heaviest day for this crop, in grams. Zero means this day stands alone.
  * @returns {DayMark[]}
  */
-export function dayMarks(entries, kindFilter) {
+export function dayMarks(entries, kindFilter, harvestPeak = 0) {
   const kinds = CALENDAR_KINDS.filter((kind) => {
     if (kindFilter && kind !== kindFilter) return false;
     return entries.some((entry) => markKind(entry) === kind);
@@ -177,18 +268,18 @@ export function dayMarks(entries, kindFilter) {
   return dayWedges(kinds).map((wedge) => {
     const ofKind = entries.filter((entry) => markKind(entry) === wedge.kind);
     const done = ofKind.some((entry) => entry.status === 'done');
-    let intensity = null;
+    let shade = null;
     if (wedge.kind === 'harvest' && done) {
-      intensity = ofKind.reduce((strongest, entry) => {
-        if (entry.status !== 'done') return strongest;
-        return Math.max(strongest, entry.intensity ?? 1);
-      }, 0);
+      const grams = harvestGrams(ofKind);
+      const peak = harvestPeak > 0 ? harvestPeak : grams;
+      if (grams > 0) shade = harvestShade(grams, peak);
+      else if (harvestPeak > 0) shade = 1;
     }
     return {
       kind: wedge.kind,
       points: wedge.points,
       status: done ? 'done' : 'planned',
-      intensity,
+      shade,
     };
   });
 }
@@ -215,6 +306,14 @@ export function entryRows(entries) {
     if (entry.crop) crops.add(entry.crop);
     else garden = true;
   }
+  return namedRows(crops, garden);
+}
+
+/**
+ * @param {Set<string>} crops
+ * @param {boolean} garden
+ */
+function namedRows(crops, garden) {
   const names = [...crops].sort((left, right) => left.localeCompare(right));
   if (garden || names.length === 0) return ['', ...names];
   return names;
@@ -229,10 +328,19 @@ const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
  * @param {number} year
  */
 function occupiesYear(assignment, year) {
+  return occupiesSpan(assignment, `${year}-01-01`, `${year}-12-31`);
+}
+
+/**
+ * The assignment overlaps the span when it was placed on or before the last
+ * day, and it had not already left before the first day.
+ * @param {BedCrop} assignment
+ * @param {string} start
+ * @param {string} end
+ */
+function occupiesSpan(assignment, start, end) {
   const created = assignment.createdOn;
   if (typeof created !== 'string' || !ISO_DATE.test(created)) return false;
-  const start = `${year}-01-01`;
-  const end = `${year}-12-31`;
   if (created > end) return false;
   const archived = assignment.archivedOn;
   return !(typeof archived === 'string' && ISO_DATE.test(archived) && archived < start);
@@ -263,9 +371,33 @@ export function calendarRows(entries, year, assignments = []) {
     if (!name || !occupiesYear(assignment, year)) continue;
     crops.add(name);
   }
-  const names = [...crops].sort((left, right) => left.localeCompare(right));
-  if (garden || names.length === 0) return ['', ...names];
-  return names;
+  return namedRows(crops, garden);
+}
+
+/**
+ * Crop lanes for a date span. A lane comes from an entry in the span, or from
+ * a bed assignment that overlaps it.
+ * @param {CalendarEntry[]} entries
+ * @param {string} start
+ * @param {string} end
+ * @param {BedCrop[]} [assignments]
+ * @returns {string[]}
+ */
+export function calendarSpanRows(entries, start, end, assignments = []) {
+  /** @type {Set<string>} */
+  const crops = new Set();
+  let garden = false;
+  for (const entry of entries) {
+    if (entry.date < start || entry.date > end) continue;
+    if (entry.crop) crops.add(entry.crop);
+    else garden = true;
+  }
+  for (const assignment of assignments) {
+    const name = typeof assignment.name === 'string' ? assignment.name.trim() : '';
+    if (!name || !occupiesSpan(assignment, start, end)) continue;
+    crops.add(name);
+  }
+  return namedRows(crops, garden);
 }
 
 /**

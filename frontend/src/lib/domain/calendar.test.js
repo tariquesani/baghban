@@ -1,10 +1,14 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  aroundMonth,
   calendarRows,
+  calendarSpanRows,
   dayEntries,
   dayMarks,
   dayReading,
+  harvestPeaks,
+  harvestShade,
   dayWedges,
   monthName,
   storedEntryId,
@@ -49,9 +53,10 @@ test('four kinds meet in the middle, and fewer kinds keep that order', () => {
 
 test('23 October tomato is harvest and diary, and a harvest filter fills the square', () => {
   const day = dayEntries(SAMPLE_ENTRIES, '2026-10-23', 'Tomato', '');
-  const marks = dayMarks(day, '');
+  const peak = harvestPeaks(SAMPLE_ENTRIES).get('Tomato') ?? 0;
+  const marks = dayMarks(day, '', peak);
   assert.deepEqual(marks.map((mark) => mark.kind), ['harvest', 'diary']);
-  assert.equal(marks[0].intensity, 1);
+  assert.equal(marks[0].shade, 8);
   assert.equal(dayReading('2026-10-23', 'Tomato', marks), '23 Oct · Tomato · Harvest, Diary');
 
   const harvest = dayMarks(day, 'harvest');
@@ -100,7 +105,7 @@ test('a planned pest treatment stays hollow', () => {
   const marks = dayMarks(dayEntries(SAMPLE_ENTRIES, '2026-10-30', 'Tomato', 'pest'), '');
   assert.equal(marks[0].kind, 'pest');
   assert.equal(marks[0].status, 'planned');
-  assert.equal(marks[0].intensity, null);
+  assert.equal(marks[0].shade, null);
 });
 
 test('a planned sowing stays hollow', () => {
@@ -108,7 +113,73 @@ test('a planned sowing stays hollow', () => {
   const marks = dayMarks(day, '');
   assert.equal(marks[0].kind, 'sowing');
   assert.equal(marks[0].status, 'planned');
-  assert.equal(marks[0].intensity, null);
+  assert.equal(marks[0].shade, null);
+});
+
+test('harvest shade is an eighth of the heaviest day', () => {
+  assert.equal(harvestShade(1010, 1010), 8);
+  assert.equal(harvestShade(1000, 1010), 8);
+  assert.equal(harvestShade(10, 10000), 1);
+  assert.equal(harvestShade(1250, 10000), 2);
+  assert.equal(harvestShade(1249, 10000), 1);
+
+  const tomato = harvestPeaks(SAMPLE_ENTRIES).get('Tomato');
+  assert.equal(tomato, 840);
+  const light = dayMarks(dayEntries(SAMPLE_ENTRIES, '2026-02-08', 'Tomato', ''), '', tomato);
+  assert.equal(light[0].shade, 3);
+
+  const counted = dayMarks(
+    [{ id: 'c', date: '2026-05-01', crop: 'Tomato', kind: 'harvest', status: 'done', weightGrams: null }],
+    '',
+    tomato,
+  );
+  assert.equal(counted[0].shade, 1);
+  assert.equal(
+    dayMarks(
+      [{ id: 'c', date: '2026-05-01', crop: 'Tomato', kind: 'harvest', status: 'done', weightGrams: null }],
+      '',
+      0,
+    )[0].shade,
+    null,
+  );
+
+  const bhindi = [
+    { id: 'a', date: '2026-08-01', crop: 'Bhindi', kind: 'harvest', status: 'done', weightGrams: 400 },
+    { id: 'b', date: '2026-08-01', crop: 'Bhindi', kind: 'harvest', status: 'done', weightGrams: 500 },
+    { id: 'c', date: '2026-08-20', crop: 'Bhindi', kind: 'harvest', status: 'done', weightGrams: 200 },
+  ];
+  assert.equal(harvestPeaks(bhindi).get('Bhindi'), 900);
+  assert.equal(dayMarks(bhindi.filter((entry) => entry.date === '2026-08-01'), '', 900)[0].shade, 8);
+  assert.equal(dayMarks(bhindi.filter((entry) => entry.date === '2026-08-20'), '', 900)[0].shade, 2);
+});
+
+test('the calendar keeps the previous month, this month, and the next', () => {
+  assert.deepEqual(aroundMonth('2026-11-03'), {
+    start: '2026-10-01',
+    end: '2026-12-31',
+    focus: '2026-11-01',
+  });
+  assert.deepEqual(aroundMonth('2026-01-15'), {
+    start: '2025-12-01',
+    end: '2026-02-28',
+    focus: '2026-01-01',
+  });
+  assert.equal(aroundMonth('2028-01-02').end, '2028-02-29');
+});
+
+test('a span keeps crops recorded in it, and plantings that overlap it', () => {
+  const beds = [
+    { name: 'Radish', createdOn: '2026-11-01', archivedOn: null },
+    { name: 'Basil', createdOn: '2026-08-01', archivedOn: '2026-09-01' },
+    { name: 'Mint', createdOn: '2027-02-01', archivedOn: null },
+  ];
+  assert.deepEqual(calendarSpanRows(SAMPLE_ENTRIES, '2026-10-01', '2026-12-31', beds), [
+    '',
+    'Coriander',
+    'Methi',
+    'Radish',
+    'Tomato',
+  ]);
 });
 
 test('a three month span starts its columns at the first day', () => {
