@@ -86,7 +86,11 @@ npm run build
 npm run preview
 ```
 
-The preview server still expects the API on port 8000.
+The preview server still expects the API on port 8000. After `npm run build`, the API also serves `frontend/dist` on its own port, so opening that address loads the app.
+
+## Docker / CasaOS
+
+The home-server container syncs `master` from GitHub on each start and serves the site on port 6060. See [docker/README.md](docker/README.md).
 
 ## Tests
 

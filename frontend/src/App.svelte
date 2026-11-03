@@ -47,9 +47,10 @@
     path === '/calendar' ? 'Calendar'
     : path === '/crops' ? 'Crops'
     : path === '/planner' ? 'Planner'
-    : path === '/settings' ? 'Setup'
+    : path === '/settings' ? 'Settings'
     : 'Dashboard',
   );
+  let documentTitle = $derived(`Baghban: ${pageTitle}`);
 
   function syncPath() {
     path = normalize(window.location.pathname);
@@ -112,6 +113,9 @@
   }
 </script>
 
+<svelte:head>
+  <title>{documentTitle}</title>
+</svelte:head>
 <svelte:window onpopstate={syncPath} onresize={noteViewport} />
 <svelte:document onclick={followLink} onsidebaropen={openDrawer} />
 

@@ -5,6 +5,8 @@ Crop assignments live in beds_crops. A garden read also
 assembles the bed and obstacle rows. Run from this directory:
 
     uvicorn app:app --host 127.0.0.1 --port 8000
+
+When frontend/dist contains index.html, this process also serves that build.
 """
 
 import json
@@ -676,3 +678,40 @@ def get_photo(photo_id: str) -> FileResponse:
         ".webp": "image/webp",
     }[path.suffix]
     return FileResponse(path, media_type=media_type)
+
+
+def frontend_dist() -> Path | None:
+    override = os.environ.get("BAGHBAN_DIST")
+    path = Path(override) if override else Path(__file__).resolve().parent.parent / "frontend" / "dist"
+    if (path / "index.html").is_file():
+        return path.resolve()
+    return None
+
+
+def frontend_file(full_path: str) -> Path:
+    """Return a built file, or index.html for a client-side route."""
+    root = frontend_dist()
+    if root is None:
+        raise HTTPException(status_code=404, detail="Not found")
+    relative = full_path.strip("/")
+    if relative == "api" or relative.startswith("api/"):
+        raise HTTPException(status_code=404, detail="Not found")
+    if relative:
+        candidate = (root / relative).resolve()
+        if candidate != root and root not in candidate.parents:
+            raise HTTPException(status_code=404, detail="Not found")
+        if candidate.is_file():
+            return candidate
+        if Path(relative).suffix:
+            raise HTTPException(status_code=404, detail="Not found")
+    return root / "index.html"
+
+
+@app.get("/", include_in_schema=False)
+def frontend_index() -> FileResponse:
+    return FileResponse(frontend_file(""))
+
+
+@app.get("/{full_path:path}", include_in_schema=False)
+def frontend_path(full_path: str) -> FileResponse:
+    return FileResponse(frontend_file(full_path))

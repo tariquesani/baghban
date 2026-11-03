@@ -1,0 +1,20 @@
+# CasaOS Custom App — Baghban (GHCR image)
+#
+# Web UI: http://<host-ip>:6060
+#
+# Set BAGHBAN_GIT_TOKEN in the CasaOS app UI when the source repo is private
+# (GitHub PAT with repo read access). Do not put the token in this file.
+# Image tag is :master; app code syncs from the master branch on each start.
+
+services:
+  baghban:
+    image: ghcr.io/tariquesani/baghban:master
+    container_name: baghban-main
+    restart: unless-stopped
+    ports:
+      - "6060:6060"
+    environment:
+      BAGHBAN_GIT_REPO: https://github.com/tariquesani/baghban.git
+      BAGHBAN_GIT_REF: master
+    volumes:
+      - /DATA/AppData/baghban:/app

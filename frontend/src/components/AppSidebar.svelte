@@ -40,7 +40,7 @@
     { id: 'planner', label: 'Planner', icon: 'map', href: '/planner' },
     { id: 'planter', label: 'Planter', icon: 'layout-grid' },
     { id: 'inventory', label: 'Inventory', icon: 'package' },
-    { id: 'setup', label: 'Setup', icon: 'ruler', href: '/settings' },
+    { id: 'setup', label: 'Settings', icon: 'ruler', href: '/settings' },
     { id: 'help', label: 'Help', icon: 'circle-help' },
   ];
 

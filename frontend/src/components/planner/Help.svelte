@@ -33,7 +33,7 @@
           <li>Drag an item to move it. Drag empty ground to pan</li>
           <li>Hold Space, or use the middle mouse button, to pan from anywhere</li>
           <li>Drag the ↻ handle to rotate; hold Shift to snap to 15°</li>
-          <li>Recalibrate a plan from Setup if the scale looks wrong</li>
+          <li>Recalibrate a plan from Settings if the scale looks wrong</li>
           <li>Plot a bed by clicking corners</li>
           <li>Double-click to close a polygon</li>
           <li>Double-click an edge of a selected bed to add a corner</li>
