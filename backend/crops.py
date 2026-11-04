@@ -12,9 +12,7 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import Response
 
-CATEGORIES = ("Vegetables", "Herbs", "Flowers", "Fruit")
-SUNS = ("", "Full", "Full/Part")
-WATERS = ("", "Low", "Medium", "High")
+from catalogue import CATEGORIES, SUNS, WATERS
 FIELDS = {
     "id",
     "name",
@@ -71,26 +69,7 @@ def display_name(plant: dict) -> str:
 
 
 def create_crop_tables(connection) -> None:
-    connection.execute(
-        """
-        CREATE TABLE IF NOT EXISTS crop (
-            id                INTEGER PRIMARY KEY AUTOINCREMENT,
-            name              TEXT NOT NULL,
-            category          TEXT NOT NULL CHECK (category IN ('Vegetables', 'Herbs', 'Flowers', 'Fruit')),
-            emoji             TEXT NOT NULL DEFAULT '',
-            sqft              REAL,
-            spacing           REAL,
-            depth_in          REAL,
-            sowing_depth_mm   REAL,
-            days_to_maturity  INTEGER,
-            sun               TEXT NOT NULL DEFAULT '' CHECK (sun IN ('', 'Full', 'Full/Part')),
-            water             TEXT NOT NULL DEFAULT '' CHECK (water IN ('', 'Low', 'Medium', 'High')),
-            trellis           INTEGER NOT NULL DEFAULT 0 CHECK (trellis IN (0, 1)),
-            notes             TEXT NOT NULL DEFAULT '',
-            archived          INTEGER NOT NULL DEFAULT 0 CHECK (archived IN (0, 1))
-        )
-        """
-    )
+    connection.execute(crop_table_sql(if_not_exists=True))
     connection.execute(
         """
         CREATE TABLE IF NOT EXISTS crop_alias (
@@ -110,6 +89,76 @@ def create_crop_tables(connection) -> None:
             CHECK (crop_id != other_id)
         )
         """
+    )
+
+
+def crop_table_sql(name: str = "crop", if_not_exists: bool = False) -> str:
+    clause = "IF NOT EXISTS " if if_not_exists else ""
+    return f"""
+        CREATE TABLE {clause}{name} (
+            id                INTEGER PRIMARY KEY AUTOINCREMENT,
+            name              TEXT NOT NULL,
+            category          TEXT NOT NULL,
+            emoji             TEXT NOT NULL DEFAULT '',
+            sqft              REAL,
+            spacing           REAL,
+            depth_in          REAL,
+            sowing_depth_mm   REAL,
+            days_to_maturity  INTEGER,
+            sun               TEXT NOT NULL DEFAULT '',
+            water             TEXT NOT NULL DEFAULT '',
+            trellis           INTEGER NOT NULL DEFAULT 0 CHECK (trellis IN (0, 1)),
+            notes             TEXT NOT NULL DEFAULT '',
+            archived          INTEGER NOT NULL DEFAULT 0 CHECK (archived IN (0, 1))
+        )
+    """
+
+
+def drop_crop_label_checks(connection) -> None:
+    """Store any category, sun, and water. The API checks the catalogue."""
+    row = connection.execute(
+        "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'crop'"
+    ).fetchone()
+    if row is None:
+        return
+    stored = row[0] or ""
+    if not any(marker in stored for marker in ("CHECK (category", "CHECK (sun", "CHECK (water")):
+        return
+    connection.execute("DROP TABLE IF EXISTS crop_next")
+    connection.execute(crop_table_sql("crop_next"))
+    connection.execute(
+        """
+        INSERT INTO crop_next (
+            id, name, category, emoji, sqft, spacing, depth_in, sowing_depth_mm,
+            days_to_maturity, sun, water, trellis, notes, archived
+        )
+        SELECT
+            id, name, category, emoji, sqft, spacing, depth_in, sowing_depth_mm,
+            days_to_maturity, sun, water, trellis, notes, archived
+        FROM crop
+        """
+    )
+    connection.execute("DROP TABLE crop")
+    connection.execute("ALTER TABLE crop_next RENAME TO crop")
+    sequence = connection.execute(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'sqlite_sequence'"
+    ).fetchone()
+    max_id = connection.execute("SELECT MAX(id) FROM crop").fetchone()[0]
+    if sequence is None or max_id is None:
+        return
+    connection.execute("DELETE FROM sqlite_sequence WHERE name = 'crop_next'")
+    found = connection.execute(
+        "SELECT 1 FROM sqlite_sequence WHERE name = 'crop'"
+    ).fetchone()
+    if found is None:
+        connection.execute(
+            "INSERT INTO sqlite_sequence (name, seq) VALUES ('crop', ?)",
+            (max_id,),
+        )
+        return
+    connection.execute(
+        "UPDATE sqlite_sequence SET seq = ? WHERE name = 'crop'",
+        (max_id,),
     )
 
 

@@ -19,6 +19,7 @@
    *   },
    *   onToggle: () => void,
    *   onClose: () => void,
+   *   onHelp: () => void,
    *   onAddEntry: (kind: string) => void,
    * }} props
    */
@@ -32,6 +33,7 @@
     actions,
     onToggle,
     onClose,
+    onHelp,
     onAddEntry,
   } = $props();
 
@@ -63,6 +65,11 @@
   function choose(action) {
     if (!wide) onClose();
     action();
+  }
+
+  function openHelp() {
+    if (!wide) onClose();
+    onHelp();
   }
 
   $effect(() => {
@@ -114,7 +121,13 @@
           <span class="rail-label">{entry.label}</span>
         </a>
       {:else}
-        <button type="button" class="rail-btn" title={entry.label}>
+        <button
+          type="button"
+          class="rail-btn"
+          title={entry.label}
+          aria-haspopup={entry.id === 'help' ? 'dialog' : undefined}
+          onclick={entry.id === 'help' ? openHelp : undefined}
+        >
           <i data-lucide={entry.icon}></i>
           <span class="rail-label">{entry.label}</span>
         </button>

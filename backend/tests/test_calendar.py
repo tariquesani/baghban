@@ -455,3 +455,92 @@ def test_done_sowing_occupies_an_empty_bed(tmp_path, monkeypatch):
     ).fetchall()
     assert rows == [("2026-06-08", None)]
     connection.close()
+
+
+def test_records_pruning_without_an_amount(tmp_path, monkeypatch):
+    monkeypatch.setenv("BAGHBAN_DB", str(tmp_path / "baghban.db"))
+
+    with TestClient(app) as client:
+        bed_id = add_bed(client)
+        body = watering(bed_id)
+        body["action"] = "pruning"
+        body["amount"] = None
+        body["unit"] = ""
+        body["note"] = "Dead wood"
+        saved = client.post("/api/calendar", json=body)
+        assert saved.status_code == 200
+        assert saved.json()["action"] == "pruning"
+        assert saved.json()["amount"] is None
+        assert saved.json()["note"] == "Dead wood"
+
+
+def test_old_care_table_accepts_new_actions(tmp_path, monkeypatch):
+    db = tmp_path / "baghban.db"
+    monkeypatch.setenv("BAGHBAN_DB", str(db))
+    connection = sqlite3.connect(db)
+    connection.execute(
+        """
+        CREATE TABLE calendar_entry (
+            id        INTEGER PRIMARY KEY AUTOINCREMENT,
+            kind      TEXT NOT NULL,
+            date      TEXT NOT NULL,
+            bed_id    INTEGER,
+            crop      TEXT,
+            status    TEXT NOT NULL,
+            note      TEXT NOT NULL DEFAULT '',
+            photo_url TEXT
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE care (
+            entry_id  INTEGER PRIMARY KEY,
+            action    TEXT NOT NULL CHECK (action IN ('watering', 'fertilising')),
+            product   TEXT,
+            amount    REAL,
+            unit      TEXT
+        )
+        """
+    )
+    connection.execute(
+        """
+        INSERT INTO calendar_entry (kind, date, crop, status, note)
+        VALUES ('care', '2026-01-02', 'Custard apple', 'done', '')
+        """
+    )
+    connection.execute(
+        """
+        INSERT INTO care (entry_id, action, product, amount, unit)
+        VALUES (1, 'watering', '', 8, 'L')
+        """
+    )
+    connection.commit()
+    connection.close()
+
+    with TestClient(app) as client:
+        bed_id = add_bed(client)
+        body = watering(bed_id)
+        body["action"] = "thinning"
+        body["amount"] = None
+        body["unit"] = ""
+        saved = client.post("/api/calendar", json=body)
+        assert saved.status_code == 200
+        assert saved.json()["action"] == "thinning"
+        kept = client.get("/api/calendar?kind=care&action=watering")
+        assert kept.status_code == 200
+        assert kept.json()[0]["amount"] == 8
+        assert kept.json()[0]["crop"] == "Custard apple"
+        unknown = watering(bed_id)
+        unknown["action"] = "composting"
+        assert client.post("/api/calendar", json=unknown).status_code == 400
+
+    connection = sqlite3.connect(db)
+    care_sql = connection.execute(
+        "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'care'"
+    ).fetchone()[0]
+    assert "CHECK" not in care_sql.upper()
+    assert connection.execute("PRAGMA user_version").fetchone()[0] == 1
+    connection.execute("UPDATE care SET action = 'composting' WHERE entry_id = 1")
+    connection.commit()
+    connection.close()

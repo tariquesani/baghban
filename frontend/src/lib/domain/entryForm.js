@@ -1,13 +1,11 @@
 /** Draft and request for recording any calendar kind. */
 
+import { CARE_ACTIONS } from './catalogue.js';
 import { sowingDraft, sowingRequest } from './sowing.js';
 
-export const ENTRY_KINDS = ['sowing', 'care', 'pest', 'harvest', 'diary'];
+export { CARE_ACTIONS };
 
-export const CARE_ACTIONS = [
-  { value: 'watering', label: 'Watering' },
-  { value: 'fertilising', label: 'Fertilising' },
-];
+export const ENTRY_KINDS = ['sowing', 'care', 'pest', 'harvest', 'diary'];
 
 /**
  * @param {string} kind
@@ -17,9 +15,13 @@ export function isEntryKind(kind) {
   return ENTRY_KINDS.includes(kind);
 }
 
-/** @param {string} action */
+/**
+ * The catalogue label, or the stored word when a retired action is still on a row.
+ * @param {string} action
+ */
 export function actionLabel(action) {
-  return CARE_ACTIONS.find((choice) => choice.value === action)?.label ?? '';
+  if (!action) return '';
+  return CARE_ACTIONS.find((choice) => choice.value === action)?.label ?? action;
 }
 
 /** @param {string} kind */
@@ -131,8 +133,8 @@ export function entryRequest(kind, draft) {
     return { ok: true, body: { ...shared.body, kind, status } };
   }
   if (kind === 'care') {
-    if (draft.action !== 'watering' && draft.action !== 'fertilising') {
-      return { ok: false, field: 'action', message: 'Choose watering or fertilising.' };
+    if (!CARE_ACTIONS.some((choice) => choice.value === draft.action)) {
+      return { ok: false, field: 'action', message: 'Choose a care action.' };
     }
     const amount = counted(draft.amount ?? '', 'amount', 'Enter a number.', false);
     if (!amount.ok) return amount;
@@ -214,7 +216,7 @@ export function entryDetail(entry) {
  */
 export function calendarRecord(saved, bedName) {
   const kind = typeof saved.kind === 'string' && isEntryKind(saved.kind) ? saved.kind : 'sowing';
-  const action = saved.action === 'watering' || saved.action === 'fertilising' ? saved.action : '';
+  const action = typeof saved.action === 'string' ? saved.action : '';
   const status = saved.status === 'planned' ? 'planned' : 'done';
   /** @type {import('./calendar.js').CalendarEntry} */
   const record = {

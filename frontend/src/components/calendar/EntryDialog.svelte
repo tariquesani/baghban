@@ -82,7 +82,7 @@
         {#if entry.product}<p>{entry.product}</p>{/if}
         {#if entry.detail}<p>{entry.detail}</p>{/if}
         {#if entry.note}<p>{entry.note}</p>{/if}
-        {#if entry.photoUrl}<img src={entry.photoUrl} alt={cropLabel(entry.crop)} />{/if}
+        {#if entry.photoUrl}<img class="photo" src={entry.photoUrl} alt={cropLabel(entry.crop)} />{/if}
         {#if error}<p class="error">{error}</p>{/if}
       </div>
       </ScrollArea>
@@ -117,10 +117,14 @@
     margin: 0;
   }
 
-  img {
+  .photo {
     display: block;
+    width: auto;
+    height: auto;
     max-width: 100%;
     max-height: 240px;
+    align-self: center;
+    object-fit: contain;
     border-radius: 8px;
   }
 

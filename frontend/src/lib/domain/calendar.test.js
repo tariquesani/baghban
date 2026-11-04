@@ -4,7 +4,11 @@ import {
   aroundMonth,
   calendarRows,
   calendarSpanRows,
+  cropYearEntries,
+  dateEntries,
   dayEntries,
+  entryWhere,
+  selectionEntries,
   dayMarks,
   dayReading,
   harvestPeaks,
@@ -195,6 +199,38 @@ test('a three month span starts its columns at the first day', () => {
       ['Dec', 31],
     ],
   );
+});
+
+test('a date lists every crop, and the garden lane leads', () => {
+  const entries = [
+    { id: 'tomato', date: '2026-10-02', crop: 'Tomato', kind: 'harvest', status: 'done' },
+    { id: 'garden', date: '2026-10-02', crop: '', kind: 'diary', status: 'done' },
+    { id: 'bhindi', date: '2026-10-02', crop: 'Bhindi', kind: 'care', status: 'done' },
+    { id: 'next', date: '2026-10-03', crop: 'Tomato', kind: 'care', status: 'done' },
+  ];
+  assert.deepEqual(dateEntries(entries, '2026-10-02', '').map((entry) => entry.id), ['garden', 'bhindi', 'tomato']);
+  assert.deepEqual(dateEntries(entries, '2026-10-02', 'harvest').map((entry) => entry.id), ['tomato']);
+  assert.equal(entryWhere(entries[1], 'day'), 'Garden');
+  assert.equal(entryWhere({ ...entries[0], bed: 'Bed 1' }, 'day'), 'Tomato · Bed 1');
+});
+
+test('a crop lists the displayed year in date order', () => {
+  const entries = [
+    { id: 'late', date: '2026-10-23', crop: 'Tomato', kind: 'diary', status: 'done' },
+    { id: 'early', date: '2026-02-08', crop: 'Tomato', kind: 'harvest', status: 'done' },
+    { id: 'same', date: '2026-02-08', crop: 'Tomato', kind: 'care', status: 'done', bed: 'Bed 2' },
+    { id: 'other-year', date: '2025-08-01', crop: 'Tomato', kind: 'care', status: 'done' },
+    { id: 'other-crop', date: '2026-02-08', crop: 'Bhindi', kind: 'care', status: 'done' },
+  ];
+  assert.deepEqual(cropYearEntries(entries, 2026, 'Tomato', '').map((entry) => entry.id), ['same', 'early', 'late']);
+  assert.deepEqual(cropYearEntries(entries, 2026, 'Tomato', 'diary').map((entry) => entry.id), ['late']);
+  assert.deepEqual(
+    selectionEntries(entries, { scope: 'crop', crop: 'Tomato' }, 2025, '').map((entry) => entry.id),
+    ['other-year'],
+  );
+  assert.deepEqual(selectionEntries(entries, null, 2026, ''), []);
+  assert.equal(entryWhere(entries[2], 'crop'), '8 Feb · Bed 2');
+  assert.equal(entryWhere(entries[0], 'cell'), '');
 });
 
 test('rows put the garden first, then crops by name', () => {

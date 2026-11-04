@@ -3,6 +3,7 @@
     cropLabel,
     dayMarks,
     dayReading,
+    formatDay,
     harvestPeaks,
     monthName,
     spanDays,
@@ -20,11 +21,15 @@
     kind,
     selectedDate,
     selectedCrop,
+    activeDate = '',
+    activeCrop = '',
     from = '',
     to = '',
     focus = '',
     reveal = '',
     onSelect,
+    onSelectDay,
+    onSelectCrop,
   }: {
     year: number;
     rows: string[];
@@ -32,11 +37,15 @@
     kind: string;
     selectedDate: string;
     selectedCrop: string;
+    activeDate?: string;
+    activeCrop?: string;
     from?: string;
     to?: string;
     focus?: string;
     reveal?: string;
     onSelect: (day: { date: string; crop: string }) => void;
+    onSelectDay?: (date: string) => void;
+    onSelectCrop?: (crop: string) => void;
   } = $props();
 
   let scroll = $state<HTMLDivElement | null>(null);
@@ -95,7 +104,17 @@
     <div class="label head">Crop</div>
     <div class="date-gap" aria-hidden="true"></div>
     {#each rows as crop (crop || 'garden')}
-      <div class="label">{cropLabel(crop)}</div>
+      {#if onSelectCrop}
+        <button
+          type="button"
+          class={['label', { selected: activeCrop === crop }]}
+          aria-pressed={activeCrop === crop}
+          aria-label="{cropLabel(crop)}, {year}"
+          onclick={() => onSelectCrop(crop)}
+        >{cropLabel(crop)}</button>
+      {:else}
+        <div class="label">{cropLabel(crop)}</div>
+      {/if}
     {/each}
   </div>
   <div class="scroll" bind:this={scroll} {@attach (node) => {
@@ -112,7 +131,19 @@
         >{month.name}</div>
       {/each}
       {#each days as day (day.date)}
-        <div class="date" data-date={day.date} style:grid-column={day.column}>{Number(day.date.slice(8, 10))}</div>
+        {#if onSelectDay}
+          <button
+            type="button"
+            class={['date', { selected: activeDate === day.date }]}
+            data-date={day.date}
+            style:grid-column={day.column}
+            aria-pressed={activeDate === day.date}
+            aria-label="All crops on {formatDay(day.date)}"
+            onclick={() => onSelectDay(day.date)}
+          >{Number(day.date.slice(8, 10))}</button>
+        {:else}
+          <div class="date" data-date={day.date} style:grid-column={day.column}>{Number(day.date.slice(8, 10))}</div>
+        {/if}
       {/each}
       {#each rows as crop, rowIndex (crop || 'garden')}
         {#each days as day (`${crop}-${day.date}`)}
@@ -215,11 +246,54 @@
     line-height: 1;
   }
 
+  button.date,
+  button.label {
+    padding: 0;
+    border: 0;
+    background: none;
+    font: inherit;
+    cursor: pointer;
+  }
+
+  button.date {
+    font-size: 10px;
+    color: #9ca3af;
+  }
+
+  button.date:hover,
+  button.label:hover {
+    color: #386a20;
+  }
+
+  button.date.selected {
+    color: #1f2937;
+    font-weight: 700;
+  }
+
+  button.date:focus-visible,
+  button.label:focus-visible {
+    outline: 2px solid #386a20;
+    outline-offset: 1px;
+  }
+
   .label {
     display: flex;
     align-items: center;
     color: #1f2937;
     font-size: 16px;
+  }
+
+  button.label {
+    width: 100%;
+    min-width: 0;
+    font-size: 16px;
+    color: #1f2937;
+    text-align: start;
+  }
+
+  button.label.selected {
+    font-weight: 650;
+    color: #14532d;
   }
 
   .label.head {

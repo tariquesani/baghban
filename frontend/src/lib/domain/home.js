@@ -356,13 +356,16 @@ function measure(amount, unit) {
  * @param {HomeEntry} entry
  */
 function latelyText(entry) {
-  if (entry.kind === 'care' && entry.action === 'watering') {
-    const amount = measure(entry.amount, entry.unit);
-    return amount ? `Watering · ${amount}` : 'Watering';
-  }
-  if (entry.kind === 'care' && entry.action === 'fertilising') {
+  if (entry.kind === 'care') {
+    const label = actionLabel(entry.action) || 'Care';
+    if (entry.action === 'watering') {
+      const amount = measure(entry.amount, entry.unit);
+      return amount ? `${label} · ${amount}` : label;
+    }
     const product = (entry.product || '').trim();
-    return product ? `Fertilising · ${product}` : 'Fertilising';
+    if (product) return `${label} · ${product}`;
+    const amount = measure(entry.amount, entry.unit);
+    return amount ? `${label} · ${amount}` : label;
   }
   if (entry.kind === 'diary') {
     const note = (entry.note || '').trim();

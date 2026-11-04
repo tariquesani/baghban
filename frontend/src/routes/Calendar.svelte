@@ -7,7 +7,7 @@
   import RecordDialog from '../components/calendar/RecordDialog.svelte';
   import { listAssignments, listBeds } from '$lib/api/beds.js';
   import { listCalendarEntries } from '$lib/api/calendar.js';
-  import { calendarRows, dayEntries, type BedCrop, type CalendarEntry } from '$lib/domain/calendar.js';
+  import { calendarRows, selectionEntries, type BedCrop, type CalendarEntry, type CalendarSelection } from '$lib/domain/calendar.js';
   import { calendarRecord, isEntryKind } from '$lib/domain/entryForm.js';
 
   let {
@@ -30,7 +30,7 @@
   let appliedSearch = $state('');
   let filledQuery = $state('');
   let kind = $state('');
-  let selected = $state<{ date: string; crop: string } | null>(null);
+  let selected = $state<CalendarSelection | null>(null);
   let saved = $state<CalendarEntry[]>([]);
   let plantings = $state.raw<BedCrop[]>([]);
   let grid = $state<{ showCurrentMonth: () => void } | null>(null);
@@ -40,12 +40,8 @@
 
   const entries = $derived(saved);
   const rows = $derived(calendarRows(entries, year, plantings));
-  const shown = $derived(
-    selected ? dayEntries(entries, selected.date, selected.crop, kind) : [],
-  );
-  const recorded = $derived(
-    selected ? dayEntries(entries, selected.date, selected.crop, '') : [],
-  );
+  const shown = $derived(selectionEntries(entries, selected, year, kind));
+  const recorded = $derived(selectionEntries(entries, selected, year, ''));
 
   function linkedYear(query: string) {
     const date = new URLSearchParams(query).get('date') ?? '';
@@ -70,7 +66,7 @@
   function addSowing(entry: CalendarEntry) {
     saved = [...saved.filter((item) => item.id !== entry.id), entry];
     year = Number(entry.date.slice(0, 4));
-    selected = { date: entry.date, crop: entry.crop };
+    selected = { scope: 'cell', date: entry.date, crop: entry.crop };
   }
 
   function editEntry(entry: CalendarEntry) {
@@ -121,20 +117,20 @@
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return;
     year = Number(date.slice(0, 4));
     const crop = untrack(() => saved.find((entry) => entry.date === date)?.crop ?? '');
-    selected = { date, crop };
+    selected = { scope: 'cell', date, crop };
   });
 
   $effect(() => {
     const date = new URLSearchParams(search).get('date') ?? '';
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || filledQuery === date) return;
-    if (selected?.date !== date) return;
+    if (selected?.scope !== 'cell' || selected.date !== date) return;
     if (selected.crop) {
       filledQuery = date;
       return;
     }
     const crop = saved.find((entry) => entry.date === date && entry.crop)?.crop ?? '';
     if (!crop) return;
-    selected = { date, crop };
+    selected = { scope: 'cell', date, crop };
     filledQuery = date;
   });
 
@@ -194,14 +190,20 @@
     {entries}
     {kind}
     reveal={linkedDate}
-    selectedDate={selected?.date ?? ''}
-    selectedCrop={selected?.crop ?? ''}
-    onSelect={(day) => (selected = day)}
+    selectedDate={selected?.scope === 'cell' ? selected.date : ''}
+    selectedCrop={selected?.scope === 'cell' ? selected.crop : ''}
+    activeDate={selected?.scope === 'day' ? selected.date : ''}
+    activeCrop={selected?.scope === 'crop' ? selected.crop : ''}
+    onSelect={(day) => (selected = { scope: 'cell', date: day.date, crop: day.crop })}
+    onSelectDay={(date) => (selected = { scope: 'day', date })}
+    onSelectCrop={(crop) => (selected = { scope: 'crop', crop })}
   />
 
   <CalendarDayPanel
-    date={selected?.date ?? ''}
-    crop={selected?.crop ?? ''}
+    scope={selected?.scope ?? ''}
+    date={selected && selected.scope !== 'crop' ? selected.date : ''}
+    crop={selected && selected.scope !== 'day' ? selected.crop : ''}
+    {year}
     entries={shown}
     hiddenByFilter={recorded.length > 0 && shown.length === 0}
     onOpen={(entry) => (detail = entry)}
@@ -215,8 +217,8 @@
     addSession={entrySession}
     {editSession}
     entry={formEntry}
-    selectedDate={selected?.date ?? ''}
-    selectedCrop={selected?.crop ?? ''}
+    selectedDate={selected && selected.scope !== 'crop' ? selected.date : ''}
+    selectedCrop={selected && selected.scope !== 'day' ? selected.crop : ''}
     onSaved={addSowing}
   />
 </main>

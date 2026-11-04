@@ -26,6 +26,7 @@ from beds import create_scene_tables, drop_plant_grid, garden_contents, router a
 from beds_crops import archive_bed_crops, copy_document_plants, create_beds_crops
 from calendar_entries import create_calendar_tables, router as calendar_router
 from crops import create_crop_tables, seed_crops, router as crops_router
+from migrate import migrate
 import sky
 
 MAX_BYTES = 2 * 1024 * 1024
@@ -109,6 +110,7 @@ def connect() -> sqlite3.Connection:
 def init_db() -> None:
     path = database_path()
     path.parent.mkdir(parents=True, exist_ok=True)
+    migrate(path)
     with closing(connect()) as connection:
         connection.execute(
             """

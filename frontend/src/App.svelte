@@ -2,11 +2,14 @@
   import './app.css';
   import { Toaster } from '$lib/components/ui/sonner';
   import AppSidebar from './components/AppSidebar.svelte';
+  import Help from './components/Help.svelte';
+  import { helpForPath } from '$lib/domain/help.js';
   import Calendar from './routes/Calendar.svelte';
   import Crops from './routes/Crops.svelte';
   import Home from './routes/Home.svelte';
   import Planner from './routes/Planner.svelte';
   import Setup from './routes/Setup.svelte';
+  import SiteFooter from './components/SiteFooter.svelte';
 
   const screens = {
     '/': Home,
@@ -33,6 +36,7 @@
   let entryOpen = $state(false);
   let entrySession = $state(0);
   let entryKind = $state('sowing');
+  let helpOpen = $state(false);
   let canvas = $state({
     ready: false,
     activeTool: 'select',
@@ -51,11 +55,17 @@
     : 'Dashboard',
   );
   let documentTitle = $derived(`Baghban: ${pageTitle}`);
+  let help = $derived(helpForPath(path));
 
   function syncPath() {
     path = normalize(window.location.pathname);
     search = window.location.search;
     entryOpen = false;
+    helpOpen = false;
+  }
+
+  function openHelp() {
+    helpOpen = true;
   }
 
   /** @param {string} kind */
@@ -104,6 +114,7 @@
     event.preventDefault();
     drawerOpen = false;
     entryOpen = false;
+    helpOpen = false;
     const nextSearch = url.search;
     if (next === path && nextSearch === search) return;
     history.pushState(null, '', next + nextSearch);
@@ -139,6 +150,7 @@
     actions={canvas.actions}
     onToggle={toggleRail}
     onClose={() => drawerOpen = false}
+    onHelp={openHelp}
     onAddEntry={askForEntry}
   />
   <div class="shell-main">
@@ -171,7 +183,9 @@
         <Home />
       {/if}
     </div>
+    <SiteFooter />
   </div>
+  <Help open={helpOpen} title={help.title} tips={help.tips} onClose={() => helpOpen = false} />
 </div>
 
 <style>

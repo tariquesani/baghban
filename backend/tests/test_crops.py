@@ -1,3 +1,5 @@
+import sqlite3
+
 from fastapi.testclient import TestClient
 
 from app import app
@@ -216,3 +218,81 @@ def test_put_rejects_bad_crops(tmp_path, monkeypatch):
         assert renamed.status_code == 200
         assert renamed.json()["id"] == body["id"]
         assert renamed.json()["name"] == "Okra"
+
+
+def test_old_crop_checks_follow_the_catalogue(tmp_path, monkeypatch):
+    db = tmp_path / "baghban.db"
+    monkeypatch.setenv("BAGHBAN_DB", str(db))
+    connection = sqlite3.connect(db)
+    connection.execute(
+        """
+        CREATE TABLE crop (
+            id                INTEGER PRIMARY KEY AUTOINCREMENT,
+            name              TEXT NOT NULL,
+            category          TEXT NOT NULL CHECK (category IN ('Vegetables', 'Herbs', 'Flowers', 'Fruit')),
+            emoji             TEXT NOT NULL DEFAULT '',
+            sqft              REAL,
+            spacing           REAL,
+            depth_in          REAL,
+            sowing_depth_mm   REAL,
+            days_to_maturity  INTEGER,
+            sun               TEXT NOT NULL DEFAULT '' CHECK (sun IN ('', 'Full', 'Full/Part')),
+            water             TEXT NOT NULL DEFAULT '' CHECK (water IN ('', 'Low', 'Medium', 'High')),
+            trellis           INTEGER NOT NULL DEFAULT 0 CHECK (trellis IN (0, 1)),
+            notes             TEXT NOT NULL DEFAULT '',
+            archived          INTEGER NOT NULL DEFAULT 0 CHECK (archived IN (0, 1))
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE crop_alias (
+            crop_id  INTEGER NOT NULL REFERENCES crop(id),
+            alias    TEXT NOT NULL,
+            PRIMARY KEY (crop_id, alias)
+        )
+        """
+    )
+    connection.execute(
+        """
+        INSERT INTO crop (name, category, sun, water)
+        VALUES ('Custard apple', 'Fruit', 'Full', 'Low')
+        """
+    )
+    connection.execute(
+        "INSERT INTO crop_alias (crop_id, alias) VALUES (1, 'Seeta phal')"
+    )
+    connection.commit()
+    connection.close()
+
+    with TestClient(app) as client:
+        kept = client.get("/api/crops?q=Custard")
+        assert kept.status_code == 200
+        assert kept.json()[0]["name"] == "Custard apple"
+        assert kept.json()[0]["aliases"] == ["Seeta phal"]
+        rejected = client.post(
+            "/api/crops",
+            json={"name": "Neem", "category": "Trees"},
+        )
+        assert rejected.status_code == 400
+        created = client.post(
+            "/api/crops",
+            json={"name": "Bhindi", "category": "Vegetables"},
+        )
+        assert created.status_code == 200
+        assert created.json()["id"] == 2
+
+    connection = sqlite3.connect(db)
+    sql = connection.execute(
+        "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'crop'"
+    ).fetchone()[0]
+    assert "CHECK (category" not in sql
+    assert "CHECK (sun" not in sql
+    assert "CHECK (water" not in sql
+    assert "CHECK (trellis" in sql
+    assert connection.execute("PRAGMA user_version").fetchone()[0] == 1
+    connection.execute(
+        "UPDATE crop SET category = 'Trees' WHERE name = 'Custard apple'"
+    )
+    connection.commit()
+    connection.close()

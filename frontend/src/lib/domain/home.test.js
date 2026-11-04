@@ -190,6 +190,16 @@ test('lately keeps the four newest done entries and the season sums weighed harv
     text: 'Fertilising · vermicompost',
     bed: 'East bed',
   });
+  assert.equal(
+    latelyNote(entry({ id: '7', date: '2026-10-20', kind: 'care', action: 'pruning', product: '' })).text,
+    'Pruning',
+  );
+  assert.equal(
+    latelyNote(
+      entry({ id: '8', date: '2026-10-20', kind: 'care', action: 'mulching', product: 'straw', amount: 2, unit: 'bags' }),
+    ).text,
+    'Mulching · straw',
+  );
   assert.equal(seasonWeight(entries, '2026-11-01'), '1.4 kg');
   assert.deepEqual(
     harvestByCrop(entries, '2026-11-01').map((row) => row.crop),

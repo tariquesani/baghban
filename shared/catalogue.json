@@ -1,0 +1,24 @@
+{
+  "careActions": [
+    { "value": "watering", "label": "Watering" },
+    { "value": "fertilising", "label": "Fertilising" },
+    { "value": "pruning", "label": "Pruning" },
+    { "value": "cleanup", "label": "Cleanup" },
+    { "value": "weeding", "label": "Weeding" },
+    { "value": "mulching", "label": "Mulching" },
+    { "value": "support", "label": "Support" },
+    { "value": "thinning", "label": "Thinning" }
+  ],
+  "cropCategories": ["Vegetables", "Herbs", "Flowers", "Fruit"],
+  "sun": [
+    { "value": "", "label": "Not set" },
+    { "value": "Full", "label": "Full" },
+    { "value": "Full/Part", "label": "Full or part" }
+  ],
+  "water": [
+    { "value": "", "label": "Not set" },
+    { "value": "Low", "label": "Low" },
+    { "value": "Medium", "label": "Medium" },
+    { "value": "High", "label": "High" }
+  ]
+}

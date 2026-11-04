@@ -1,30 +1,40 @@
 <script lang="ts">
-  import { cropLabel, formatDay, markKind, markTitle, type CalendarEntry } from '$lib/domain/calendar.js';
+  import { cropLabel, entryWhere, formatDay, markKind, markTitle, type CalendarEntry } from '$lib/domain/calendar.js';
   import { actionLabel } from '$lib/domain/entryForm.js';
 
   let {
+    scope = '',
     date,
     crop,
+    year,
     entries,
     hiddenByFilter,
     onOpen,
   }: {
+    scope?: '' | 'cell' | 'day' | 'crop';
     date: string;
     crop: string;
+    year: number;
     entries: CalendarEntry[];
     hiddenByFilter: boolean;
     onOpen: (entry: CalendarEntry) => void;
   } = $props();
 
-  const heading = $derived(date ? `${formatDay(date)} · ${cropLabel(crop)}` : '');
-  const bed = $derived(entries.find((entry) => entry.bed)?.bed ?? '');
+  const heading = $derived(
+    scope === 'day' ? formatDay(date)
+    : scope === 'crop' ? `${cropLabel(crop)} · ${year}`
+    : scope === 'cell' ? `${formatDay(date)} · ${cropLabel(crop)}`
+    : '',
+  );
+  const kicker = $derived(scope === 'crop' ? 'Selected crop' : 'Selected day');
+  const bed = $derived(scope === 'cell' ? entries.find((entry) => entry.bed)?.bed ?? '' : '');
 </script>
 
-<section class="panel" aria-label={heading || 'Selected day'}>
-  {#if date}
+<section class="panel" aria-label={heading || 'Calendar entries'}>
+  {#if scope}
     <div class="panel-head">
       <div>
-        <p class="kicker">Selected day</p>
+        <p class="kicker">{kicker}</p>
         <h2>{heading}</h2>
         {#if bed}
           <p class="bed">{bed}</p>
@@ -37,6 +47,9 @@
         <button type="button" class="entry" onclick={() => onOpen(entry)}>
           <span class="pip {shown}"></span>
           <div class="copy">
+            {#if scope === 'day' || scope === 'crop'}
+              <p class="where">{entryWhere(entry, scope)}</p>
+            {/if}
             <header>
               <span class="kind">{markTitle(shown)}</span>
               <em class="status {entry.status}">{entry.status === 'done' ? 'Done' : 'Planned'}</em>
@@ -66,7 +79,7 @@
       <p class="empty">{hiddenByFilter ? 'Nothing of this kind.' : 'Nothing recorded.'}</p>
     {/if}
   {:else}
-    <p class="empty">Select a day.</p>
+    <p class="empty">Select a day or a crop.</p>
   {/if}
 </section>
 
@@ -165,6 +178,13 @@
   .status.planned { color: #6b7280; }
 
   p { margin: 4px 0 0; }
+
+  .where {
+    margin: 0;
+    color: #1f2937;
+    font-weight: 650;
+  }
+
   .note { color: #3d4a38; }
 
   .photo {

@@ -617,10 +617,10 @@
           onchange={(event) => choosePhoto(event.currentTarget.files?.[0] ?? null)}
         />
         {#if previewUrl}
-          <img src={previewUrl} alt="" />
+          <img class="photo" src={previewUrl} alt="" />
           <Button type="button" variant="outline" onclick={dropPhoto}>Remove photo</Button>
         {:else if keptPhotoUrl && !photoCleared}
-          <img src={keptPhotoUrl} alt="" />
+          <img class="photo" src={keptPhotoUrl} alt="" />
           <Button type="button" variant="outline" onclick={dropPhoto}>Remove photo</Button>
         {/if}
         {#if photoError}<Field.Error>{photoError}</Field.Error>{/if}
@@ -645,10 +645,15 @@
     font: inherit;
   }
 
-  img {
+  .photo {
     display: block;
+    width: auto;
+    height: auto;
+    max-width: 100%;
     max-height: 160px;
     margin-top: 8px;
+    align-self: flex-start;
+    object-fit: contain;
     border-radius: 8px;
   }
 

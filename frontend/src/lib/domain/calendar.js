@@ -75,7 +75,7 @@ const WEDGES = [
  * @property {string} crop Empty when the entry is for the whole garden.
  * @property {'sowing' | 'care' | 'pest' | 'harvest' | 'diary'} kind
  * @property {'planned' | 'done'} status
- * @property {string} [action] Care action, watering or fertilising.
+ * @property {string} [action] Care action from the shared catalogue. A retired value is kept.
  * @property {number | null} [amount]
  * @property {string} [unit]
  * @property {number | null} [quantity]
@@ -451,6 +451,43 @@ export function spanMonths(start, end) {
 }
 
 /**
+ * One open panel on the calendar.
+ * A cell is one crop on one day. A day is every crop on that date.
+ * A crop is that crop across the year on screen.
+ * @typedef {Object} CellSelection
+ * @property {'cell'} scope
+ * @property {string} date
+ * @property {string} crop
+ */
+
+/**
+ * @typedef {Object} DaySelection
+ * @property {'day'} scope
+ * @property {string} date
+ */
+
+/**
+ * @typedef {Object} CropSelection
+ * @property {'crop'} scope
+ * @property {string} crop
+ */
+
+/** @typedef {CellSelection | DaySelection | CropSelection} CalendarSelection */
+
+/**
+ * @param {CalendarEntry} entry
+ * @param {string} kindFilter
+ */
+function matchesKind(entry, kindFilter) {
+  return !kindFilter || markKind(entry) === kindFilter;
+}
+
+/** @param {CalendarEntry} entry */
+function kindRank(entry) {
+  return CALENDAR_KINDS.indexOf(markKind(entry));
+}
+
+/**
  * @param {CalendarEntry[]} entries
  * @param {string} date
  * @param {string} crop
@@ -459,9 +496,74 @@ export function spanMonths(start, end) {
  */
 export function dayEntries(entries, date, crop, kindFilter) {
   return entries
-    .filter((entry) => entry.date === date && entry.crop === crop)
-    .filter((entry) => !kindFilter || markKind(entry) === kindFilter)
-    .sort((left, right) => CALENDAR_KINDS.indexOf(markKind(left)) - CALENDAR_KINDS.indexOf(markKind(right)));
+    .filter((entry) => entry.date === date && entry.crop === crop && matchesKind(entry, kindFilter))
+    .sort((left, right) => kindRank(left) - kindRank(right));
+}
+
+/**
+ * Every crop on one date. The garden lane leads, then crops by name.
+ * @param {CalendarEntry[]} entries
+ * @param {string} date
+ * @param {string} kindFilter
+ * @returns {CalendarEntry[]}
+ */
+export function dateEntries(entries, date, kindFilter) {
+  return entries
+    .filter((entry) => entry.date === date && matchesKind(entry, kindFilter))
+    .sort((left, right) => {
+      if (!left.crop && right.crop) return -1;
+      if (left.crop && !right.crop) return 1;
+      const crop = left.crop.localeCompare(right.crop);
+      return crop || kindRank(left) - kindRank(right);
+    });
+}
+
+/**
+ * One crop across the displayed year, earliest day first.
+ * @param {CalendarEntry[]} entries
+ * @param {number} year
+ * @param {string} crop
+ * @param {string} kindFilter
+ * @returns {CalendarEntry[]}
+ */
+export function cropYearEntries(entries, year, crop, kindFilter) {
+  const prefix = `${year}-`;
+  return entries
+    .filter((entry) => entry.crop === crop && entry.date.startsWith(prefix) && matchesKind(entry, kindFilter))
+    .sort((left, right) => {
+      if (left.date !== right.date) return left.date < right.date ? -1 : 1;
+      return kindRank(left) - kindRank(right);
+    });
+}
+
+/**
+ * @param {CalendarEntry[]} entries
+ * @param {CalendarSelection | null} selection
+ * @param {number} year
+ * @param {string} kindFilter
+ * @returns {CalendarEntry[]}
+ */
+export function selectionEntries(entries, selection, year, kindFilter) {
+  if (!selection) return [];
+  if (selection.scope === 'day') return dateEntries(entries, selection.date, kindFilter);
+  if (selection.scope === 'crop') return cropYearEntries(entries, year, selection.crop, kindFilter);
+  return dayEntries(entries, selection.date, selection.crop, kindFilter);
+}
+
+/**
+ * The line that says which crop or day a row belongs to.
+ * A single cell already says both in the heading.
+ * @param {CalendarEntry} entry
+ * @param {'cell' | 'day' | 'crop' | ''} scope
+ */
+export function entryWhere(entry, scope) {
+  if (scope === 'day') {
+    return entry.bed ? `${cropLabel(entry.crop)} · ${entry.bed}` : cropLabel(entry.crop);
+  }
+  if (scope === 'crop') {
+    return entry.bed ? `${formatDay(entry.date)} · ${entry.bed}` : formatDay(entry.date);
+  }
+  return '';
 }
 
 /**

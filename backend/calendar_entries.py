@@ -15,10 +15,24 @@ from datetime import datetime
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import Response
 
+from catalogue import CARE_ACTIONS
+
 PHOTO_URL = re.compile(r"/api/photos/([A-Za-z0-9][A-Za-z0-9_-]{0,80})")
 KINDS = ("sowing", "care", "pest", "harvest", "diary")
 STATUSES = ("planned", "done")
-ACTIONS = ("watering", "fertilising")
+
+
+def care_table_sql(name: str = "care", if_not_exists: bool = False) -> str:
+    clause = "IF NOT EXISTS " if if_not_exists else ""
+    return f"""
+        CREATE TABLE {clause}{name} (
+            entry_id  INTEGER PRIMARY KEY REFERENCES calendar_entry(id),
+            action    TEXT NOT NULL,
+            product   TEXT,
+            amount    REAL,
+            unit      TEXT
+        )
+    """
 SHARED_FIELDS = {
     "id",
     "kind",
@@ -92,17 +106,7 @@ def create_calendar_tables(connection) -> None:
         )
         """
     )
-    connection.execute(
-        """
-        CREATE TABLE IF NOT EXISTS care (
-            entry_id  INTEGER PRIMARY KEY REFERENCES calendar_entry(id),
-            action    TEXT NOT NULL CHECK (action IN ('watering', 'fertilising')),
-            product   TEXT,
-            amount    REAL,
-            unit      TEXT
-        )
-        """
-    )
+    connection.execute(care_table_sql(if_not_exists=True))
     connection.execute(
         """
         CREATE TABLE IF NOT EXISTS pest (
@@ -114,6 +118,25 @@ def create_calendar_tables(connection) -> None:
         )
         """
     )
+
+
+def drop_care_action_check(connection) -> None:
+    """Store any care action. The API, not SQLite, decides which values are current."""
+    row = connection.execute(
+        "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'care'"
+    ).fetchone()
+    if row is None or "CHECK" not in (row[0] or "").upper():
+        return
+    connection.execute("DROP TABLE IF EXISTS care_next")
+    connection.execute(care_table_sql("care_next"))
+    connection.execute(
+        """
+        INSERT INTO care_next (entry_id, action, product, amount, unit)
+        SELECT entry_id, action, product, amount, unit FROM care
+        """
+    )
+    connection.execute("DROP TABLE care")
+    connection.execute("ALTER TABLE care_next RENAME TO care")
 
 
 def require_entry_id(entry_id: str) -> int:
@@ -262,7 +285,7 @@ def parse_entry(body: dict, entry_id: int | None) -> dict:
     }
     if kind == "care":
         action = body.get("action")
-        if action not in ACTIONS:
+        if action not in CARE_ACTIONS:
             raise HTTPException(status_code=400, detail="Invalid action")
         entry["care"] = {
             "action": action,
@@ -643,7 +666,7 @@ def get_calendar(
         "bed_id": query_bed_id(bed_id),
         "crop": crop,
         "status": require_choice(status, STATUSES, "status"),
-        "action": require_choice(action, ACTIONS, "action"),
+        "action": require_choice(action, CARE_ACTIONS, "action"),
     }
     return list_entries(filters)
 
@@ -672,7 +695,7 @@ def get_care_total(
     date_from: str | None = Query(default=None, alias="from"),
     date_to: str | None = Query(default=None, alias="to"),
 ) -> dict:
-    if action not in ACTIONS:
+    if action not in CARE_ACTIONS:
         raise HTTPException(status_code=400, detail="Invalid action")
     if not unit:
         raise HTTPException(status_code=400, detail="unit is required")

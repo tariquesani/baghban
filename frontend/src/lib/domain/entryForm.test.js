@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   calendarRecord,
+  actionLabel,
   entryDetail,
   entryDraft,
   entryRequest,
@@ -63,6 +64,28 @@ test('care needs an action, and blank measures stay empty', () => {
     entryRequest('care', { ...shared, action: 'fertilising', amount: 'lots' }).field,
     'amount',
   );
+  assert.equal(entryRequest('care', { ...shared, action: 'spraying' }).field, 'action');
+  const retired = calendarRecord(
+    {
+      id: 9,
+      kind: 'care',
+      date: '2026-10-23',
+      crop: 'Tomatoes',
+      status: 'done',
+      note: '',
+      action: 'rest',
+    },
+    '',
+  );
+  assert.equal(retired.action, 'rest');
+  assert.equal(actionLabel('rest'), 'rest');
+  assert.equal(actionLabel('pruning'), 'Pruning');
+  const pruned = entryRequest('care', { ...shared, action: 'pruning' });
+  assert.equal(pruned.ok, true);
+  if (pruned.ok) {
+    assert.equal(pruned.body.action, 'pruning');
+    assert.equal(pruned.body.amount, null);
+  }
 });
 
 test('pest and harvest measures are optional', () => {

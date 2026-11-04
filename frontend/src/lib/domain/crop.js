@@ -1,17 +1,4 @@
-export const CROP_CATEGORIES = ['Vegetables', 'Herbs', 'Flowers', 'Fruit'];
-
-export const SUNS = [
-  { value: '', label: 'Not set' },
-  { value: 'Full', label: 'Full' },
-  { value: 'Full/Part', label: 'Full or part' },
-];
-
-export const WATERS = [
-  { value: '', label: 'Not set' },
-  { value: 'Low', label: 'Low' },
-  { value: 'Medium', label: 'Medium' },
-  { value: 'High', label: 'High' },
-];
+export { CROP_CATEGORIES, SUNS, WATERS } from './catalogue.js';
 
 /**
  * @param {string} text
