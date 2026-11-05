@@ -192,10 +192,10 @@ def assign_crop(bed_id: int, name: str) -> dict:
         return _assignment(active, crop)
 
 
-def place_crop(connection, bed_id: int, name: str, when: str) -> None:
+def place_crop_id(connection, bed_id: int, crop_id: int, when: str) -> None:
     """Give a bed an active crop on `when`. An active row for that pair stays."""
-    crop = match_crop(_crop_rows(connection), name)
-    if crop is None:
+    found = connection.execute("SELECT id FROM crop WHERE id = ?", (crop_id,)).fetchone()
+    if found is None:
         raise HTTPException(status_code=400, detail="Unknown crop")
     active = connection.execute(
         """
@@ -203,7 +203,7 @@ def place_crop(connection, bed_id: int, name: str, when: str) -> None:
         FROM beds_crops
         WHERE bed_id = ? AND crop_id = ? AND archived_on IS NULL
         """,
-        (bed_id, int(crop["id"])),
+        (bed_id, crop_id),
     ).fetchone()
     if active is not None:
         return
@@ -213,10 +213,18 @@ def place_crop(connection, bed_id: int, name: str, when: str) -> None:
             INSERT INTO beds_crops (bed_id, crop_id, created_on)
             VALUES (?, ?, ?)
             """,
-            (bed_id, int(crop["id"]), when),
+            (bed_id, crop_id, when),
         )
     except sqlite3.IntegrityError:
         return
+
+
+def place_crop(connection, bed_id: int, name: str, when: str) -> None:
+    """Give a bed an active crop on `when`. An active row for that pair stays."""
+    crop = match_crop(_crop_rows(connection), name)
+    if crop is None:
+        raise HTTPException(status_code=400, detail="Unknown crop")
+    place_crop_id(connection, bed_id, int(crop["id"]), when)
 
 
 def archive_crop(bed_id: int, name: str) -> None:

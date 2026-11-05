@@ -26,12 +26,12 @@ def herbs():
     }
 
 
-def diary(bed_id):
+def diary(bed_id, crop_id):
     return {
         "kind": "diary",
         "date": "2026-10-22",
         "bedId": bed_id,
-        "crop": "Mint",
+        "cropId": crop_id,
         "status": "done",
         "note": "Filled in after rain.",
         "photoUrl": "",
@@ -233,10 +233,14 @@ def test_rows_save_one_at_a_time(tmp_path, monkeypatch):
             json={"name": "Fence"},
         ).status_code == 404
 
-        saved = client.post("/api/calendar", json=diary(bed_id))
+        mint = next(
+            crop["id"] for crop in client.get("/api/crops").json() if crop["name"] == "Mint"
+        )
+        saved = client.post("/api/calendar", json=diary(bed_id, mint))
         assert saved.status_code == 200
         assert isinstance(saved.json()["id"], int)
         assert saved.json()["bedId"] == bed_id
+        assert saved.json()["crop"] == "Mint"
         assert "bedName" not in client.get(f"/api/calendar/{saved.json()['id']}").json()
         assert client.get("/api/beds").json()[0]["name"] == "Mint"
 

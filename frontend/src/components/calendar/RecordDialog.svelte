@@ -342,20 +342,24 @@
   async function save(event: SubmitEvent) {
     event.preventDefault();
     if (busy) return;
-    const request = entryRequest(recording, {
-      crop,
-      date,
-      status,
-      bedId,
-      note,
-      action,
-      problem,
-      product,
-      amount,
-      unit,
-      quantity,
-      weightGrams,
-    });
+    const request = entryRequest(
+      recording,
+      {
+        crop,
+        date,
+        status,
+        bedId,
+        note,
+        action,
+        problem,
+        product,
+        amount,
+        unit,
+        quantity,
+        weightGrams,
+      },
+      offeredCrops,
+    );
     if (!request.ok) {
       fieldError = request.field;
       formError = request.message;

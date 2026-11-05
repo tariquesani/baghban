@@ -235,24 +235,26 @@ export function photoProblem(file) {
 /**
  * @param {{
  *   crop: string,
+ *   cropId?: number | null,
  *   date: string,
  *   status: 'planned' | 'done',
  *   bedId: string,
  *   note: string,
  * }} draft
+ * @param {{ id: number, name: string }[]} [crops]
  * @returns {{ ok: true, body: {
  *   kind: 'sowing',
  *   date: string,
  *   bedId: number | null,
- *   crop: string,
+ *   cropId: number,
  *   status: 'planned' | 'done',
  *   note: string,
  *   photoUrl: string,
  * }} | { ok: false, field: 'crop' | 'date' | 'bed', message: string }}
  */
-export function sowingRequest(draft) {
+export function sowingRequest(draft, crops = []) {
   const crop = draft.crop.trim();
-  if (!crop) return { ok: false, field: 'crop', message: 'Choose a crop.' };
+  if (!crop && draft.cropId == null) return { ok: false, field: 'crop', message: 'Choose a crop.' };
   if (!/^\d{4}-\d{2}-\d{2}$/.test(draft.date)) {
     return { ok: false, field: 'date', message: 'Choose a date.' };
   }
@@ -260,13 +262,22 @@ export function sowingRequest(draft) {
   if (bedId !== null && !Number.isInteger(bedId)) {
     return { ok: false, field: 'bed', message: 'Choose a bed.' };
   }
+  let cropId = typeof draft.cropId === 'number' ? draft.cropId : null;
+  if (cropId == null) {
+    const wanted = crop.toLowerCase();
+    const found = crops.find((item) => item.name.toLowerCase() === wanted);
+    if (found && typeof found.id === 'number' && found.id > 0) cropId = found.id;
+  }
+  if (cropId == null || !Number.isInteger(cropId) || cropId < 1) {
+    return { ok: false, field: 'crop', message: 'Choose a crop.' };
+  }
   return {
     ok: true,
     body: {
       kind: 'sowing',
       date: draft.date,
       bedId,
-      crop,
+      cropId,
       status: draft.status,
       note: draft.note.trim(),
       photoUrl: '',
@@ -275,7 +286,7 @@ export function sowingRequest(draft) {
 }
 
 /**
- * @param {{ id: number, date: string, crop: string, status: 'planned' | 'done', note?: string, photoUrl?: string, bedId?: number | null }} saved
+ * @param {{ id: number, date: string, crop: string, cropId?: number | null, status: 'planned' | 'done', note?: string, photoUrl?: string, bedId?: number | null }} saved
  * @param {string} bedName
  * @returns {import('./calendar.js').CalendarEntry}
  */
@@ -284,6 +295,7 @@ export function calendarSowing(saved, bedName) {
     id: String(saved.id),
     date: saved.date,
     crop: saved.crop,
+    cropId: typeof saved.cropId === 'number' ? saved.cropId : null,
     kind: 'sowing',
     status: saved.status,
     note: saved.note || '',

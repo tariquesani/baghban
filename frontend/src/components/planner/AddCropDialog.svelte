@@ -125,13 +125,17 @@
         close();
         return;
       }
-      const request = sowingRequest({
-        crop: cropName,
-        date: localDate(),
-        status: 'done',
-        bedId: String(bedId),
-        note: '',
-      });
+      const request = sowingRequest(
+        {
+          crop: cropName,
+          cropId: chosen.id,
+          date: localDate(),
+          status: 'done',
+          bedId: String(bedId),
+          note: '',
+        },
+        [chosen],
+      );
       if (!request.ok) {
         fieldError = request.field;
         formError = request.message;

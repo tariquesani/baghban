@@ -72,23 +72,27 @@ test('an empty selection starts on today with no crop', () => {
 });
 
 test('a sowing request needs a crop and a date', () => {
+  const catalogue = sowingCropChoices(crops);
   assert.deepEqual(
-    sowingRequest({ crop: ' ', date: '2026-10-23', status: 'done', bedId: 'none', note: '  ' }),
+    sowingRequest({ crop: ' ', date: '2026-10-23', status: 'done', bedId: 'none', note: '  ' }, catalogue),
     { ok: false, field: 'crop', message: 'Choose a crop.' },
   );
   assert.equal(
-    sowingRequest({ crop: 'Basil', date: '', status: 'done', bedId: 'none', note: '' }).ok,
+    sowingRequest({ crop: 'Basil', date: '', status: 'done', bedId: 'none', note: '' }, catalogue).ok,
     false,
   );
   assert.deepEqual(
-    sowingRequest({ crop: 'Basil', date: '2026-11-02', status: 'planned', bedId: '4', note: ' Tray ' }),
+    sowingRequest(
+      { crop: 'Basil', date: '2026-11-02', status: 'planned', bedId: '4', note: ' Tray ' },
+      catalogue,
+    ),
     {
       ok: true,
       body: {
         kind: 'sowing',
         date: '2026-11-02',
         bedId: 4,
-        crop: 'Basil',
+        cropId: 1,
         status: 'planned',
         note: 'Tray',
         photoUrl: '',
@@ -171,6 +175,7 @@ test('a saved sowing becomes a calendar row', () => {
         id: 12,
         date: '2026-10-23',
         crop: 'Tomatoes',
+        cropId: 2,
         status: 'done',
         note: 'Tray',
         photoUrl: '/api/photos/sowing-1',
@@ -182,6 +187,7 @@ test('a saved sowing becomes a calendar row', () => {
       id: '12',
       date: '2026-10-23',
       crop: 'Tomatoes',
+      cropId: 2,
       kind: 'sowing',
       status: 'done',
       note: 'Tray',

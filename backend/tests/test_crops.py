@@ -290,7 +290,7 @@ def test_old_crop_checks_follow_the_catalogue(tmp_path, monkeypatch):
     assert "CHECK (sun" not in sql
     assert "CHECK (water" not in sql
     assert "CHECK (trellis" in sql
-    assert connection.execute("PRAGMA user_version").fetchone()[0] == 2
+    assert connection.execute("PRAGMA user_version").fetchone()[0] == 3
     assert connection.execute(
         "SELECT icon FROM crop WHERE name = 'Custard apple'"
     ).fetchone()[0] == ""

@@ -106,6 +106,7 @@ function counted(text, field, message, whole) {
  * @param {string} kind
  * @param {{
  *   crop: string,
+ *   cropId?: number | null,
  *   date: string,
  *   status: 'planned' | 'done',
  *   bedId: string,
@@ -118,16 +119,21 @@ function counted(text, field, message, whole) {
  *   quantity?: string,
  *   weightGrams?: string,
  * }} draft
+ * @param {{ id: number, name: string }[]} [crops]
  */
-export function entryRequest(kind, draft) {
+export function entryRequest(kind, draft, crops = []) {
   const status = kind === 'diary' ? 'done' : draft.status;
-  const shared = sowingRequest({
-    crop: draft.crop,
-    date: draft.date,
-    status,
-    bedId: draft.bedId,
-    note: draft.note,
-  });
+  const shared = sowingRequest(
+    {
+      crop: draft.crop,
+      cropId: draft.cropId,
+      date: draft.date,
+      status,
+      bedId: draft.bedId,
+      note: draft.note,
+    },
+    crops,
+  );
   if (!shared.ok) return shared;
   if (kind === 'sowing' || kind === 'diary') {
     return { ok: true, body: { ...shared.body, kind, status } };
@@ -223,6 +229,7 @@ export function calendarRecord(saved, bedName) {
     id: String(saved.id),
     date: typeof saved.date === 'string' ? saved.date : '',
     crop: typeof saved.crop === 'string' ? saved.crop : '',
+    cropId: typeof saved.cropId === 'number' ? saved.cropId : null,
     kind,
     status,
     note: typeof saved.note === 'string' ? saved.note : '',

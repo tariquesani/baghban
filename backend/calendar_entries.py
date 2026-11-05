@@ -4,7 +4,8 @@ POST /api/calendar inserts a row and returns its integer id.
 PUT /api/calendar/{id} replaces that entry. Care, pest, and harvest rows are
 written with the calendar row, and replaced when a new body drops them.
 Photos stay on /api/photos/{id}. An entry stores a bed id, or none for the
-whole garden. The bed's name lives on the bed table.
+whole garden. The bed's name lives on the bed table. A crop is stored by id;
+reads join crop.name so renames stay on the calendar.
 """
 
 import json
@@ -38,7 +39,7 @@ SHARED_FIELDS = {
     "kind",
     "date",
     "bedId",
-    "crop",
+    "cropId",
     "status",
     "note",
     "photoUrl",
@@ -57,7 +58,8 @@ SELECT
     calendar_entry.kind,
     calendar_entry.date,
     calendar_entry.bed_id,
-    calendar_entry.crop,
+    calendar_entry.crop_id,
+    crop.name AS crop,
     calendar_entry.status,
     calendar_entry.note,
     calendar_entry.photo_url,
@@ -73,6 +75,7 @@ SELECT
     pest.amount AS pest_amount,
     pest.unit AS pest_unit
 FROM calendar_entry
+LEFT JOIN crop ON crop.id = calendar_entry.crop_id
 LEFT JOIN harvest ON harvest.entry_id = calendar_entry.id
 LEFT JOIN care ON care.entry_id = calendar_entry.id
 LEFT JOIN pest ON pest.entry_id = calendar_entry.id
@@ -81,21 +84,24 @@ LEFT JOIN pest ON pest.entry_id = calendar_entry.id
 router = APIRouter()
 
 
-def create_calendar_tables(connection) -> None:
-    connection.execute(
-        """
-        CREATE TABLE IF NOT EXISTS calendar_entry (
+def entry_table_sql(name: str = "calendar_entry", if_not_exists: bool = False) -> str:
+    clause = "IF NOT EXISTS " if if_not_exists else ""
+    return f"""
+        CREATE TABLE {clause}{name} (
             id        INTEGER PRIMARY KEY AUTOINCREMENT,
             kind      TEXT NOT NULL CHECK (kind IN ('sowing', 'care', 'pest', 'harvest', 'diary')),
             date      TEXT NOT NULL,
             bed_id    INTEGER REFERENCES bed(id),
-            crop      TEXT,
+            crop_id   INTEGER REFERENCES crop(id),
             status    TEXT NOT NULL CHECK (status IN ('planned', 'done')),
             note      TEXT NOT NULL DEFAULT '',
             photo_url TEXT
         )
-        """
-    )
+    """
+
+
+def create_calendar_tables(connection) -> None:
+    connection.execute(entry_table_sql(if_not_exists=True))
     connection.execute(
         """
         CREATE TABLE IF NOT EXISTS harvest (
@@ -137,6 +143,118 @@ def drop_care_action_check(connection) -> None:
     )
     connection.execute("DROP TABLE care")
     connection.execute("ALTER TABLE care_next RENAME TO care")
+
+
+def _crop_label_ids(connection) -> dict[str, int]:
+    """Map catalogue name, emoji label, and alias (casefolded) to crop id."""
+    from beds_crops import canvas_name
+
+    labels: dict[str, int] = {}
+    crops = connection.execute("SELECT id, name, emoji FROM crop").fetchall()
+    for crop in crops:
+        crop_id = int(crop["id"])
+        labels[crop["name"].casefold()] = crop_id
+        labeled = canvas_name(crop["name"], crop["emoji"] or "").casefold()
+        labels[labeled] = crop_id
+    aliases = connection.execute(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'crop_alias'"
+    ).fetchone()
+    if aliases is None:
+        return labels
+    for row in connection.execute("SELECT crop_id, alias FROM crop_alias"):
+        labels[row["alias"].casefold()] = int(row["crop_id"])
+    return labels
+
+
+def calendar_crop_id(connection) -> None:
+    """Replace calendar_entry.crop text with crop_id. Empty text becomes NULL."""
+    import sqlite3
+
+    row = connection.execute(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'calendar_entry'"
+    ).fetchone()
+    if row is None:
+        return
+    columns = {info[1] for info in connection.execute("PRAGMA table_info(calendar_entry)")}
+    if "crop_id" in columns and "crop" not in columns:
+        return
+    if "crop" not in columns:
+        return
+    crop_table = connection.execute(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'crop'"
+    ).fetchone()
+    if crop_table is None:
+        raise RuntimeError("Calendar crop_id migration needs the crop table")
+
+    connection.row_factory = sqlite3.Row
+    labels = _crop_label_ids(connection)
+    unmatched: set[str] = set()
+    rows = connection.execute(
+        """
+        SELECT id, kind, date, bed_id, crop, status, note, photo_url
+        FROM calendar_entry
+        """
+    ).fetchall()
+    prepared = []
+    for entry in rows:
+        raw = entry["crop"]
+        if raw is None or (isinstance(raw, str) and not raw.strip()):
+            crop_id = None
+        else:
+            text = raw.strip() if isinstance(raw, str) else str(raw)
+            crop_id = labels.get(text.casefold())
+            if crop_id is None:
+                unmatched.add(text)
+        prepared.append(
+            (
+                entry["id"],
+                entry["kind"],
+                entry["date"],
+                entry["bed_id"],
+                crop_id,
+                entry["status"],
+                entry["note"] or "",
+                entry["photo_url"],
+            )
+        )
+    if unmatched:
+        names = ", ".join(sorted(unmatched))
+        raise RuntimeError(f"Calendar crop names not in the catalogue: {names}")
+
+    connection.execute("DROP TABLE IF EXISTS calendar_entry_next")
+    connection.execute(entry_table_sql("calendar_entry_next"))
+    connection.executemany(
+        """
+        INSERT INTO calendar_entry_next (
+            id, kind, date, bed_id, crop_id, status, note, photo_url
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        prepared,
+    )
+    connection.execute("DROP TABLE calendar_entry")
+    connection.execute("ALTER TABLE calendar_entry_next RENAME TO calendar_entry")
+    sequence = connection.execute(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'sqlite_sequence'"
+    ).fetchone()
+    max_id = connection.execute("SELECT MAX(id) FROM calendar_entry").fetchone()[0]
+    if sequence is not None and max_id is not None:
+        connection.execute("DELETE FROM sqlite_sequence WHERE name = 'calendar_entry_next'")
+        found = connection.execute(
+            "SELECT 1 FROM sqlite_sequence WHERE name = 'calendar_entry'"
+        ).fetchone()
+        if found is None:
+            connection.execute(
+                "INSERT INTO sqlite_sequence (name, seq) VALUES ('calendar_entry', ?)",
+                (max_id,),
+            )
+        else:
+            connection.execute(
+                "UPDATE sqlite_sequence SET seq = ? WHERE name = 'calendar_entry'",
+                (max_id,),
+            )
+    broken = connection.execute("PRAGMA foreign_key_check").fetchone()
+    if broken is not None:
+        raise RuntimeError("Calendar crop_id migration broke a foreign key")
 
 
 def require_entry_id(entry_id: str) -> int:
@@ -197,6 +315,15 @@ def bed_id_field(body: dict) -> int | None:
     value = body["bedId"]
     if isinstance(value, bool) or not isinstance(value, int) or value < 1:
         raise HTTPException(status_code=400, detail="bedId must be an integer")
+    return value
+
+
+def crop_id_field(body: dict) -> int | None:
+    if "cropId" not in body or body["cropId"] is None or body["cropId"] == "":
+        return None
+    value = body["cropId"]
+    if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+        raise HTTPException(status_code=400, detail="cropId must be an integer")
     return value
 
 
@@ -278,7 +405,7 @@ def parse_entry(body: dict, entry_id: int | None) -> dict:
         "kind": kind,
         "date": require_date(body.get("date"), "date"),
         "bed_id": bed_id_field(body),
-        "crop": text_field(body, "crop") or None,
+        "crop_id": crop_id_field(body),
         "status": status,
         "note": text_field(body, "note"),
         "photo_url": photo_url_field(body) or None,
@@ -315,11 +442,17 @@ def entry_json(row) -> dict:
         bed_id = None
     else:
         bed_id = int(bed_id)
+    crop_id = row["crop_id"]
+    if crop_id is None or crop_id == "":
+        crop_id = None
+    else:
+        crop_id = int(crop_id)
     body = {
         "id": int(row["id"]),
         "kind": row["kind"],
         "date": row["date"],
         "bedId": bed_id,
+        "cropId": crop_id,
         "crop": row["crop"] or "",
         "status": row["status"],
         "note": row["note"] or "",
@@ -361,6 +494,14 @@ def require_bed(connection, bed_id: int | None) -> None:
     found = connection.execute("SELECT 1 FROM bed WHERE id = ?", (bed_id,)).fetchone()
     if found is None:
         raise HTTPException(status_code=400, detail="bedId does not exist")
+
+
+def require_crop(connection, crop_id: int | None) -> None:
+    if crop_id is None:
+        return
+    found = connection.execute("SELECT 1 FROM crop WHERE id = ?", (crop_id,)).fetchone()
+    if found is None:
+        raise HTTPException(status_code=400, detail="cropId does not exist")
 
 
 def write_children(connection, entry_id: int, entry: dict) -> None:
@@ -434,29 +575,30 @@ def occupy_from_sowing(connection, entry: dict) -> None:
     """A done sowing in a bed puts that crop there when the bed does not hold it."""
     if entry["kind"] != "sowing" or entry["status"] != "done":
         return
-    if entry["bed_id"] is None or not entry["crop"]:
+    if entry["bed_id"] is None or entry["crop_id"] is None:
         return
-    from beds_crops import place_crop
+    from beds_crops import place_crop_id
 
-    place_crop(connection, entry["bed_id"], entry["crop"], entry["date"])
+    place_crop_id(connection, entry["bed_id"], entry["crop_id"], entry["date"])
 
 
 def create_entry(body: dict) -> dict:
     entry = parse_entry(body, None)
     with closing(connect()) as connection:
         require_bed(connection, entry["bed_id"])
+        require_crop(connection, entry["crop_id"])
         try:
             cursor = connection.execute(
                 """
                 INSERT INTO calendar_entry (
-                    kind, date, bed_id, crop, status, note, photo_url
+                    kind, date, bed_id, crop_id, status, note, photo_url
                 ) VALUES (?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     entry["kind"],
                     entry["date"],
                     entry["bed_id"],
-                    entry["crop"],
+                    entry["crop_id"],
                     entry["status"],
                     entry["note"],
                     entry["photo_url"],
@@ -487,6 +629,7 @@ def replace_entry(entry_id: int, body: dict) -> dict:
         if existing["kind"] != entry["kind"]:
             raise HTTPException(status_code=400, detail="kind cannot change")
         require_bed(connection, entry["bed_id"])
+        require_crop(connection, entry["crop_id"])
         previous_photo = existing["photo_url"]
         try:
             connection.execute(
@@ -494,7 +637,7 @@ def replace_entry(entry_id: int, body: dict) -> dict:
                 UPDATE calendar_entry SET
                     date = ?,
                     bed_id = ?,
-                    crop = ?,
+                    crop_id = ?,
                     status = ?,
                     note = ?,
                     photo_url = ?
@@ -503,7 +646,7 @@ def replace_entry(entry_id: int, body: dict) -> dict:
                 (
                     entry["date"],
                     entry["bed_id"],
-                    entry["crop"],
+                    entry["crop_id"],
                     entry["status"],
                     entry["note"],
                     entry["photo_url"],
@@ -570,9 +713,9 @@ def list_entries(filters: dict) -> list:
     bed_clause(filters["bed_id"], clauses, params)
     if filters["crop"] is not None:
         if filters["crop"] == "":
-            clauses.append("(calendar_entry.crop IS NULL OR calendar_entry.crop = '')")
+            clauses.append("calendar_entry.crop_id IS NULL")
         else:
-            clauses.append("calendar_entry.crop = ?")
+            clauses.append("crop.name = ?")
             params.append(filters["crop"])
     if filters["status"] is not None:
         clauses.append("calendar_entry.status = ?")
@@ -593,7 +736,7 @@ def harvest_total(crop: str | None, bed_id, date_from: str | None, date_to: str 
     clauses = ["calendar_entry.kind = 'harvest'", "calendar_entry.status = 'done'"]
     params = []
     if crop is not None:
-        clauses.append("calendar_entry.crop = ?")
+        clauses.append("crop.name = ?")
         params.append(crop)
     bed_clause(bed_id, clauses, params)
     if date_from is not None:
@@ -603,9 +746,10 @@ def harvest_total(crop: str | None, bed_id, date_from: str | None, date_to: str 
         clauses.append("calendar_entry.date <= ?")
         params.append(date_to)
     sql = f"""
-        SELECT calendar_entry.crop AS crop, COALESCE(SUM(harvest.weight_grams), 0) AS total
+        SELECT crop.name AS crop, COALESCE(SUM(harvest.weight_grams), 0) AS total
         FROM calendar_entry
         JOIN harvest ON harvest.entry_id = calendar_entry.id
+        LEFT JOIN crop ON crop.id = calendar_entry.crop_id
         WHERE {' AND '.join(clauses)}
     """
     with closing(connect()) as connection:
@@ -613,7 +757,10 @@ def harvest_total(crop: str | None, bed_id, date_from: str | None, date_to: str 
             row = connection.execute(sql, params).fetchone()
             total = 0 if row is None or row["total"] is None else row["total"]
             return {"crop": crop, "weightGrams": json_number(total) or 0}
-        rows = connection.execute(sql + " GROUP BY calendar_entry.crop ORDER BY calendar_entry.crop", params).fetchall()
+        rows = connection.execute(
+            sql + " GROUP BY calendar_entry.crop_id, crop.name ORDER BY crop.name",
+            params,
+        ).fetchall()
     return [
         {"crop": row["crop"] or "", "weightGrams": json_number(row["total"]) or 0}
         for row in rows

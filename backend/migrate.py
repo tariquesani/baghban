@@ -12,7 +12,7 @@ table does not rewrite aliases and links.
 import sqlite3
 from pathlib import Path
 
-from calendar_entries import drop_care_action_check
+from calendar_entries import calendar_crop_id, drop_care_action_check
 from crops import add_crop_icon, drop_crop_label_checks
 
 
@@ -25,7 +25,7 @@ def drop_label_checks(connection) -> None:
         raise RuntimeError("Catalogue migration broke a foreign key")
 
 
-MIGRATIONS = (drop_label_checks, add_crop_icon)
+MIGRATIONS = (drop_label_checks, add_crop_icon, calendar_crop_id)
 
 
 def apply_pending(connection, steps=MIGRATIONS) -> None:

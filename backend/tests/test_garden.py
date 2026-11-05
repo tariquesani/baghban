@@ -399,8 +399,9 @@ def test_reset_keeps_the_name_and_the_calendar(tmp_path, monkeypatch):
         with closing(connect()) as connection:
             connection.execute(
                 """
-                INSERT INTO calendar_entry (kind, date, bed_id, crop, status)
-                VALUES ('sowing', '2026-10-01', 4, 'Tomato', 'done')
+                INSERT INTO calendar_entry (kind, date, bed_id, crop_id, status)
+                SELECT 'sowing', '2026-10-01', 4, id, 'done'
+                FROM crop WHERE name = 'Tomatoes'
                 """
             )
             connection.execute(
@@ -434,8 +435,13 @@ def test_reset_keeps_the_name_and_the_calendar(tmp_path, monkeypatch):
     ).fetchone()
     assert archived[0]
     sowing = connection.execute(
-        "SELECT crop FROM calendar_entry WHERE bed_id = 4"
+        """
+        SELECT crop.name
+        FROM calendar_entry
+        JOIN crop ON crop.id = calendar_entry.crop_id
+        WHERE calendar_entry.bed_id = 4
+        """
     ).fetchone()
-    assert sowing[0] == "Tomato"
+    assert sowing[0] == "Tomatoes"
     assert connection.execute("SELECT COUNT(*) FROM obstacle").fetchone()[0] == 0
     connection.close()

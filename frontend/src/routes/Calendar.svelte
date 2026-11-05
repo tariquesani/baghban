@@ -104,6 +104,7 @@
         kind: kindName,
         status,
         crop: typeof row.crop === 'string' ? row.crop : '',
+        cropId: typeof row.cropId === 'number' ? row.cropId : null,
         note: typeof row.note === 'string' ? row.note : '',
         photoUrl: typeof row.photoUrl === 'string' ? row.photoUrl : '',
       },

@@ -72,7 +72,8 @@ const WEDGES = [
  * @typedef {Object} CalendarEntry
  * @property {string} id
  * @property {string} date
- * @property {string} crop Empty when the entry is for the whole garden.
+ * @property {string} crop Empty when the entry is for the whole garden. Joined catalogue name.
+ * @property {number | null} [cropId] Catalogue id when the entry names a crop.
  * @property {'sowing' | 'care' | 'pest' | 'harvest' | 'diary'} kind
  * @property {'planned' | 'done'} status
  * @property {string} [action] Care action from the shared catalogue. A retired value is kept.

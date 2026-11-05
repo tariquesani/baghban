@@ -15,7 +15,7 @@ def test_a_new_database_is_stamped_at_the_current_version(tmp_path, monkeypatch)
         pass
 
     connection = sqlite3.connect(db)
-    assert connection.execute("PRAGMA user_version").fetchone()[0] == 2
+    assert connection.execute("PRAGMA user_version").fetchone()[0] == 3
     care = connection.execute(
         "SELECT sql FROM sqlite_master WHERE name = 'care'"
     ).fetchone()[0]
@@ -24,6 +24,11 @@ def test_a_new_database_is_stamped_at_the_current_version(tmp_path, monkeypatch)
         "SELECT sql FROM sqlite_master WHERE name = 'crop'"
     ).fetchone()[0]
     assert "icon" in crop
+    calendar = connection.execute(
+        "SELECT sql FROM sqlite_master WHERE name = 'calendar_entry'"
+    ).fetchone()[0]
+    assert "crop_id" in calendar
+    assert "crop TEXT" not in calendar
     connection.close()
 
 
@@ -31,7 +36,7 @@ def test_a_database_already_at_this_version_keeps_its_checks(tmp_path, monkeypat
     db = tmp_path / "baghban.db"
     monkeypatch.setenv("BAGHBAN_DB", str(db))
     connection = sqlite3.connect(db)
-    connection.execute("PRAGMA user_version = 2")
+    connection.execute("PRAGMA user_version = 3")
     connection.execute(
         """
         CREATE TABLE care (
@@ -50,7 +55,7 @@ def test_a_database_already_at_this_version_keeps_its_checks(tmp_path, monkeypat
         pass
 
     connection = sqlite3.connect(db)
-    assert connection.execute("PRAGMA user_version").fetchone()[0] == 2
+    assert connection.execute("PRAGMA user_version").fetchone()[0] == 3
     sql = connection.execute(
         "SELECT sql FROM sqlite_master WHERE name = 'care'"
     ).fetchone()[0]
@@ -79,7 +84,7 @@ def test_a_failed_step_rolls_back_the_version_and_the_change(tmp_path):
     connection.close()
     migrate(db)
     connection = sqlite3.connect(db)
-    assert connection.execute("PRAGMA user_version").fetchone()[0] == 2
+    assert connection.execute("PRAGMA user_version").fetchone()[0] == 3
     connection.close()
 
 
@@ -103,10 +108,77 @@ def test_an_existing_crop_gains_an_empty_icon(tmp_path):
     migrate(db)
 
     connection = sqlite3.connect(db)
-    assert connection.execute("PRAGMA user_version").fetchone()[0] == 2
+    assert connection.execute("PRAGMA user_version").fetchone()[0] == 3
     assert connection.execute("SELECT name, emoji, icon FROM crop").fetchone() == (
         "Mint",
         "🌿",
         "",
     )
+    connection.close()
+
+
+def test_calendar_crop_text_becomes_crop_id(tmp_path):
+    db = tmp_path / "baghban.db"
+    connection = sqlite3.connect(db)
+    connection.execute("PRAGMA user_version = 2")
+    connection.execute(
+        """
+        CREATE TABLE crop (
+            id INTEGER PRIMARY KEY,
+            name TEXT NOT NULL,
+            emoji TEXT NOT NULL DEFAULT '',
+            icon TEXT NOT NULL DEFAULT ''
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE crop_alias (
+            crop_id INTEGER NOT NULL REFERENCES crop(id),
+            alias TEXT NOT NULL,
+            PRIMARY KEY (crop_id, alias)
+        )
+        """
+    )
+    connection.execute("INSERT INTO crop (id, name, emoji) VALUES (7, 'Seeta Phal', '')")
+    connection.execute(
+        "INSERT INTO crop_alias (crop_id, alias) VALUES (7, 'Custard apple')"
+    )
+    connection.execute(
+        """
+        CREATE TABLE calendar_entry (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            kind TEXT NOT NULL,
+            date TEXT NOT NULL,
+            bed_id INTEGER,
+            crop TEXT,
+            status TEXT NOT NULL,
+            note TEXT NOT NULL DEFAULT '',
+            photo_url TEXT
+        )
+        """
+    )
+    connection.execute(
+        """
+        INSERT INTO calendar_entry (kind, date, crop, status, note)
+        VALUES
+            ('harvest', '2026-10-01', 'Custard apple', 'done', ''),
+            ('diary', '2026-10-02', '', 'done', 'Garden note'),
+            ('care', '2026-10-03', 'Seeta Phal', 'done', '')
+        """
+    )
+    connection.commit()
+    connection.close()
+
+    migrate(db)
+
+    connection = sqlite3.connect(db)
+    assert connection.execute("PRAGMA user_version").fetchone()[0] == 3
+    rows = connection.execute(
+        "SELECT id, crop_id FROM calendar_entry ORDER BY id"
+    ).fetchall()
+    assert rows == [(1, 7), (2, None), (3, 7)]
+    columns = {info[1] for info in connection.execute("PRAGMA table_info(calendar_entry)")}
+    assert "crop_id" in columns
+    assert "crop" not in columns
     connection.close()
