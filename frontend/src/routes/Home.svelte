@@ -1,4 +1,5 @@
 <script lang="ts">
+  import CropMark from '../components/crops/CropMark.svelte';
   import ComingUp from '../components/home/ComingUp.svelte';
   import Gallery from '../components/home/Gallery.svelte';
   import GardenHeader from '../components/home/GardenHeader.svelte';
@@ -66,8 +67,10 @@
     id: number;
     bedId: number;
     bedName: string;
+    cropId: number;
     name: string;
     emoji: string;
+    icon: string;
     createdOn: string;
     daysToMaturity: number | null;
   };
@@ -126,8 +129,10 @@
       id: row.id,
       bedId: row.bedId,
       bedName: typeof row.bedName === 'string' ? row.bedName : '',
+      cropId: typeof row.cropId === 'number' ? row.cropId : 0,
       name: row.name,
       emoji: typeof row.emoji === 'string' ? row.emoji : '',
+      icon: typeof row.icon === 'string' ? row.icon : '',
       createdOn: row.createdOn,
       daysToMaturity: typeof row.daysToMaturity === 'number' ? row.daysToMaturity : null,
     };
@@ -236,7 +241,10 @@
             <div class="crops">
               {#each growing as card (card.id)}
                 <article>
-                  <h3>{card.emoji ? `${card.emoji} ` : ''}{card.name}</h3>
+                  <h3>
+                    <CropMark id={card.cropId} icon={card.icon} emoji={card.emoji} />
+                    {card.name}
+                  </h3>
                   <p>{card.bedName}</p>
                   {#if card.days}<p>{card.days}</p>{/if}
                   <p>{card.harvest}</p>
@@ -392,7 +400,12 @@
     font-size: 0.9rem;
   }
 
-  h3 { font-size: 1rem; }
+  h3 {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 1rem;
+  }
 
   article p:nth-of-type(1) { color: #5c6560; }
 

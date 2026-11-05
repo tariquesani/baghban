@@ -6,6 +6,7 @@
   import * as Item from '$lib/components/ui/item';
   import { ScrollArea } from '$lib/components/ui/scroll-area';
   import * as ToggleGroup from '$lib/components/ui/toggle-group';
+  import { cropIconUrl } from '$lib/api/crops.js';
   import { CROP_CATEGORIES } from '$lib/domain/crop.js';
   import { cn } from '$lib/utils';
 
@@ -21,8 +22,9 @@
     onAdd,
     onSelect,
     ready,
+    iconVersion,
   }: {
-    crops: Array<{ id: number; name: string; category: string; emoji: string }>;
+    crops: Array<{ id: number; name: string; category: string; emoji: string; icon: string }>;
     selectedId: number | '';
     query: string;
     category: string;
@@ -33,6 +35,7 @@
     onAdd: () => void;
     onSelect: (crop: { id: number }) => void;
     ready: boolean;
+    iconVersion: number;
   } = $props();
 
   const categoryChoice = $derived(category || 'all');
@@ -108,7 +111,15 @@
                 aria-current={crop.id === selectedId ? 'true' : undefined}
                 onclick={() => onSelect(crop)}
               >
-                {#if crop.emoji}
+                {#if crop.icon}
+                  <Item.Media>
+                    <img
+                      alt=""
+                      class="size-8 object-contain"
+                      src="{cropIconUrl(crop.id)}?v={iconVersion}"
+                    />
+                  </Item.Media>
+                {:else if crop.emoji}
                   <Item.Media>
                     <span aria-hidden="true">{crop.emoji}</span>
                   </Item.Media>

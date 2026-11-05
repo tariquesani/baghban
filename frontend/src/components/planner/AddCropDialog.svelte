@@ -9,6 +9,7 @@
   import * as Dialog from '$lib/components/ui/dialog';
   import * as Field from '$lib/components/ui/field';
   import * as Popover from '$lib/components/ui/popover';
+  import CropMark from '../crops/CropMark.svelte';
   import { cropsNotInBed, localDate, sowingRequest } from '$lib/domain/sowing.js';
   import { cn } from '$lib/utils.js';
 
@@ -16,6 +17,7 @@
     id: number;
     name: string;
     emoji: string;
+    icon: string;
     aliases: string[];
   };
 
@@ -44,7 +46,7 @@
   let fieldError = $state('');
 
   const available = $derived(cropsNotInBed(catalogue, plants));
-  const chosenLabel = $derived(chosen ? (chosen.emoji ? `${chosen.emoji} ${chosen.name}` : chosen.name) : '');
+  const chosenLabel = $derived(chosen ? chosen.name : '');
   const place = $derived(bedName.trim() || 'this bed');
 
   $effect(() => {
@@ -181,8 +183,9 @@
                   aria-invalid={fieldError === 'crop' || undefined}
                   disabled={loading}
                 >
-                  <span class={cn('min-w-0 flex-1 truncate text-left', !chosenLabel && 'text-muted-foreground')}>
-                    {chosenLabel || (loading ? 'Loading crops...' : 'Choose a crop')}
+                  <span class={cn('flex min-w-0 flex-1 items-center gap-2 text-left', !chosenLabel && 'text-muted-foreground')}>
+                    {#if chosen}<CropMark id={chosen.id} icon={chosen.icon} emoji={chosen.emoji} />{/if}
+                    <span class="truncate">{chosenLabel || (loading ? 'Loading crops...' : 'Choose a crop')}</span>
                   </span>
                   <ChevronDownIcon data-icon="inline-end" />
                 </Button>
@@ -201,7 +204,7 @@
                         data-checked={chosen?.id === crop.id}
                         onSelect={() => choose(crop)}
                       >
-                        {#if crop.emoji}<span aria-hidden="true">{crop.emoji}</span>{/if}
+                        <CropMark id={crop.id} icon={crop.icon} emoji={crop.emoji} />
                         {crop.name}
                       </Command.Item>
                     {/each}

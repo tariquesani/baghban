@@ -33,7 +33,7 @@ export function statusForSowingDate(date, today) {
 
 /**
  * @param {unknown} crops
- * @returns {{ id: number, name: string, emoji: string }[]}
+ * @returns {{ id: number, name: string, emoji: string, icon: string }[]}
  */
 export function sowingCropChoices(crops) {
   if (!Array.isArray(crops)) return [];
@@ -43,6 +43,7 @@ export function sowingCropChoices(crops) {
       id: typeof crop.id === 'number' ? crop.id : 0,
       name: crop.name.trim(),
       emoji: typeof crop.emoji === 'string' ? crop.emoji : '',
+      icon: typeof crop.icon === 'string' ? crop.icon : '',
     }))
     .sort((left, right) => left.name.localeCompare(right.name));
 }
@@ -149,7 +150,7 @@ export function bedCropNames(plants) {
  * Catalogue crops that are not already growing in the bed.
  * @param {unknown} crops
  * @param {unknown} planted
- * @returns {{ id: number, name: string, emoji: string, aliases: string[] }[]}
+ * @returns {{ id: number, name: string, emoji: string, icon: string, aliases: string[] }[]}
  */
 export function cropsNotInBed(crops, planted) {
   if (!Array.isArray(crops)) return [];
@@ -164,6 +165,7 @@ export function cropsNotInBed(crops, planted) {
       id: typeof crop.id === 'number' ? crop.id : 0,
       name: crop.name.trim(),
       emoji: typeof crop.emoji === 'string' ? crop.emoji : '',
+      icon: typeof crop.icon === 'string' ? crop.icon : '',
       aliases: Array.isArray(crop.aliases)
         ? crop.aliases.filter((alias) => typeof alias === 'string')
         : [],
@@ -174,7 +176,7 @@ export function cropsNotInBed(crops, planted) {
 /**
  * Crops the combobox may offer. `null` keeps the whole catalogue.
  * A name that is not in the catalogue stays, so a bed crop can still be chosen.
- * @param {{ id: number, name: string, emoji: string }[]} crops
+ * @param {{ id: number, name: string, emoji: string, icon?: string }[]} crops
  * @param {string[] | null | undefined} names
  */
 export function cropsForNames(crops, names) {
@@ -190,7 +192,7 @@ export function cropsForNames(crops, names) {
     seen.add(key);
     wanted.push({ text, key });
   }
-  /** @type {{ id: number, name: string, emoji: string }[]} */
+  /** @type {{ id: number, name: string, emoji: string, icon?: string }[]} */
   const matched = [];
   const used = new Set();
   for (const crop of crops) {
@@ -202,7 +204,7 @@ export function cropsForNames(crops, names) {
   }
   const missing = wanted
     .filter((name) => !used.has(name.key))
-    .map((name) => ({ id: 0, name: name.text, emoji: '' }));
+    .map((name) => ({ id: 0, name: name.text, emoji: '', icon: '' }));
   return [...matched, ...missing];
 }
 

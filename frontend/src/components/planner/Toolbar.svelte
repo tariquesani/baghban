@@ -1,7 +1,7 @@
 <script>
   import ToolbarButton from './ToolbarButton.svelte';
 
-  let snapped = $state(true);
+  let snapped = $state(false);
 
   /**
    * @param {HTMLElement} element

@@ -31,3 +31,21 @@ export function saveCrop(crop) {
 export function archiveCrop(id) {
   return api.delete(`/crops/${encodeURIComponent(id)}`);
 }
+
+/** @param {number} id */
+export function cropIconUrl(id) {
+  return `/api/crops/${encodeURIComponent(id)}/icon`;
+}
+
+/**
+ * @param {number} id
+ * @param {Blob} file
+ */
+export function storeCropIcon(id, file) {
+  return api.put(`/crops/${encodeURIComponent(id)}/icon`, file);
+}
+
+/** @param {number} id */
+export function removeCropIcon(id) {
+  return api.delete(`/crops/${encodeURIComponent(id)}/icon`);
+}

@@ -341,8 +341,11 @@ function generatePlantsHTML() {
       const cTags = pd.companions.filter(c => plants.includes(c)).map(c => `<span class="pill">✅ ${c}</span>`).join('');
       const aTags = pd.avoid.filter(a => plants.includes(a)).map(a => `<span class="pill bad">⚠️ ${a}</span>`).join('');
 
+      const mark = pd.icon
+        ? `<img class="plant-emoji" src="${String(pd.icon).replace(/"/g, '')}" alt="">`
+        : `<div class="plant-emoji">${pd.emoji || ''}</div>`;
       return `<div class="plant-row">
-        <div class="plant-emoji">${pd.emoji}</div>
+        ${mark}
         <div class="plant-info">
           <h5>${pName}</h5>
           <div class="plant-meta">

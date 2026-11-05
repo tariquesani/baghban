@@ -10,7 +10,7 @@ from contextlib import closing
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import Response
+from fastapi.responses import FileResponse, Response
 
 from catalogue import CATEGORIES, SUNS, WATERS
 FIELDS = {
@@ -18,6 +18,7 @@ FIELDS = {
     "name",
     "category",
     "emoji",
+    "icon",
     "sqft",
     "spacing",
     "depthIn",
@@ -33,6 +34,8 @@ FIELDS = {
     "avoid",
 }
 router = APIRouter()
+MAX_ICON_BYTES = 1024 * 1024
+PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
 
 
 def catalog_file() -> Path:
@@ -100,6 +103,7 @@ def crop_table_sql(name: str = "crop", if_not_exists: bool = False) -> str:
             name              TEXT NOT NULL,
             category          TEXT NOT NULL,
             emoji             TEXT NOT NULL DEFAULT '',
+            icon              TEXT NOT NULL DEFAULT '',
             sqft              REAL,
             spacing           REAL,
             depth_in          REAL,
@@ -112,6 +116,19 @@ def crop_table_sql(name: str = "crop", if_not_exists: bool = False) -> str:
             archived          INTEGER NOT NULL DEFAULT 0 CHECK (archived IN (0, 1))
         )
     """
+
+
+def add_crop_icon(connection) -> None:
+    """Add an empty icon name. No crop is given a file."""
+    row = connection.execute(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'crop'"
+    ).fetchone()
+    if row is None:
+        return
+    columns = {info[1] for info in connection.execute("PRAGMA table_info(crop)")}
+    if "icon" in columns:
+        return
+    connection.execute("ALTER TABLE crop ADD COLUMN icon TEXT NOT NULL DEFAULT ''")
 
 
 def drop_crop_label_checks(connection) -> None:
@@ -381,6 +398,7 @@ def crop_json(row, aliases, companions, avoid) -> dict:
         "name": row["name"],
         "category": row["category"],
         "emoji": row["emoji"] or "",
+        "icon": row["icon"] or "",
         "sqft": json_number(row["sqft"]),
         "spacing": json_number(row["spacing"]),
         "depthIn": json_number(row["depth_in"]),
@@ -648,6 +666,80 @@ def save_crop(crop_id: int, body: dict) -> dict:
             raise
 
 
+def icons_root() -> Path:
+    from app import database_path
+
+    return database_path().parent / "icons"
+
+
+def icons_dir() -> Path:
+    path = icons_root()
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def icon_filename(crop_id: int) -> str:
+    return f"{crop_id}.png"
+
+
+def store_crop_icon(crop_id: int, data: bytes) -> dict:
+    """Save a PNG beside the database and remember its file name."""
+    if not data.startswith(PNG_MAGIC):
+        raise HTTPException(status_code=400, detail="Icon must be a PNG")
+    with closing(connect()) as connection:
+        if fetch_crop(connection, crop_id) is None:
+            raise HTTPException(status_code=404, detail="Crop not found")
+    destination = icons_dir() / icon_filename(crop_id)
+    temporary = destination.with_name(destination.name + ".tmp")
+    temporary.write_bytes(data)
+    temporary.replace(destination)
+    with closing(connect()) as connection:
+        try:
+            connection.execute(
+                "UPDATE crop SET icon = ? WHERE id = ?",
+                (icon_filename(crop_id), crop_id),
+            )
+            connection.commit()
+            row = fetch_crop(connection, crop_id)
+            if row is None:
+                raise HTTPException(status_code=404, detail="Crop not found")
+            return rows_json(connection, [row])[0]
+        except HTTPException:
+            connection.rollback()
+            raise
+        except Exception:
+            connection.rollback()
+            raise
+
+
+def remove_crop_icon(crop_id: int) -> None:
+    with closing(connect()) as connection:
+        if fetch_crop(connection, crop_id) is None:
+            raise HTTPException(status_code=404, detail="Crop not found")
+        connection.execute("UPDATE crop SET icon = '' WHERE id = ?", (crop_id,))
+        connection.commit()
+    path = icons_root() / icon_filename(crop_id)
+    if path.is_file():
+        path.unlink()
+
+
+def read_crop_icon(crop_id: int) -> FileResponse:
+    with closing(connect()) as connection:
+        row = fetch_crop(connection, crop_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Crop not found")
+    if (row["icon"] or "") != icon_filename(crop_id):
+        raise HTTPException(status_code=404, detail="Icon not found")
+    path = icons_root() / icon_filename(crop_id)
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Icon not found")
+    return FileResponse(
+        path,
+        media_type="image/png",
+        headers={"Cache-Control": "no-store"},
+    )
+
+
 def archive_crop(crop_id: int) -> None:
     with closing(connect()) as connection:
         row = fetch_crop(connection, crop_id)
@@ -704,3 +796,25 @@ async def put_crop(crop_id: str, request: Request) -> dict:
 def delete_crop(crop_id: str) -> Response:
     archive_crop(require_crop_id(crop_id))
     return Response(status_code=204)
+
+
+@router.put("/crops/{crop_id}/icon")
+async def put_crop_icon(crop_id: str, request: Request) -> dict:
+    from app import reject_oversized
+
+    raw = await request.body()
+    reject_oversized(request, raw, MAX_ICON_BYTES, "Icon is larger than 1 MB")
+    if not raw:
+        raise HTTPException(status_code=400, detail="Icon is empty")
+    return store_crop_icon(require_crop_id(crop_id), raw)
+
+
+@router.delete("/crops/{crop_id}/icon")
+def delete_crop_icon(crop_id: str) -> Response:
+    remove_crop_icon(require_crop_id(crop_id))
+    return Response(status_code=204)
+
+
+@router.get("/crops/{crop_id}/icon")
+def get_crop_icon(crop_id: str) -> FileResponse:
+    return read_crop_icon(require_crop_id(crop_id))

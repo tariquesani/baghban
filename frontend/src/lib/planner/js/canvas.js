@@ -281,16 +281,37 @@ function bedIsEmpty(bed) {
   return !(bed.plants || []).some(name => String(name).trim());
 }
 
+const iconImages = new Map();
+
+function iconImage(url) {
+  if (!url) return null;
+  let image = iconImages.get(url);
+  if (!image) {
+    image = new Image();
+    image.onload = () => draw();
+    iconImages.set(url, image);
+    image.src = url;
+  }
+  return image.complete && image.naturalWidth ? image : null;
+}
+
 function cropEmojis(plants) {
   return (plants || [])
-    .map(name => PLANT_DATA[name] && PLANT_DATA[name].emoji)
+    .map((name) => {
+      const plant = PLANT_DATA[name];
+      if (!plant) return null;
+      const emoji = plant.emoji || '';
+      const icon = plant.icon || '';
+      if (!emoji && !icon) return null;
+      return { emoji, icon };
+    })
     .filter(Boolean);
 }
 
-function drawCropEmojis(emojis, centerX, topY, maxWidth, maxHeight) {
-  if (!emojis.length || maxWidth < 10 || maxHeight < 10) return;
+function drawCropEmojis(marks, centerX, topY, maxWidth, maxHeight) {
+  if (!marks.length || maxWidth < 10 || maxHeight < 10) return;
   const gap = 2;
-  let size = Math.min(26, Math.floor(maxHeight), Math.floor((maxWidth + gap) / Math.min(emojis.length, 8)) - gap);
+  let size = Math.min(26, Math.floor(maxHeight), Math.floor((maxWidth + gap) / Math.min(marks.length, 8)) - gap);
   size = Math.max(12, Math.min(26, size));
   const perRow = Math.max(1, Math.floor((maxWidth + gap) / (size + gap)));
   ctx.save();
@@ -298,16 +319,18 @@ function drawCropEmojis(emojis, centerX, topY, maxWidth, maxHeight) {
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.font = `${size}px sans-serif`;
-  emojis.forEach((emoji, index) => {
+  marks.forEach((mark, index) => {
     const col = index % perRow;
     const row = Math.floor(index / perRow);
     if (topY + (row + 1) * (size + gap) > topY + maxHeight + gap) return;
-    const rowCount = Math.min(perRow, emojis.length - row * perRow);
+    const rowCount = Math.min(perRow, marks.length - row * perRow);
     const rowWidth = rowCount * size + (rowCount - 1) * gap;
     const x = centerX - rowWidth / 2 + size / 2 + col * (size + gap);
     const y = topY + size / 2 + row * (size + gap);
+    const image = iconImage(mark.icon);
     ctx.globalAlpha = 0.95;
-    ctx.fillText(emoji, x, y);
+    if (image) ctx.drawImage(image, x - size / 2, y - size / 2, size, size);
+    else if (mark.emoji) ctx.fillText(mark.emoji, x, y);
   });
   ctx.restore();
 }
@@ -1290,11 +1313,105 @@ canvas.addEventListener('dblclick', e => {
 });
 
 // ─── Keyboard shortcuts ───────────────────────────────────────────────────────
+// One screen pixel, in feet. Zoomed out, that pixel covers more ground.
+function arrowStep(key) {
+  const bounds = canvas.getBoundingClientRect();
+  const pixel = bounds.width > 0 ? canvas.width / bounds.width : 1;
+  const step = pixel / (SCALE * viewZoom);
+  if (key === 'ArrowLeft') return { dx: -step, dy: 0 };
+  if (key === 'ArrowRight') return { dx: step, dy: 0 };
+  if (key === 'ArrowUp') return { dx: 0, dy: -step };
+  if (key === 'ArrowDown') return { dx: 0, dy: step };
+  return null;
+}
+
+function localDelta(dx, dy, rotation) {
+  if (!rotation) return { dx, dy };
+  const c = Math.cos(-rotation), s = Math.sin(-rotation);
+  return { dx: dx * c - dy * s, dy: dx * s + dy * c };
+}
+
+function nudgeRectItem(item, dx, dy) {
+  const rot = item.rotation || 0;
+  const ac = Math.abs(Math.cos(rot)), as = Math.abs(Math.sin(rot));
+  const halfW = (item.w / 2) * ac + (item.h / 2) * as;
+  const halfH = (item.w / 2) * as + (item.h / 2) * ac;
+  const minX = halfW - item.w / 2;
+  const maxX = garden.width - halfW - item.w / 2;
+  const minY = halfH - item.h / 2;
+  const maxY = garden.height - halfH - item.h / 2;
+  item.x = Math.max(minX, Math.min(item.x + dx, maxX));
+  item.y = Math.max(minY, Math.min(item.y + dy, maxY));
+}
+
+function nudgePolygonBed(bed, dx, dy) {
+  const pivot = bed.pivot ? { x: bed.pivot.x, y: bed.pivot.y } : null;
+  const clamped = clampPolygonMove(bed, bed.points, pivot, dx, dy);
+  const local = localDelta(clamped.dx, clamped.dy, bed.rotation || 0);
+  bed.points = bed.points.map(point => ({ x: point.x + local.dx, y: point.y + local.dy }));
+  if (bed.pivot) bed.pivot = { x: bed.pivot.x + local.dx, y: bed.pivot.y + local.dy };
+  syncPolygonBounds(bed);
+}
+
+function nudgePolygonCorner(bed, index, dx, dy) {
+  const world = polygonWorldPoints(bed)[index];
+  const next = polygonLocalFeet(bed,
+    Math.max(0, Math.min(garden.width, world.x + dx)),
+    Math.max(0, Math.min(garden.height, world.y + dy)));
+  const previous = bed.points[index];
+  bed.points[index] = next;
+  syncPolygonBounds(bed);
+  if ((bed.rotation || 0) && !polygonFitsGarden(bed, bed.rotation)) {
+    bed.points[index] = previous;
+    syncPolygonBounds(bed);
+  }
+}
+
+function nudgeSelection(dx, dy) {
+  const item = getSelected();
+  if (!item) return;
+  if (isPolygon(item) && selectedVertex >= 0 && selectedVertex < item.points.length) {
+    nudgePolygonCorner(item, selectedVertex, dx, dy);
+    updatePolyPanel();
+  } else if (isPolygon(item)) {
+    nudgePolygonBed(item, dx, dy);
+    updatePolyPanel();
+  } else {
+    nudgeRectItem(item, dx, dy);
+    syncPositionFields();
+  }
+  draw();
+}
+
+const nudgeKeys = new Set();
+let nudgeGesture = false;
+
+function arrowsBlocked() {
+  // The bed details drawer is a non-modal dialog and stays open while nudging.
+  return tool === 'draw-bed' || tool === 'calibrate' || typingInField()
+    || !!document.querySelector('.modal-overlay, [data-slot="dialog-content"], .overlay [role="dialog"]');
+}
+
+function beginArrowNudge(key) {
+  if (nudgeKeys.size === 0) saveHistory();
+  nudgeKeys.add(key);
+  nudgeGesture = true;
+}
+
+function finishArrowNudge(key) {
+  if (key) nudgeKeys.delete(key);
+  else nudgeKeys.clear();
+  if (nudgeKeys.size || !nudgeGesture) return;
+  nudgeGesture = false;
+  renderLists();
+}
+
 document.addEventListener('keydown', e => {
   if (pickOnly) return;
   // Ctrl+Z / Cmd+Z — undo (always active, even when typing)
-  if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+  if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.altKey) {
     e.preventDefault();
+    finishArrowNudge();
     undoLast();
     return;
   }
@@ -1316,6 +1433,15 @@ document.addEventListener('keydown', e => {
     setTool('select');
     return;
   }
+  const step = arrowStep(e.key);
+  if (step) {
+    if (e.altKey || e.ctrlKey || e.metaKey || arrowsBlocked() || !selectedObj) return;
+    e.preventDefault();
+    if (e.repeat) nudgeKeys.add(e.key);
+    else beginArrowNudge(e.key);
+    nudgeSelection(step.dx, step.dy);
+    return;
+  }
   if (!selectedObj) return;
   // Don't fire Delete when user is typing in an input / textarea
   const tag = document.activeElement.tagName;
@@ -1329,6 +1455,10 @@ document.addEventListener('keydown', e => {
 document.addEventListener('keyup', e => {
   if (pickOnly) return;
   if (e.code === 'Space') releaseSpace();
+  if (arrowStep(e.key)) finishArrowNudge(e.key);
 });
 
-window.addEventListener('blur', releaseSpace);
+window.addEventListener('blur', () => {
+  releaseSpace();
+  finishArrowNudge();
+});

@@ -540,7 +540,7 @@ def test_old_care_table_accepts_new_actions(tmp_path, monkeypatch):
         "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'care'"
     ).fetchone()[0]
     assert "CHECK" not in care_sql.upper()
-    assert connection.execute("PRAGMA user_version").fetchone()[0] == 1
+    assert connection.execute("PRAGMA user_version").fetchone()[0] == 2
     connection.execute("UPDATE care SET action = 'composting' WHERE entry_id = 1")
     connection.commit()
     connection.close()

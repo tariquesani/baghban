@@ -13,7 +13,7 @@ import sqlite3
 from pathlib import Path
 
 from calendar_entries import drop_care_action_check
-from crops import drop_crop_label_checks
+from crops import add_crop_icon, drop_crop_label_checks
 
 
 def drop_label_checks(connection) -> None:
@@ -25,7 +25,7 @@ def drop_label_checks(connection) -> None:
         raise RuntimeError("Catalogue migration broke a foreign key")
 
 
-MIGRATIONS = (drop_label_checks,)
+MIGRATIONS = (drop_label_checks, add_crop_icon)
 
 
 def apply_pending(connection, steps=MIGRATIONS) -> None:

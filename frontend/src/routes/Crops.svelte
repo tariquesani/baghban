@@ -1,5 +1,12 @@
 <script>
-  import { archiveCrop, createCrop, listCrops, saveCrop } from '$lib/api/crops.js';
+  import {
+    archiveCrop,
+    createCrop,
+    listCrops,
+    removeCropIcon,
+    saveCrop,
+    storeCropIcon,
+  } from '$lib/api/crops.js';
   import { toast } from 'svelte-sonner';
   import { cloneCrop, cropPayload, emptyCrop } from '$lib/domain/crop.js';
   import ArchiveCropDialog from '../components/crops/ArchiveCropDialog.svelte';
@@ -28,6 +35,7 @@
   let listError = $state('');
   let ready = $state(false);
   let listTicket = 0;
+  let iconVersion = $state(0);
 
   let showList = $derived(!narrow || !formOpen);
   let showForm = $derived(editing && (!narrow || formOpen));
@@ -117,6 +125,38 @@
     }
   }
 
+  async function replaceIcon(file) {
+    if (busy || typeof draft.id !== 'number') return;
+    busy = true;
+    error = '';
+    try {
+      const saved = await storeCropIcon(draft.id, file);
+      draft = cloneCrop(saved);
+      iconVersion += 1;
+      await loadList();
+    } catch (err) {
+      error = err instanceof Error ? err.message : 'Could not save this icon';
+    } finally {
+      busy = false;
+    }
+  }
+
+  async function clearIcon() {
+    if (busy || typeof draft.id !== 'number' || !draft.icon) return;
+    busy = true;
+    error = '';
+    try {
+      await removeCropIcon(draft.id);
+      draft.icon = '';
+      iconVersion += 1;
+      await loadList();
+    } catch (err) {
+      error = err instanceof Error ? err.message : 'Could not remove this icon';
+    } finally {
+      busy = false;
+    }
+  }
+
   function askArchive() {
     archiveAsk = true;
   }
@@ -191,6 +231,7 @@
         onAdd={startCreating}
         onSelect={openCrop}
         {ready}
+        {iconVersion}
       />
     {/if}
     {#if showForm}
@@ -208,6 +249,9 @@
         onArchive={askArchive}
         onRestore={restoreOpen}
         onBack={closeForm}
+        onIcon={replaceIcon}
+        onClearIcon={clearIcon}
+        {iconVersion}
       />
     {:else if !narrow}
       <p class="prompt">Select a crop, or add one.</p>

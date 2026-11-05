@@ -8,6 +8,7 @@
   import { listCrops } from '$lib/api/crops.js';
   import { readGarden } from '$lib/api/garden.js';
   import BedField from '../beds/BedField.svelte';
+  import CropMark from '../crops/CropMark.svelte';
   import { Button } from '$lib/components/ui/button';
   import { Calendar } from '$lib/components/ui/calendar';
   import * as Command from '$lib/components/ui/command';
@@ -98,7 +99,7 @@
   let todayStamp = $state(localDate());
   let statusChosen = $state(false);
   let cropEdited = $state(false);
-  let cropChoices = $state<{ id: number; name: string; emoji: string }[]>([]);
+  let cropChoices = $state<{ id: number; name: string; emoji: string; icon: string }[]>([]);
   let bedRows = $state<{ id: number; name: string; plants: string[] }[]>([]);
   let bedsLoaded = $state(false);
   let loading = $state(false);
@@ -121,10 +122,12 @@
   const cropItems = $derived(
     offeredCrops.map((choice) => ({
       value: choice.name,
-      label: choice.emoji ? `${choice.emoji} ${choice.name}` : choice.name,
+      id: choice.id,
+      icon: choice.icon,
+      emoji: choice.emoji,
     })),
   );
-  const cropLabel = $derived(cropItems.find((item) => item.value === crop)?.label ?? crop);
+  const chosenCrop = $derived(cropItems.find((item) => item.value === crop));
   const bedChoices = $derived(sowingBedChoices(bedRows));
   const cropBeds = $derived(recording === 'care' || recording === 'pest' || recording === 'harvest');
   const offeredBeds = $derived(cropBeds ? bedsHoldingCrop(bedRows, crop) : bedChoices);
@@ -426,8 +429,11 @@
                 aria-expanded={cropOpen}
                 aria-invalid={fieldError === 'crop' || undefined}
               >
-                <span class={cn('min-w-0 flex-1 truncate text-left', !cropLabel && 'text-muted-foreground')}>
-                  {cropLabel || 'Choose a crop'}
+                <span class={cn('flex min-w-0 flex-1 items-center gap-2 text-left', !crop && 'text-muted-foreground')}>
+                  {#if chosenCrop}
+                    <CropMark id={chosenCrop.id} icon={chosenCrop.icon} emoji={chosenCrop.emoji} />
+                  {/if}
+                  <span class="truncate">{crop || 'Choose a crop'}</span>
                 </span>
                 <ChevronDownIcon data-icon="inline-end" />
               </Button>
@@ -445,7 +451,8 @@
                       data-checked={crop === item.value}
                       onSelect={() => chooseCrop(item.value)}
                     >
-                      {item.label}
+                      <CropMark id={item.id} icon={item.icon} emoji={item.emoji} />
+                      {item.value}
                     </Command.Item>
                   {/each}
                 </Command.Group>

@@ -1,6 +1,7 @@
 <script lang="ts">
   import XIcon from '@lucide/svelte/icons/x';
   import { tick } from 'svelte';
+  import { cropIconUrl } from '$lib/api/crops.js';
   import { CROP_CATEGORIES, SUNS, WATERS, optionalNumber } from '$lib/domain/crop.js';
   import { Badge } from '$lib/components/ui/badge';
   import { Button } from '$lib/components/ui/button';
@@ -18,6 +19,7 @@
     name: string;
     category: string;
     emoji: string;
+    icon: string;
     sqft: number | null;
     spacing: number | null;
     depthIn: number | null;
@@ -49,10 +51,13 @@
     onArchive,
     onRestore,
     onBack,
+    onIcon,
+    onClearIcon,
+    iconVersion,
   }: {
     draft: CropDraft;
     creating: boolean;
-    choices: Array<{ id: number; name: string; emoji: string; aliases: string[] }>;
+    choices: Array<{ id: number; name: string; emoji: string; icon: string; aliases: string[] }>;
     busy: boolean;
     error: string;
     narrow: boolean;
@@ -63,6 +68,9 @@
     onArchive: () => void;
     onRestore: () => void;
     onBack: () => void;
+    onIcon: (file: File) => void;
+    onClearIcon: () => void;
+    iconVersion: number;
   } = $props();
 
   let aliasError = $state('');
@@ -147,6 +155,14 @@
     draft.avoid = draft.avoid.filter((item) => item !== id);
   }
 
+  function chooseIcon(event: Event) {
+    const input = event.currentTarget;
+    if (!(input instanceof HTMLInputElement) || !input.files?.length) return;
+    const file = input.files[0];
+    input.value = '';
+    onIcon(file);
+  }
+
   function typedValue(event: Event) {
     const target = event.currentTarget;
     return target instanceof HTMLInputElement ? target.value : '';
@@ -228,6 +244,35 @@
     <Field.Field>
       <Field.Label for="crop-emoji">Emoji</Field.Label>
       <Input id="crop-emoji" name="emoji" bind:value={draft.emoji} />
+    </Field.Field>
+
+    <Field.Field>
+      <Field.Label for="crop-icon">Icon</Field.Label>
+      {#if creating}
+        <Field.Description>Save the crop, then add a PNG icon.</Field.Description>
+      {:else}
+        <div class="flex items-center gap-3">
+          {#if draft.icon && typeof draft.id === 'number'}
+            <img
+              alt=""
+              class="size-10 shrink-0 object-contain"
+              src="{cropIconUrl(draft.id)}?v={iconVersion}"
+            />
+          {/if}
+          <Input
+            id="crop-icon"
+            type="file"
+            accept="image/png"
+            disabled={busy}
+            onchange={chooseIcon}
+          />
+        </div>
+        {#if draft.icon}
+          <Button type="button" variant="outline" size="sm" class="w-fit" disabled={busy} onclick={onClearIcon}>
+            Remove icon
+          </Button>
+        {/if}
+      {/if}
     </Field.Field>
 
     <Field.Set class="gap-3">

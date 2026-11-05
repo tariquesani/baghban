@@ -15,11 +15,15 @@ def test_a_new_database_is_stamped_at_the_current_version(tmp_path, monkeypatch)
         pass
 
     connection = sqlite3.connect(db)
-    assert connection.execute("PRAGMA user_version").fetchone()[0] == 1
+    assert connection.execute("PRAGMA user_version").fetchone()[0] == 2
     care = connection.execute(
         "SELECT sql FROM sqlite_master WHERE name = 'care'"
     ).fetchone()[0]
     assert "CHECK" not in care.upper()
+    crop = connection.execute(
+        "SELECT sql FROM sqlite_master WHERE name = 'crop'"
+    ).fetchone()[0]
+    assert "icon" in crop
     connection.close()
 
 
@@ -27,7 +31,7 @@ def test_a_database_already_at_this_version_keeps_its_checks(tmp_path, monkeypat
     db = tmp_path / "baghban.db"
     monkeypatch.setenv("BAGHBAN_DB", str(db))
     connection = sqlite3.connect(db)
-    connection.execute("PRAGMA user_version = 1")
+    connection.execute("PRAGMA user_version = 2")
     connection.execute(
         """
         CREATE TABLE care (
@@ -46,7 +50,7 @@ def test_a_database_already_at_this_version_keeps_its_checks(tmp_path, monkeypat
         pass
 
     connection = sqlite3.connect(db)
-    assert connection.execute("PRAGMA user_version").fetchone()[0] == 1
+    assert connection.execute("PRAGMA user_version").fetchone()[0] == 2
     sql = connection.execute(
         "SELECT sql FROM sqlite_master WHERE name = 'care'"
     ).fetchone()[0]
@@ -75,5 +79,34 @@ def test_a_failed_step_rolls_back_the_version_and_the_change(tmp_path):
     connection.close()
     migrate(db)
     connection = sqlite3.connect(db)
-    assert connection.execute("PRAGMA user_version").fetchone()[0] == 1
+    assert connection.execute("PRAGMA user_version").fetchone()[0] == 2
+    connection.close()
+
+
+def test_an_existing_crop_gains_an_empty_icon(tmp_path):
+    db = tmp_path / "baghban.db"
+    connection = sqlite3.connect(db)
+    connection.execute("PRAGMA user_version = 1")
+    connection.execute(
+        """
+        CREATE TABLE crop (
+            id INTEGER PRIMARY KEY,
+            name TEXT NOT NULL,
+            emoji TEXT NOT NULL DEFAULT ''
+        )
+        """
+    )
+    connection.execute("INSERT INTO crop (name, emoji) VALUES ('Mint', '🌿')")
+    connection.commit()
+    connection.close()
+
+    migrate(db)
+
+    connection = sqlite3.connect(db)
+    assert connection.execute("PRAGMA user_version").fetchone()[0] == 2
+    assert connection.execute("SELECT name, emoji, icon FROM crop").fetchone() == (
+        "Mint",
+        "🌿",
+        "",
+    )
     connection.close()

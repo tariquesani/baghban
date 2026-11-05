@@ -56,6 +56,7 @@
   );
   let documentTitle = $derived(`Baghban: ${pageTitle}`);
   let help = $derived(helpForPath(path));
+  let fillsScreen = $derived(path === '/planner' || path === '/crops');
 
   function syncPath() {
     path = normalize(window.location.pathname);
@@ -153,7 +154,7 @@
     onHelp={openHelp}
     onAddEntry={askForEntry}
   />
-  <div class="shell-main">
+  <div class={['shell-main', fillsScreen && 'fills-screen']}>
     <header class="page-head">
       {#if !wide}
         <button
@@ -189,8 +190,11 @@
 </div>
 
 <style>
+  :global(html),
   :global(body) {
     margin: 0;
+    height: 100%;
+    overflow: hidden;
   }
 
   .shell {
@@ -207,6 +211,11 @@
     height: 100vh;
     display: flex;
     flex-direction: column;
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+
+  .shell-main.fills-screen {
     overflow: hidden;
   }
 
@@ -255,11 +264,24 @@
   }
 
   .page-body {
-    flex: 1;
-    min-height: 0;
+    flex: 1 0 auto;
     min-width: 0;
     position: relative;
-    overflow: auto;
+  }
+
+  .shell-main.fills-screen .page-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  @media (max-width: 800px) {
+    .page-head {
+      position: sticky;
+      top: 0;
+      z-index: 5;
+      background: #f0f4f0;
+    }
   }
 
   .page-body :global(.map-host),

@@ -1,5 +1,6 @@
 <script lang="ts">
   import ChevronDownIcon from '@lucide/svelte/icons/chevron-down';
+  import CropMark from './CropMark.svelte';
   import XIcon from '@lucide/svelte/icons/x';
   import { tick } from 'svelte';
   import { Badge } from '$lib/components/ui/badge';
@@ -12,6 +13,7 @@
     id: number;
     name: string;
     emoji: string;
+    icon: string;
     aliases: string[];
   };
 
@@ -105,7 +107,7 @@
                   closeAndFocusTrigger();
                 }}
               >
-                {#if crop.emoji}<span aria-hidden="true">{crop.emoji}</span>{/if}
+                <CropMark id={crop.id} icon={crop.icon} emoji={crop.emoji} />
                 {crop.name}
               </Command.Item>
             {/each}

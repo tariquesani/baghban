@@ -36,6 +36,7 @@ const screens = {
     title: 'Planner',
     tips: [
       'Drag an item to move it. Drag empty ground to pan',
+      'Arrow keys nudge the selection by one screen pixel. A selected corner moves on its own',
       'Hold Space, or use the middle mouse button, to pan from anywhere',
       'Drag the ↻ handle to rotate; hold Shift to snap to 15°',
       'Recalibrate a plan from Settings if the scale looks wrong',

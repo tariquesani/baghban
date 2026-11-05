@@ -107,8 +107,10 @@ def list_active_assignments() -> list:
                 beds_crops.bed_id,
                 beds_crops.created_on,
                 bed.name AS bed_name,
+                crop.id AS crop_id,
                 crop.name AS crop_name,
                 crop.emoji,
+                crop.icon,
                 crop.days_to_maturity
             FROM beds_crops
             JOIN bed ON bed.id = beds_crops.bed_id
@@ -126,8 +128,10 @@ def list_active_assignments() -> list:
                 "id": int(row["id"]),
                 "bedId": int(row["bed_id"]),
                 "bedName": row["bed_name"] or "",
+                "cropId": int(row["crop_id"]),
                 "name": row["crop_name"],
                 "emoji": row["emoji"] or "",
+                "icon": row["icon"] or "",
                 "createdOn": row["created_on"],
                 "daysToMaturity": None if maturity is None else int(maturity),
             }

@@ -19,6 +19,7 @@ export function plantCatalogFromCrops(crops) {
       name: canvasLabel(crop),
       category: text(crop.category),
       emoji: text(crop.emoji),
+      icon: iconUrl(crop),
       sqft: numberOr(crop.sqft, 1),
       spacing: finite(crop.spacing),
       depthIn: finite(crop.depthIn),
@@ -29,6 +30,16 @@ export function plantCatalogFromCrops(crops) {
       companions: linkLabels(crop.companions, labels),
       avoid: linkLabels(crop.avoid, labels),
     }));
+}
+
+/**
+ * @param {object} crop
+ */
+function iconUrl(crop) {
+  const file = text(crop.icon);
+  const id = crop.id;
+  if (!file || typeof id !== 'number') return '';
+  return `/api/crops/${id}/icon`;
 }
 
 /**

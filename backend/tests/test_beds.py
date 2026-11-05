@@ -253,5 +253,7 @@ def test_active_assignments_keep_the_crop_date_and_maturity(tmp_path, monkeypatc
         assert rows[0]["bedName"] == "Herbs"
         assert rows[0]["name"] == "Tomatoes"
         assert rows[0]["emoji"] == "🍅"
+        assert rows[0]["icon"] == ""
+        assert isinstance(rows[0]["cropId"], int)
         assert rows[0]["createdOn"]
         assert "daysToMaturity" in rows[0]
