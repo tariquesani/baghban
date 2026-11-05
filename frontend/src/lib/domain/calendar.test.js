@@ -4,6 +4,7 @@ import {
   aroundMonth,
   calendarRows,
   calendarSpanRows,
+  cropMarks,
   cropYearEntries,
   dateEntries,
   dayEntries,
@@ -23,6 +24,22 @@ import {
   yearMonths,
 } from './calendar.js';
 import { SAMPLE_ENTRIES } from './calendar-sample.js';
+
+test('a catalogue crop keeps its icon and emoji for the calendar row', () => {
+  assert.deepEqual(
+    cropMarks([
+      { id: 41, name: 'Spinach', emoji: '🥬', icon: '41.png' },
+      { id: 9, name: '  Mint', emoji: '🌿', icon: '' },
+      { name: 'Basil', emoji: '🌿', icon: '' },
+      null,
+    ]),
+    {
+      Spinach: { id: 41, icon: '41.png', emoji: '🥬' },
+      Mint: { id: 9, icon: '', emoji: '🌿' },
+    },
+  );
+  assert.deepEqual(cropMarks(null), {});
+});
 
 test('a saved entry is addressed by its number', () => {
   assert.equal(storedEntryId('12'), 12);

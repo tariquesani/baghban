@@ -222,11 +222,13 @@ function startPlanner(element, options) {
  * Insert the planner into a host that is already in the document.
  * Each call runs the planner program again. `destroy` drops that visit.
  * `ready` resolves when the program has finished starting.
+ * Occupancy paints a planting area that has a crop as planted and the rest as empty,
+ * the same way the dashboard plan does.
  * @param {HTMLElement} element
  * @returns {{ destroy: () => void, ready: Promise<void> }}
  */
 export function mountPlanner(element) {
-  const visit = startPlanner(element, { publish: true, pick: false });
+  const visit = startPlanner(element, { publish: true, pick: false, occupancy: true });
   return {
     ready: visit.ready,
     destroy: () => visit.destroy(),

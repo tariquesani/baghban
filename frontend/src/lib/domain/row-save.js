@@ -40,10 +40,13 @@ function serverId(id) {
 }
 
 /**
- * @param {{ x?: unknown, y?: unknown } | null | undefined} point
+ * @param {{ x?: unknown, y?: unknown, bulge?: unknown } | null | undefined} point
  */
 function copyPoint(point) {
-  return { x: amount(point?.x), y: amount(point?.y) };
+  const next = { x: amount(point?.x), y: amount(point?.y) };
+  const bulge = finite(point?.bulge);
+  if (bulge) next.bulge = bulge;
+  return next;
 }
 
 /**
@@ -403,6 +406,20 @@ export function createSaveQueue() {
   }
 
   /**
+   * A deleted row is back on the canvas. A bed keeps its id, because the
+   * calendar still names it. An obstacle was removed outright, so it is inserted
+   * again and the new id is stamped onto the canvas.
+   * @param {'bed' | 'obstacle'} type
+   * @param {Record<string, any>} row
+   */
+  function restoreJob(type, row) {
+    if (type === 'obstacle') return insertJob(type, row);
+    const job = updateJob(type, row);
+    job.immediate = true;
+    return job;
+  }
+
+  /**
    * @param {'bed' | 'obstacle'} type
    * @param {Record<string, any>} row
    * @param {number} now
@@ -434,14 +451,32 @@ export function createSaveQueue() {
         flight.next = sameBody(flight.body, current) ? null : followUpdate(type, row, now, flight.next);
         continue;
       }
-      if (flight && flight.op === 'delete') continue;
+      if (flight && flight.op === 'delete') {
+        // Ctrl+Z brought the row back while the delete is still on the wire.
+        // Restore it as soon as that delete finishes, or the canvas and the
+        // server stay out of sync until the next reload.
+        const restore = restoreJob(type, row);
+        restore.readyAt = now;
+        restore.paused = false;
+        flight.next = restore;
+        continue;
+      }
 
       const known = saved.get(row.id);
       if (!known) {
-        if (!serverId(row.id)) place(insertJob(type, row), now);
+        // A new stand-in is inserted. A row that already had a server id and
+        // then left the saved set was deleted; seeing it again is an undo.
+        place(serverId(row.id) ? restoreJob(type, row) : insertJob(type, row), now);
         continue;
       }
       const current = rowBody(type, row, true);
+      const waiting = pending.get(key);
+      if (waiting && waiting.op === 'delete') {
+        // Delete was queued but not sent. Drop it; keep an edit if one is needed.
+        if (!sameBody(known, current)) place(updateJob(type, row), now);
+        else pending.delete(key);
+        continue;
+      }
       if (!sameBody(known, current)) place(updateJob(type, row), now);
       else if (pending.has(key)) pending.delete(key);
     }
@@ -771,7 +806,10 @@ export function createSaveQueue() {
       } else if (flight.op === 'delete') {
         const saved = flight.type === 'bed' ? savedBeds : savedObstacles;
         saved.delete(flight.id);
+        if (flight.type === 'bed') delete savedPlants[String(flight.id)];
+        const follow = flight.next;
         inflight.delete(request.key);
+        if (follow) pending.set(flight.key, follow);
       } else if (flight.op === 'assign' || flight.op === 'archive') {
         const id = String(flight.id);
         const names = [...(savedPlants[id] || [])];

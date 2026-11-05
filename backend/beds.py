@@ -7,6 +7,7 @@ when the garden is read.
 """
 
 import json
+import math
 from contextlib import closing
 
 from fastapi import APIRouter, HTTPException, Request
@@ -83,6 +84,63 @@ def _number(value) -> float | None:
     return float(value)
 
 
+def _bulge(point: dict) -> float:
+    if not isinstance(point, dict):
+        return 0.0
+    value = _number(point.get("bulge"))
+    return 0.0 if value is None else value
+
+
+def _sample_edge(start: dict, end: dict) -> list | None:
+    """Points along one side, matching the canvas curve sampler."""
+    if not isinstance(start, dict) or not isinstance(end, dict):
+        return None
+    x0, y0 = _number(start.get("x")), _number(start.get("y"))
+    x1, y1 = _number(end.get("x")), _number(end.get("y"))
+    if None in (x0, y0, x1, y1):
+        return None
+    bulge = _bulge(start)
+    dx, dy = x1 - x0, y1 - y0
+    length = math.hypot(dx, dy)
+    if length < 1e-9 or bulge == 0.0:
+        return [{"x": x1, "y": y1}]
+    nx, ny = -dy / length, dx / length
+    cx = (x0 + x1) / 2 + 2 * bulge * nx
+    cy = (y0 + y1) / 2 + 2 * bulge * ny
+    steps = min(64, max(4, math.ceil((length + 2 * abs(bulge)) / (1 / 12))))
+    samples = []
+    for step in range(1, steps + 1):
+        t = step / steps
+        u = 1 - t
+        samples.append({
+            "x": u * u * x0 + 2 * u * t * cx + t * t * x1,
+            "y": u * u * y0 + 2 * u * t * cy + t * t * y1,
+        })
+    return samples
+
+
+def _sample_outline(points: list) -> list | None:
+    if not points or not isinstance(points[0], dict):
+        return None
+    x0, y0 = _number(points[0].get("x")), _number(points[0].get("y"))
+    if x0 is None or y0 is None:
+        return None
+    outline = [{"x": x0, "y": y0}]
+    count = len(points)
+    for index, start in enumerate(points):
+        samples = _sample_edge(start, points[(index + 1) % count])
+        if samples is None:
+            return None
+        outline.extend(samples)
+    if (
+        len(outline) > 1
+        and outline[-1]["x"] == outline[0]["x"]
+        and outline[-1]["y"] == outline[0]["y"]
+    ):
+        outline.pop()
+    return outline
+
+
 def _shoelace(points: list) -> float | None:
     total = 0.0
     count = len(points)
@@ -116,12 +174,14 @@ def _outline_points(bed: dict) -> list | None:
 def bed_area(bed: dict) -> float:
     """Square feet, using the same rule as the canvas.
 
-    A polygon uses the shoelace of its outline. Anything else is width times
+    A polygon uses the shoelace of its outline. A side with a bulge is sampled
+    along that curve first, about an inch apart. Anything else is width times
     height. The legacy document still passes ``shape`` and ``points``.
     """
     points = _outline_points(bed)
     if points is not None:
-        area = _shoelace(points)
+        sampled = _sample_outline(points)
+        area = _shoelace(sampled) if sampled is not None else None
         if area is not None:
             return round(area, 4)
     width = _number(bed.get("w")) or 0.0
@@ -222,13 +282,21 @@ def _plain_number(value, label: str):
     return json_number(number)
 
 
-def _point(value, label: str) -> dict:
-    if not isinstance(value, dict) or set(value) != {"x", "y"}:
+def _point(value, label: str, allow_bulge: bool = False) -> dict:
+    if not isinstance(value, dict):
         raise HTTPException(status_code=400, detail=f"{label} needs x and y")
-    return {
+    allowed = {"x", "y", "bulge"} if allow_bulge else {"x", "y"}
+    if set(value) - allowed or "x" not in value or "y" not in value:
+        raise HTTPException(status_code=400, detail=f"{label} needs x and y")
+    cleaned = {
         "x": _plain_number(value["x"], f"{label} x"),
         "y": _plain_number(value["y"], f"{label} y"),
     }
+    if allow_bulge and "bulge" in value and value["bulge"] not in (None, 0):
+        bulge = _plain_number(value["bulge"], f"{label} bulge")
+        if bulge != 0:
+            cleaned["bulge"] = bulge
+    return cleaned
 
 
 def _outline(body: dict) -> dict | None:
@@ -245,7 +313,7 @@ def _outline(body: dict) -> dict | None:
     points = outline.get("points")
     if not isinstance(points, list) or len(points) < 3:
         raise HTTPException(status_code=400, detail="outline needs at least 3 points")
-    cleaned = {"points": [_point(point, "A point") for point in points]}
+    cleaned = {"points": [_point(point, "A point", allow_bulge=True) for point in points]}
     if "pivot" in outline and outline["pivot"] is not None:
         cleaned["pivot"] = _point(outline["pivot"], "pivot")
     return cleaned
@@ -423,7 +491,8 @@ def update_bed(bed_id: int, body: dict) -> dict:
                 color = ?,
                 notes = ?,
                 area_sqft = ?,
-                outline = ?
+                outline = ?,
+                removed = 0
             WHERE id = ?
             """,
             (*_bed_values(bed), bed_id),

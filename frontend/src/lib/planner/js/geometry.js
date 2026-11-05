@@ -62,7 +62,7 @@ function polygonBounds(points) {
 }
 
 function syncPolygonBounds(bed) {
-  const b = polygonBounds(bed.points);
+  const b = polygonBounds(polygonOutline(bed));
   bed.x = b.x; bed.y = b.y; bed.w = b.w; bed.h = b.h;
 }
 
@@ -95,6 +95,111 @@ function polygonLocalFeet(bed, x, y) {
   return rotatePoint({ x, y }, polygonPivot(bed), -rotation);
 }
 
+// A side bows by `bulge` feet, stored on the corner where the side starts.
+// Positive is to the left of the corner-to-corner direction. The curve is a
+// quadratic whose midpoint sits that far off the straight side.
+function sideBulge(point) {
+  const bulge = point && typeof point.bulge === 'number' ? point.bulge : 0;
+  return Number.isFinite(bulge) ? bulge : 0;
+}
+
+function copyGardenPoint(point, dx, dy) {
+  const next = { x: point.x + (dx || 0), y: point.y + (dy || 0) };
+  const bulge = sideBulge(point);
+  if (bulge) next.bulge = bulge;
+  return next;
+}
+
+function edgeAxes(start, end) {
+  const dx = end.x - start.x, dy = end.y - start.y;
+  const length = Math.hypot(dx, dy);
+  if (length < 1e-9) return null;
+  return { length, nx: -dy / length, ny: dx / length };
+}
+
+function edgeControl(start, end) {
+  const bulge = sideBulge(start);
+  const axes = edgeAxes(start, end);
+  if (!axes || !bulge) return null;
+  return {
+    x: (start.x + end.x) / 2 + 2 * bulge * axes.nx,
+    y: (start.y + end.y) / 2 + 2 * bulge * axes.ny,
+  };
+}
+
+function quadraticAt(start, control, end, t) {
+  const u = 1 - t;
+  return {
+    x: u * u * start.x + 2 * u * t * control.x + t * t * end.x,
+    y: u * u * start.y + 2 * u * t * control.y + t * t * end.y,
+  };
+}
+
+// About one inch between samples, and never more than 64, so a long side stays cheap.
+function sampleEdge(start, end) {
+  const control = edgeControl(start, end);
+  if (!control) return [{ x: end.x, y: end.y }];
+  const axes = edgeAxes(start, end);
+  const span = axes.length + 2 * Math.abs(sideBulge(start));
+  const steps = Math.min(64, Math.max(4, Math.ceil(span / (1 / 12))));
+  const samples = [];
+  for (let i = 1; i <= steps; i++) samples.push(quadraticAt(start, control, end, i / steps));
+  return samples;
+}
+
+function polygonOutline(bed) {
+  const points = (bed && bed.points) || [];
+  if (!points.length) return [];
+  const outline = [{ x: points[0].x, y: points[0].y }];
+  for (let i = 0; i < points.length; i++) {
+    const start = points[i];
+    const end = points[(i + 1) % points.length];
+    sampleEdge(start, end).forEach(sample => outline.push(sample));
+  }
+  const last = outline[outline.length - 1];
+  if (outline.length > 1 && last.x === outline[0].x && last.y === outline[0].y) outline.pop();
+  return outline;
+}
+
+function polygonWorldOutline(bed) {
+  const outline = polygonOutline(bed);
+  const rotation = bed.rotation || 0;
+  if (!rotation) return outline;
+  const pivot = polygonPivot(bed);
+  return outline.map(point => rotatePoint(point, pivot, rotation));
+}
+
+function edgeLengthFeet(start, end) {
+  const samples = sampleEdge(start, end);
+  let length = 0;
+  let prev = start;
+  samples.forEach(sample => {
+    length += Math.hypot(sample.x - prev.x, sample.y - prev.y);
+    prev = sample;
+  });
+  return length;
+}
+
+function edgeMidpoint(start, end) {
+  const bulge = sideBulge(start);
+  const axes = edgeAxes(start, end);
+  const mx = (start.x + end.x) / 2;
+  const my = (start.y + end.y) / 2;
+  if (!axes || !bulge) return { x: mx, y: my };
+  return { x: mx + bulge * axes.nx, y: my + bulge * axes.ny };
+}
+
+function bulgeFromPointer(start, end, pointer) {
+  const axes = edgeAxes(start, end);
+  if (!axes) return 0;
+  const mx = (start.x + end.x) / 2;
+  const my = (start.y + end.y) / 2;
+  const offset = (pointer.x - mx) * axes.nx + (pointer.y - my) * axes.ny;
+  // A quarter-inch of slack straightens the side. The drag itself is not on the grid.
+  if (Math.abs(offset) < 0.02) return 0;
+  return offset;
+}
+
 function polygonCentroid(points) {
   let a = 0, cx = 0, cy = 0;
   for (let i = 0; i < points.length; i++) {
@@ -122,8 +227,52 @@ function polygonLabelPoint(points) {
   };
 }
 
+// Direction of the bed's length. A drawn bed can slope while its rotation stays 0,
+// and the long sides are often several short edges, so one edge is not the length.
+// The angle stays within upright reading range.
+function polygonLabelAngle(points) {
+  const spots = points || [];
+  if (spots.length < 2) return 0;
+  let mx = 0, my = 0;
+  for (const p of spots) { mx += p.x; my += p.y; }
+  mx /= spots.length;
+  my /= spots.length;
+  let xx = 0, xy = 0, yy = 0;
+  for (const p of spots) {
+    const dx = p.x - mx, dy = p.y - my;
+    xx += dx * dx;
+    xy += dx * dy;
+    yy += dy * dy;
+  }
+  let angle = 0.5 * Math.atan2(2 * xy, xx - yy);
+  if (angle >= Math.PI / 2) angle -= Math.PI;
+  return angle;
+}
+
+function polygonLabelFrame(points) {
+  const angle = polygonLabelAngle(points);
+  if (!points || points.length < 2) return { angle: 0, length: 0, thickness: 0 };
+  const alongX = Math.cos(angle);
+  const alongY = Math.sin(angle);
+  const acrossX = -alongY;
+  const acrossY = alongX;
+  let alongMin = Infinity;
+  let alongMax = -Infinity;
+  let acrossMin = Infinity;
+  let acrossMax = -Infinity;
+  for (const p of points) {
+    const along = p.x * alongX + p.y * alongY;
+    const across = p.x * acrossX + p.y * acrossY;
+    if (along < alongMin) alongMin = along;
+    if (along > alongMax) alongMax = along;
+    if (across < acrossMin) acrossMin = across;
+    if (across > acrossMax) acrossMax = across;
+  }
+  return { angle, length: alongMax - alongMin, thickness: acrossMax - acrossMin };
+}
+
 function bedArea(bed) {
-  if (isPolygon(bed)) return shoelaceArea(bed.points);
+  if (isPolygon(bed)) return shoelaceArea(polygonOutline(bed));
   return (bed.w || 0) * (bed.h || 0);
 }
 
@@ -166,20 +315,30 @@ function pointSegDist(p, a, b) {
 // `radius` uses the same units as `points`. Each end of the edge is left for
 // the corner handle, but never more than 30% of that edge, so a short edge
 // still has a middle that can take a new corner.
+function closestOnChain(point, chain) {
+  let best = null;
+  for (let i = 0; i < chain.length - 1; i++) {
+    const projected = closestPointOnSegment(point, chain[i], chain[i + 1]);
+    const distance = Math.hypot(point.x - projected.x, point.y - projected.y);
+    if (!best || distance < best.distance) best = { point: projected, distance };
+  }
+  return best;
+}
+
 function polygonEdgeInsertPoint(points, point, radius) {
   let best = null;
   for (let i = 0; i < points.length; i++) {
     const start = points[i];
     const end = points[(i + 1) % points.length];
-    const projected = closestPointOnSegment(point, start, end);
-    const distance = Math.hypot(point.x - projected.x, point.y - projected.y);
-    if (distance > radius) continue;
+    const chain = [{ x: start.x, y: start.y }].concat(sampleEdge(start, end));
+    const hit = closestOnChain(point, chain);
+    if (!hit || hit.distance > radius) continue;
     const edgeLength = Math.hypot(end.x - start.x, end.y - start.y);
     const keepOff = Math.min(radius, edgeLength * 0.3);
-    if (Math.hypot(projected.x - start.x, projected.y - start.y) <= keepOff) continue;
-    if (Math.hypot(projected.x - end.x, projected.y - end.y) <= keepOff) continue;
-    if (!best || distance < best.distance) {
-      best = { index: i, point: { x: projected.x, y: projected.y }, distance };
+    if (Math.hypot(hit.point.x - start.x, hit.point.y - start.y) <= keepOff) continue;
+    if (Math.hypot(hit.point.x - end.x, hit.point.y - end.y) <= keepOff) continue;
+    if (!best || hit.distance < best.distance) {
+      best = { index: i, point: { x: hit.point.x, y: hit.point.y }, distance: hit.distance };
     }
   }
   return best;

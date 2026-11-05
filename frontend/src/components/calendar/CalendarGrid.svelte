@@ -12,6 +12,7 @@
     yearMonths,
     type CalendarEntry,
   } from '$lib/domain/calendar.js';
+  import CropMark from '../crops/CropMark.svelte';
   import CalendarDay from './CalendarDay.svelte';
 
   let {
@@ -27,6 +28,7 @@
     to = '',
     focus = '',
     reveal = '',
+    marks,
     onSelect,
     onSelectDay,
     onSelectCrop,
@@ -43,6 +45,7 @@
     to?: string;
     focus?: string;
     reveal?: string;
+    marks?: Record<string, { id: number; icon: string; emoji: string }>;
     onSelect: (day: { date: string; crop: string }) => void;
     onSelectDay?: (date: string) => void;
     onSelectCrop?: (crop: string) => void;
@@ -104,16 +107,17 @@
     <div class="label head">Crop</div>
     <div class="date-gap" aria-hidden="true"></div>
     {#each rows as crop (crop || 'garden')}
+      {@const mark = marks?.[crop]}
       {#if onSelectCrop}
         <button
           type="button"
-          class={['label', { selected: activeCrop === crop }]}
+          class={['label', { marked: Boolean(mark), selected: activeCrop === crop }]}
           aria-pressed={activeCrop === crop}
           aria-label="{cropLabel(crop)}, {year}"
           onclick={() => onSelectCrop(crop)}
-        >{cropLabel(crop)}</button>
+        >{#if mark}<CropMark id={mark.id} icon={mark.icon} emoji={mark.emoji} />{/if}<span class="name">{cropLabel(crop)}</span></button>
       {:else}
-        <div class="label">{cropLabel(crop)}</div>
+        <div class={['label', { marked: Boolean(mark) }]}>{#if mark}<CropMark id={mark.id} icon={mark.icon} emoji={mark.emoji} />{/if}<span class="name">{cropLabel(crop)}</span></div>
       {/if}
     {/each}
   </div>
@@ -281,6 +285,17 @@
     align-items: center;
     color: #1f2937;
     font-size: 16px;
+  }
+
+  .label.marked {
+    gap: 6px;
+  }
+
+  .label.marked .name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   button.label {

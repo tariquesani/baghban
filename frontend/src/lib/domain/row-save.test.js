@@ -117,6 +117,32 @@ test('a pot sends diam and a traced bed sends its outline', () => {
   assert.equal('shape' in traced.body, false);
 });
 
+test('a bent side keeps its bulge on the outline', () => {
+  const queue = createSaveQueue();
+  queue.baseline(plan());
+  queue.observe(plan({
+    beds: [bed({
+      id: -2,
+      shape: 'polygon',
+      points: [
+        { x: 0, y: 0, bulge: 1.5 },
+        { x: 4, y: 0, bulge: 0 },
+        { x: 0, y: 3 },
+      ],
+      pivot: { x: 1, y: 1 },
+    })],
+  }), 0);
+  const [traced] = queue.take(0);
+  assert.deepEqual(traced.body.outline, {
+    points: [
+      { x: 0, y: 0, bulge: 1.5 },
+      { x: 4, y: 0 },
+      { x: 0, y: 3 },
+    ],
+    pivot: { x: 1, y: 1 },
+  });
+});
+
 test('plant names wait for a stand-in, then the new crop is assigned', () => {
   const queue = createSaveQueue();
   const saved = bed({ id: 4, name: 'Herbs', plants: ['Mint'] });
@@ -185,6 +211,66 @@ test('garden size and plot fields save settings, not the scene', () => {
   assert.deepEqual(settings.body.plot.calibration, { lengthFt: 10 });
   assert.equal(settings.body.beds, undefined);
   assert.equal(settings.body.nextId, undefined);
+});
+
+test('undo before the delete is sent leaves the row alone', () => {
+  const queue = createSaveQueue();
+  const herbs = bed({ id: 4, name: 'Herbs' });
+  queue.baseline(plan({ beds: [herbs] }));
+  queue.observe(plan(), 0);
+  queue.observe(plan({ beds: [herbs] }), 5);
+  assert.equal(queue.take(5).length, 0);
+});
+
+test('undoing a delete puts the bed and its crops back', () => {
+  const queue = createSaveQueue();
+  const herbs = bed({ id: 4, name: 'Herbs', plants: ['Basil'] });
+  queue.baseline(plan({ beds: [herbs] }));
+  queue.observe(plan(), 0);
+  const [removal] = queue.take(0);
+  assert.equal(removal.method, 'DELETE');
+  queue.observe(plan({ beds: [herbs] }), 10);
+  assert.equal(queue.take(10).length, 0);
+  queue.succeeded(removal, {}, 20);
+  const [restored] = queue.take(20);
+  assert.equal(restored.path, '/beds/4');
+  assert.equal(restored.body.name, 'Herbs');
+  queue.succeeded(restored, { id: 4 }, 30);
+  const [crop] = queue.take(30 + SAVE_QUIET_MS);
+  assert.equal(crop.path, '/beds/4/crops');
+  assert.equal(crop.body.name, 'Basil');
+});
+
+test('undo after the delete has finished still restores the bed', () => {
+  const queue = createSaveQueue();
+  const herbs = bed({ id: 4, name: 'Herbs' });
+  queue.baseline(plan({ beds: [herbs] }));
+  queue.observe(plan(), 0);
+  const [removal] = queue.take(0);
+  queue.succeeded(removal, {}, 10);
+  assert.equal(queue.take(10).length, 0);
+  queue.observe(plan({ beds: [herbs] }), 20);
+  const [restored] = queue.take(20);
+  assert.equal(restored.method, 'PUT');
+  assert.equal(restored.path, '/beds/4');
+  assert.equal(restored.body.name, 'Herbs');
+});
+
+test('undoing a deleted obstacle inserts it again', () => {
+  const queue = createSaveQueue();
+  const shed = { id: 2, name: 'Shed', x: 1, y: 1, w: 2, h: 2, color: '#888' };
+  queue.baseline(plan({ obstacles: [shed] }));
+  queue.observe(plan(), 0);
+  const [removal] = queue.take(0);
+  queue.succeeded(removal, {}, 10);
+  queue.observe(plan({ obstacles: [shed] }), 20);
+  const [insert] = queue.take(20);
+  assert.equal(insert.method, 'PUT');
+  assert.equal(insert.path, '/obstacles');
+  assert.equal('id' in insert.body, false);
+  assert.equal(insert.body.name, 'Shed');
+  const outcome = queue.succeeded(insert, { id: 9 }, 30);
+  assert.deepEqual(outcome.stamp, { type: 'obstacle', from: 2, to: 9 });
 });
 
 test('removing a saved bed or obstacle deletes that row', () => {

@@ -7,7 +7,8 @@
   import RecordDialog from '../components/calendar/RecordDialog.svelte';
   import { listAssignments, listBeds } from '$lib/api/beds.js';
   import { listCalendarEntries } from '$lib/api/calendar.js';
-  import { calendarRows, selectionEntries, type BedCrop, type CalendarEntry, type CalendarSelection } from '$lib/domain/calendar.js';
+  import { listCrops } from '$lib/api/crops.js';
+  import { calendarRows, cropMarks, selectionEntries, type BedCrop, type CalendarEntry, type CalendarSelection } from '$lib/domain/calendar.js';
   import { calendarRecord, isEntryKind } from '$lib/domain/entryForm.js';
 
   let {
@@ -31,6 +32,7 @@
   let kind = $state('');
   let selected = $state<CalendarSelection | null>(null);
   let saved = $state<CalendarEntry[]>([]);
+  let catalogue = $state.raw<unknown[]>([]);
   let plantings = $state.raw<BedCrop[]>([]);
   let grid = $state<{ showCurrentMonth: () => void } | null>(null);
   let detail = $state<CalendarEntry | null>(null);
@@ -39,6 +41,7 @@
 
   const entries = $derived(saved);
   const rows = $derived(calendarRows(entries, year, plantings));
+  const marks = $derived(cropMarks(catalogue));
   const shown = $derived(selectionEntries(entries, selected, year, kind));
   const recorded = $derived(selectionEntries(entries, selected, year, ''));
 
@@ -107,6 +110,18 @@
       bedName,
     );
   }
+
+  $effect(() => {
+    let cancel = false;
+    listCrops()
+      .then((rows) => {
+        if (!cancel && Array.isArray(rows)) catalogue = rows;
+      })
+      .catch(() => {});
+    return () => {
+      cancel = true;
+    };
+  });
 
   $effect(() => {
     const query = search;
@@ -178,6 +193,7 @@
     selectedCrop={selected?.scope === 'cell' ? selected.crop : ''}
     activeDate={selected?.scope === 'day' ? selected.date : ''}
     activeCrop={selected?.scope === 'crop' ? selected.crop : ''}
+    {marks}
     onSelect={(day) => (selected = { scope: 'cell', date: day.date, crop: day.crop })}
     onSelectDay={(date) => (selected = { scope: 'day', date })}
     onSelectCrop={(crop) => (selected = { scope: 'crop', crop })}

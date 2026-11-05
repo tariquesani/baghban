@@ -136,7 +136,11 @@ function imagePixelToWorld(ix, iy) {
 }
 
 function scaleWorld(ratio) {
-  const scalePt = p => { p.x *= ratio; p.y *= ratio; };
+  const scalePt = p => {
+    p.x *= ratio;
+    p.y *= ratio;
+    if (typeof p.bulge === 'number') p.bulge *= ratio;
+  };
   beds.forEach(b => {
     if (isPolygon(b)) {
       b.points.forEach(scalePt);
@@ -396,10 +400,9 @@ function closeDraft() {
 
 function clampPolygonMove(bed, points, pivot, dx, dy) {
   const rotation = bed.rotation || 0;
-  const base = points.map(point => {
-    const placed = { x: point.x, y: point.y };
-    return rotation ? rotatePoint(placed, pivot || polygonCentroid(points), rotation) : placed;
-  });
+  const anchor = pivot || polygonCentroid(points);
+  const base = polygonOutline({ points }).map(point =>
+    rotation ? rotatePoint(point, anchor, rotation) : point);
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
   base.forEach(point => {
     minX = Math.min(minX, point.x); minY = Math.min(minY, point.y);
@@ -420,8 +423,8 @@ function polygonSummary(item) {
     const prev = item.points[(i - 1 + n) % n];
     const cur = item.points[i];
     const next = item.points[(i + 1) % n];
-    const a = formatFeetInches(Math.hypot(cur.x - prev.x, cur.y - prev.y));
-    const b = formatFeetInches(Math.hypot(next.x - cur.x, next.y - cur.y));
+    const a = formatFeetInches(edgeLengthFeet(prev, cur));
+    const b = formatFeetInches(edgeLengthFeet(cur, next));
     edgeNote = ` · edges ${a} and ${b}`;
   }
   return {

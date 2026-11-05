@@ -21,6 +21,7 @@ let edgeInsertBedId = null;
 let edgeInsertPressAt = 0;
 let edgeInsertPressBedId = null;
 let edgeInsertPressCount = 0;
+let bendCandidate = null;
 let dragOriginPoints = null;
 let dragOriginPivot = null;
 let dragStartFeet = null;
@@ -81,7 +82,11 @@ function undoLast() {
   if (!getSelected()) select(null);
   else syncPanel();
   updateCalibReadout();
-  renderLists(); draw();
+  renderLists();
+  draw();
+  // renderLists already notes the plan; call again so a restored delete is
+  // always handed to the save queue even if selection publish was a no-op.
+  notePlanChanged();
 }
 // ─── Data ────────────────────────────────────────────────────────────────────
 let obstacles = [];

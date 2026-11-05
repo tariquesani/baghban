@@ -30,15 +30,18 @@ function text(value) {
 
 /**
  * @param {unknown} value
- * @returns {{ x: number, y: number } | null}
+ * @returns {{ x: number, y: number, bulge?: number } | null}
  */
 function point(value) {
   if (!value || typeof value !== 'object') return null;
-  const spot = /** @type {{ x?: unknown, y?: unknown }} */ (value);
+  const spot = /** @type {{ x?: unknown, y?: unknown, bulge?: unknown }} */ (value);
   const x = finite(spot.x);
   const y = finite(spot.y);
   if (x === null || y === null) return null;
-  return { x, y };
+  const next = { x, y };
+  const bulge = finite(spot.bulge);
+  if (bulge) next.bulge = bulge;
+  return next;
 }
 
 /**

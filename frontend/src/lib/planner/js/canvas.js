@@ -247,8 +247,26 @@ function addCornerAtPointer(bed, wx, wy) {
   const edge = polygonEdgeInsertPoint(bed.points, local, edgeInsertRadiusFeet());
   if (!edge) return;
   saveHistory();
+  delete bed.points[edge.index].bulge;
   bed.points.splice(edge.index + 1, 0, edge.point);
   selectedVertex = edge.index + 1;
+  syncPolygonBounds(bed);
+  updatePolyPanel();
+  renderLists();
+  draw();
+}
+
+function deletePolygonCorner(bed, index) {
+  if (!bed.points || bed.points.length <= 3) {
+    alert('A bed needs at least 3 corners.');
+    return;
+  }
+  if (!confirm('Delete this corner? The sides that met here become one straight side.')) return;
+  saveHistory();
+  const previous = (index - 1 + bed.points.length) % bed.points.length;
+  delete bed.points[previous].bulge;
+  bed.points.splice(index, 1);
+  selectedVertex = index >= bed.points.length ? bed.points.length - 1 : index;
   syncPolygonBounds(bed);
   updatePolyPanel();
   renderLists();
@@ -258,7 +276,7 @@ function addCornerAtPointer(bed, wx, wy) {
 function polygonFitsGarden(bed, rotation) {
   const previous = bed.rotation;
   bed.rotation = rotation;
-  const fits = polygonWorldPoints(bed).every(point =>
+  const fits = polygonWorldOutline(bed).every(point =>
     point.x >= -0.01 && point.y >= -0.01 && point.x <= garden.width + 0.01 && point.y <= garden.height + 0.01);
   bed.rotation = previous;
   return fits;
@@ -345,8 +363,16 @@ function drawPolygonBed(b) {
   ctx.translate(-ft(pivot.x), -ft(pivot.y));
   const pts = b.points.map(p => ({ x: ft(p.x), y: ft(p.y) }));
   const path = () => {
+    const corners = b.points;
     ctx.beginPath();
-    pts.forEach((p, i) => i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y));
+    ctx.moveTo(ft(corners[0].x), ft(corners[0].y));
+    for (let i = 0; i < corners.length; i++) {
+      const start = corners[i];
+      const end = corners[(i + 1) % corners.length];
+      const control = edgeControl(start, end);
+      if (control) ctx.quadraticCurveTo(ft(control.x), ft(control.y), ft(end.x), ft(end.y));
+      else ctx.lineTo(ft(end.x), ft(end.y));
+    }
     ctx.closePath();
   };
 
@@ -371,30 +397,48 @@ function drawPolygonBed(b) {
   path(); ctx.stroke();
   ctx.setLineDash([]);
 
-  const label = polygonLabelPoint(b.points);
+  const outline = polygonOutline(b);
+  const label = polygonLabelPoint(outline);
+  const frame = polygonLabelFrame(outline);
   const area = bedArea(b);
+  const nameFs = clamp(10, 13, ft(frame.thickness) / 5);
+  const sizeFs = clamp(9, 11, ft(frame.thickness) / 6);
+  const emojis = empty ? [] : cropEmojis(b.plants);
+  ctx.save();
+  path();
+  ctx.clip();
+  ctx.translate(ft(label.x), ft(label.y));
+  ctx.rotate(frame.angle);
   ctx.fillStyle = empty ? '#3d4742' : '#fff';
-  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  ctx.font = `bold ${clamp(10, 13, ft(Math.min(b.w, b.h)) / 5)}px sans-serif`;
-  ctx.fillText(b.name, ft(label.x), ft(label.y) - 8);
-  ctx.font = `${clamp(9, 11, ft(Math.min(b.w, b.h)) / 6)}px sans-serif`;
-  ctx.globalAlpha = 0.85;
-  ctx.fillText(`${area.toFixed(1)} sq ft`, ft(label.x), ft(label.y) + 8);
-  ctx.globalAlpha = 1;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.font = `bold ${nameFs}px sans-serif`;
   if (empty) {
-    ctx.fillText('Empty', ft(label.x), ft(label.y) + 24);
+    ctx.fillText(b.name, 0, -(sizeFs + 4));
+    ctx.font = `${sizeFs}px sans-serif`;
+    ctx.globalAlpha = 0.85;
+    ctx.fillText(`${area.toFixed(1)} sq ft`, 0, 0);
+    ctx.globalAlpha = 1;
+    ctx.fillText('Empty', 0, sizeFs + 4);
   } else {
-    ctx.save();
-    path(); ctx.clip();
-    drawCropEmojis(
-      cropEmojis(b.plants),
-      ft(label.x),
-      ft(label.y) + 18,
-      Math.max(12, ft(Math.min(b.w, b.h)) * 0.8),
-      Math.max(12, ft(Math.min(b.w, b.h)) * 0.45),
-    );
-    ctx.restore();
+    const nameY = emojis.length ? -sizeFs : -sizeFs * 0.6;
+    const areaY = emojis.length ? sizeFs * 0.15 : sizeFs * 0.6;
+    ctx.fillText(b.name, 0, nameY);
+    ctx.font = `${sizeFs}px sans-serif`;
+    ctx.globalAlpha = 0.85;
+    ctx.fillText(`${area.toFixed(1)} sq ft`, 0, areaY);
+    ctx.globalAlpha = 1;
+    if (emojis.length) {
+      drawCropEmojis(
+        emojis,
+        0,
+        areaY + sizeFs * 0.6,
+        Math.max(12, ft(frame.length) * 0.85),
+        Math.max(12, ft(frame.thickness) * 0.4),
+      );
+    }
   }
+  ctx.restore();
   ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
   ctx.restore();
 
@@ -425,13 +469,16 @@ function drawVertexEdgeLabels(b) {
   [ [prev, cur], [cur, next] ].forEach(([a, c]) => {
     ctx.beginPath();
     ctx.moveTo(ft(a.x), ft(a.y));
-    ctx.lineTo(ft(c.x), ft(c.y));
+    const control = edgeControl(a, c);
+    if (control) ctx.quadraticCurveTo(ft(control.x), ft(control.y), ft(c.x), ft(c.y));
+    else ctx.lineTo(ft(c.x), ft(c.y));
     ctx.strokeStyle = '#1f2933';
     ctx.lineWidth = 3 / viewZoom;
     ctx.stroke();
-    const text = formatFeetInches(Math.hypot(c.x - a.x, c.y - a.y));
-    const mx = ft((a.x + c.x) / 2);
-    const my = ft((a.y + c.y) / 2);
+    const text = formatFeetInches(edgeLengthFeet(a, c));
+    const mid = edgeMidpoint(a, c);
+    const mx = ft(mid.x);
+    const my = ft(mid.y);
     ctx.font = `bold ${Math.round(13 / viewZoom)}px sans-serif`;
     const pad = 4 / viewZoom;
     const w = ctx.measureText(text).width + pad * 2;
@@ -473,7 +520,9 @@ function drawBed(b) {
   ctx.shadowOffsetX = empty ? 0 : 2; ctx.shadowOffsetY = empty ? 0 : 2;
 
   ctx.fillStyle = empty ? 'rgba(255,255,255,0.55)' : b.color;
-  roundRect(x, y, w, h, 5); ctx.fill();
+  if (!isPot) {
+    roundRect(x, y, w, h, 5); ctx.fill();
+  }
 
   ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0;
   ctx.shadowOffsetX = 0; ctx.shadowOffsetY = 0;
@@ -654,16 +703,50 @@ function beginRotate(item, pointerX, pointerY) {
   rotateStartRot = item.rotation || 0;
 }
 
+function assignCorner(bed, index, next) {
+  const current = bed.points[index];
+  const placed = { x: next.x, y: next.y };
+  const bulge = sideBulge(current);
+  if (bulge) placed.bulge = bulge;
+  bed.points[index] = placed;
+  syncPolygonBounds(bed);
+  if (!polygonFitsGarden(bed, bed.rotation || 0)) {
+    bed.points[index] = current;
+    syncPolygonBounds(bed);
+    return false;
+  }
+  return true;
+}
+
 function movePolygonVertex(bed, index, pointerX, pointerY) {
   const local = polygonLocalFeet(bed, pointerX / SCALE, pointerY / SCALE);
   const next = (bed.rotation || 0)
     ? { x: snap(local.x), y: snap(local.y) }
     : pointerFeet(pointerX, pointerY);
-  const previous = bed.points[index];
-  bed.points[index] = next;
+  assignCorner(bed, index, next);
+}
+
+function beginBend(bed, index) {
+  saveHistory();
+  dragging = bed;
+  dragMode = 'bend';
+  dragVertex = index;
+  edgeInsertBedId = null;
+  bendCandidate = null;
+}
+
+function applyBend(bed, index, pointerX, pointerY) {
+  const local = polygonLocalFeet(bed, pointerX / SCALE, pointerY / SCALE);
+  const start = bed.points[index];
+  const end = bed.points[(index + 1) % bed.points.length];
+  const nextBulge = bulgeFromPointer(start, end, local);
+  const previous = sideBulge(start);
+  if (nextBulge) start.bulge = nextBulge;
+  else delete start.bulge;
   syncPolygonBounds(bed);
-  if ((bed.rotation || 0) && !polygonFitsGarden(bed, bed.rotation)) {
-    bed.points[index] = previous;
+  if (!polygonFitsGarden(bed, bed.rotation || 0)) {
+    if (previous) start.bulge = previous;
+    else delete start.bulge;
     syncPolygonBounds(bed);
   }
 }
@@ -692,7 +775,7 @@ function hitTest(wx, wy) {
     const b = beds[i];
     if (isPolygon(b)) {
       const local = polygonLocalFeet(b, wx / SCALE, wy / SCALE);
-      if (pointInPolygon(local.x, local.y, b.points)) return { type:'bed', item:b };
+      if (pointInPolygon(local.x, local.y, polygonOutline(b))) return { type:'bed', item:b };
     } else if (inRotated(b)) return { type:'bed', item:b };
   }
   for (let i = obstacles.length - 1; i >= 0; i--)
@@ -730,6 +813,8 @@ function pointerCursor() {
   if (selItem && isPolygon(selItem)) {
     if (hitPolygonRotateHandle(wpx, wpy, selItem)) return 'default';
     if (hitPolygonVertex(selItem, wpx, wpy, 12 / viewZoom) >= 0) return 'default';
+    const local = polygonLocalFeet(selItem, wpx / SCALE, wpy / SCALE);
+    if (polygonEdgeInsertPoint(selItem.points, local, edgeInsertRadiusFeet())) return 'grab';
   }
   if (selItem && !isPolygon(selItem) && selItem.type !== 'pot' && hitRotateHandle(wpx, wpy, selItem)) return 'default';
   const hit = hitTest(wpx, wpy);
@@ -741,7 +826,7 @@ function pointerCursor() {
 function refreshCursor() {
   if (calibDrag || isPanning) canvas.style.cursor = 'grabbing';
   else if (isRotating) canvas.style.cursor = 'grabbing';
-  else if (dragging && dragMode === 'vertex') canvas.style.cursor = 'grabbing';
+  else if (dragging && (dragMode === 'vertex' || dragMode === 'bend')) canvas.style.cursor = 'grabbing';
   else if (dragging) canvas.style.cursor = 'move';
   else canvas.style.cursor = pointerCursor();
 }
@@ -773,6 +858,7 @@ function finishPointerGesture(event) {
   dragging = null;
   dragMode = null;
   dragVertex = -1;
+  bendCandidate = null;
   const selected = getSelected();
   if (selected && selectedObj.type === 'bed' && isPolygon(selected)) updatePolyPanel();
   dragOriginPoints = null;
@@ -882,7 +968,9 @@ canvas.addEventListener('mousedown', e => {
   }
   if (pressTarget && selItem && pressTarget.id === selItem.id && isPolygon(selItem)) {
     const local = polygonLocalFeet(selItem, wpx / SCALE, wpy / SCALE);
-    if (polygonEdgeInsertPoint(selItem.points, local, edgeInsertRadiusFeet())) {
+    const edge = polygonEdgeInsertPoint(selItem.points, local, edgeInsertRadiusFeet());
+    if (edge) {
+      bendCandidate = { bedId: selItem.id, index: edge.index, sx, sy };
       refreshCursor();
       return;
     }
@@ -921,7 +1009,7 @@ canvas.addEventListener('mousedown', e => {
       } else {
         dragMode = 'move';
         selectedVertex = -1;
-        dragOriginPoints = hit.item.points.map(p => ({ x: p.x, y: p.y }));
+        dragOriginPoints = hit.item.points.map(p => copyGardenPoint(p));
         dragOriginPivot = hit.item.pivot ? { x: hit.item.pivot.x, y: hit.item.pivot.y } : null;
         dragStartFeet = { x: snap(wpx / SCALE), y: snap(wpy / SCALE) };
       }
@@ -952,16 +1040,27 @@ canvas.addEventListener('mousemove', e => {
     refreshCursor();
     return;
   }
+  if (bendCandidate) {
+    const dist = Math.hypot(sx - bendCandidate.sx, sy - bendCandidate.sy);
+    if (dist >= 5) {
+      const bed = beds.find(item => item.id === bendCandidate.bedId);
+      const index = bendCandidate.index;
+      if (bed && isPolygon(bed)) beginBend(bed, index);
+      else bendCandidate = null;
+    }
+  }
   if (isRotating) {
     applyDragRotation(wpx, wpy, e.shiftKey);
   } else if (dragging && isPolygon(dragging)) {
-    if (dragMode === 'vertex') {
+    if (dragMode === 'bend') {
+      applyBend(dragging, dragVertex, wpx, wpy);
+    } else if (dragMode === 'vertex') {
       movePolygonVertex(dragging, dragVertex, wpx, wpy);
     } else if (dragOriginPoints) {
       const rawDx = snap(wpx / SCALE) - dragStartFeet.x;
       const rawDy = snap(wpy / SCALE) - dragStartFeet.y;
       const { dx, dy } = clampPolygonMove(dragging, dragOriginPoints, dragOriginPivot, rawDx, rawDy);
-      dragging.points = dragOriginPoints.map(p => ({ x: p.x + dx, y: p.y + dy }));
+      dragging.points = dragOriginPoints.map(p => copyGardenPoint(p, dx, dy));
       if (dragOriginPivot) dragging.pivot = { x: dragOriginPivot.x + dx, y: dragOriginPivot.y + dy };
       syncPolygonBounds(dragging);
     }
@@ -1072,6 +1171,7 @@ canvas.addEventListener('mouseup', e => {
       // Begin pinch — cancel any ongoing item drag
       if (calibDrag) { calibDrag = null; draw(); }
       dragging = null; isPanning = false; touchHit = null;
+      bendCandidate = null;
       pinchDist = getTouchDist(e.touches);
       pinchMid  = getTouchMid(e.touches, r);
       return;
@@ -1122,6 +1222,13 @@ canvas.addEventListener('mouseup', e => {
         draw();
         return;
       }
+      const local = polygonLocalFeet(selItem, wpx / SCALE, wpy / SCALE);
+      const edge = polygonEdgeInsertPoint(selItem.points, local, edgeInsertRadiusFeet());
+      if (edge) {
+        bendCandidate = { bedId: selItem.id, index: edge.index, sx: t.clientX, sy: t.clientY };
+        touchHit = { type: 'bed', item: selItem };
+        return;
+      }
     }
     if (selItem && !isPolygon(selItem) && selItem.type !== 'pot' && hitRotateHandle(wpx, wpy, selItem)) {
       beginRotate(selItem, wpx, wpy);
@@ -1141,7 +1248,7 @@ canvas.addEventListener('mouseup', e => {
         } else {
           dragMode = 'move';
           selectedVertex = -1;
-          dragOriginPoints = touchHit.item.points.map(p => ({ x: p.x, y: p.y }));
+          dragOriginPoints = touchHit.item.points.map(p => copyGardenPoint(p));
           dragOriginPivot = touchHit.item.pivot ? { x: touchHit.item.pivot.x, y: touchHit.item.pivot.y } : null;
           dragStartFeet = { x: snap(wpx / SCALE), y: snap(wpy / SCALE) };
         }
@@ -1206,6 +1313,13 @@ canvas.addEventListener('mouseup', e => {
     const t  = e.touches[0];
     const dx = t.clientX - touchStart.x, dy = t.clientY - touchStart.y;
     if (Math.sqrt(dx*dx + dy*dy) > 5) touchMoved = true;
+
+    if (bendCandidate && touchMoved) {
+      const bed = beds.find(item => item.id === bendCandidate.bedId);
+      const index = bendCandidate.index;
+      if (bed && isPolygon(bed)) beginBend(bed, index);
+      else bendCandidate = null;
+    }
 
     if (calibDrag) {
       const sx = t.clientX - r.left, sy = t.clientY - r.top;
@@ -1276,6 +1390,7 @@ canvas.addEventListener('mouseup', e => {
       select(null);
     }
     isPanning = false;
+    bendCandidate = null;
     if (dragging) canvas.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
     else { dragging = null; renderLists(); draw(); }
     touchHit = null;
@@ -1348,7 +1463,7 @@ function nudgePolygonBed(bed, dx, dy) {
   const pivot = bed.pivot ? { x: bed.pivot.x, y: bed.pivot.y } : null;
   const clamped = clampPolygonMove(bed, bed.points, pivot, dx, dy);
   const local = localDelta(clamped.dx, clamped.dy, bed.rotation || 0);
-  bed.points = bed.points.map(point => ({ x: point.x + local.dx, y: point.y + local.dy }));
+  bed.points = bed.points.map(point => copyGardenPoint(point, local.dx, local.dy));
   if (bed.pivot) bed.pivot = { x: bed.pivot.x + local.dx, y: bed.pivot.y + local.dy };
   syncPolygonBounds(bed);
 }
@@ -1358,13 +1473,7 @@ function nudgePolygonCorner(bed, index, dx, dy) {
   const next = polygonLocalFeet(bed,
     Math.max(0, Math.min(garden.width, world.x + dx)),
     Math.max(0, Math.min(garden.height, world.y + dy)));
-  const previous = bed.points[index];
-  bed.points[index] = next;
-  syncPolygonBounds(bed);
-  if ((bed.rotation || 0) && !polygonFitsGarden(bed, bed.rotation)) {
-    bed.points[index] = previous;
-    syncPolygonBounds(bed);
-  }
+  assignCorner(bed, index, next);
 }
 
 function nudgeSelection(dx, dy) {
@@ -1447,6 +1556,7 @@ document.addEventListener('keydown', e => {
   const tag = document.activeElement.tagName;
   if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
   if (e.key === 'Delete' || e.key === 'Backspace') {
+    if (e.repeat) return;
     e.preventDefault();
     deleteSelected();
   }

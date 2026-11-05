@@ -150,6 +150,31 @@ test('a polygon outline and a pot become canvas shapes', () => {
   assert.equal(scene.beds[1].shape, undefined);
 });
 
+test('a bent side keeps its bulge and drops a straight side', () => {
+  const scene = gardenScene({
+    garden: { width: 20, height: 18, scale: 'plan', widthText: '', heightText: '' },
+    plot: null,
+    beds: [{
+      id: 2,
+      name: 'Patch',
+      kind: 'bed',
+      shape: 'polygon',
+      points: [
+        { x: 0, y: 0, bulge: 1.5 },
+        { x: 4, y: 0, bulge: 0 },
+        { x: 0, y: 3 },
+      ],
+    }],
+    obstacles: [],
+  });
+
+  assert.deepEqual(scene.beds[0].points, [
+    { x: 0, y: 0, bulge: 1.5 },
+    { x: 4, y: 0 },
+    { x: 0, y: 3 },
+  ]);
+});
+
 test('a removed bed stays off the map and a blank garden keeps the canvas size', () => {
   const scene = gardenScene({
     garden: {

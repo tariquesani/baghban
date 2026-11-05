@@ -186,6 +186,30 @@ export function cropLabel(crop) {
 }
 
 /**
+ * Icon and emoji for each catalogue name, so a calendar row can show a mark.
+ * The dashboard grid does not use this. Archived crops stay when they are in
+ * the list, so an older row can still match.
+ * @param {unknown} crops
+ * @returns {Record<string, { id: number, icon: string, emoji: string }>}
+ */
+export function cropMarks(crops) {
+  /** @type {Record<string, { id: number, icon: string, emoji: string }>} */
+  const marks = {};
+  if (!Array.isArray(crops)) return marks;
+  for (const crop of crops) {
+    if (!crop || typeof crop !== 'object' || typeof crop.name !== 'string') continue;
+    const name = crop.name.trim();
+    if (!name || typeof crop.id !== 'number') continue;
+    marks[name] = {
+      id: crop.id,
+      icon: typeof crop.icon === 'string' ? crop.icon : '',
+      emoji: typeof crop.emoji === 'string' ? crop.emoji : '',
+    };
+  }
+  return marks;
+}
+
+/**
  * @param {string[]} kinds
  * @returns {{ kind: string, points: string }[]}
  */

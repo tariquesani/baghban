@@ -64,7 +64,7 @@ function currentPlan() {
     beds: beds.map(b => ({
       ...b,
       plants: [...(b.plants || [])],
-      points: b.points ? b.points.map(p => ({ x: p.x, y: p.y })) : undefined,
+      points: b.points ? b.points.map(p => copyGardenPoint(p)) : undefined,
     })),
     obstacles: obstacles.map(o => ({ ...o })),
     plot: plot.plotId ? {

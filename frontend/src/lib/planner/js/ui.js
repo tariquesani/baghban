@@ -322,7 +322,7 @@ function duplicateSelected() {
     const copy = { ...orig, id: newId, x: orig.x + 1, y: orig.y + 1,
                    plants: [...(orig.plants || [])], notes: orig.notes || '' };
     if (orig.points) {
-      copy.points = orig.points.map(p => ({ x: p.x + 1, y: p.y + 1 }));
+      copy.points = orig.points.map(p => copyGardenPoint(p, 1, 1));
       if (orig.pivot) copy.pivot = { x: orig.pivot.x + 1, y: orig.pivot.y + 1 };
       syncPolygonBounds(copy);
     }
@@ -340,6 +340,11 @@ function duplicateSelected() {
 function deleteSelected() {
   const item = getSelected();
   if (!item) return;
+  if (selectedObj.type === 'bed' && isPolygon(item)
+      && selectedVertex >= 0 && selectedVertex < item.points.length) {
+    deletePolygonCorner(item, selectedVertex);
+    return;
+  }
   if (!confirm('Remove this item?')) return;
   saveHistory();
   if (selectedObj.type === 'bed') beds = beds.filter(b => !isSelected(selectedObj, 'bed', b.id));

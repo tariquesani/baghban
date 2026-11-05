@@ -241,6 +241,56 @@ def test_rows_save_one_at_a_time(tmp_path, monkeypatch):
         assert client.get("/api/beds").json()[0]["name"] == "Mint"
 
 
+def test_a_bent_side_is_stored_and_changes_the_area(tmp_path, monkeypatch):
+    monkeypatch.setenv("BAGHBAN_DB", str(tmp_path / "baghban.db"))
+    points = [
+        {"x": 0, "y": 0, "bulge": 1},
+        {"x": 4, "y": 0},
+        {"x": 0, "y": 3},
+    ]
+    with TestClient(app) as client:
+        saved = client.put(
+            "/api/beds",
+            json={
+                "name": "Bowed",
+                "kind": "bed",
+                "x": 0,
+                "y": 0,
+                "w": 4,
+                "h": 3,
+                "outline": {"points": points, "pivot": PIVOT},
+            },
+        )
+        assert saved.status_code == 200
+        body = saved.json()
+        assert body["outline"]["points"] == points
+        assert body["outline"]["pivot"] == PIVOT
+        assert body["areaSqFt"] == 3.334
+        assert client.put(
+            "/api/beds",
+            json={
+                "name": "Bowed",
+                "kind": "bed",
+                "outline": {"points": [*TRIANGLE[:1], {"x": 4, "y": 0, "bulge": 1, "z": 2}, TRIANGLE[2]]},
+            },
+        ).status_code == 400
+
+
+def test_saving_a_removed_bed_puts_it_back_on_the_map(tmp_path, monkeypatch):
+    monkeypatch.setenv("BAGHBAN_DB", str(tmp_path / "baghban.db"))
+    with TestClient(app) as client:
+        created = client.put("/api/beds", json=herbs())
+        bed_id = created.json()["id"]
+        assert client.delete(f"/api/beds/{bed_id}").status_code == 204
+        assert client.get("/api/garden").status_code == 204
+
+        restored = client.put(f"/api/beds/{bed_id}", json={**herbs(), "id": bed_id})
+        assert restored.status_code == 200
+        assert restored.json()["removed"] is False
+        visible = client.get("/api/garden").json()
+        assert [bed["id"] for bed in visible["beds"]] == [bed_id]
+
+
 def test_active_assignments_keep_the_crop_date_and_maturity(tmp_path, monkeypatch):
     monkeypatch.setenv("BAGHBAN_DB", str(tmp_path / "baghban.db"))
     with TestClient(app) as client:
