@@ -1,4 +1,6 @@
 <script lang="ts">
+  import EntryDialog from '../components/calendar/EntryDialog.svelte';
+  import RecordDialog from '../components/calendar/RecordDialog.svelte';
   import CropMark from '../components/crops/CropMark.svelte';
   import ComingUp from '../components/home/ComingUp.svelte';
   import Gallery from '../components/home/Gallery.svelte';
@@ -83,6 +85,10 @@
   let assignments = $state.raw<Assignment[]>([]);
   let now = $state(new Date());
   let gardenReady = $state(false);
+  let detail = $state<CalendarEntry | null>(null);
+  let formEntry = $state<CalendarEntry | null>(null);
+  let entryOpen = $state(false);
+  let editSession = $state(0);
 
   let view = $derived(
     headerView({
@@ -107,6 +113,20 @@
   const season = $derived(seasonWeight(entries, today));
   const harvests = $derived(harvestByCrop(entries, today));
   const forecast = $derived(sky?.forecast ?? null);
+
+  function editEntry(entry: CalendarEntry) {
+    formEntry = entry;
+    editSession += 1;
+    entryOpen = true;
+  }
+
+  function forgetEntry(id: string) {
+    entries = entries.filter((item) => item.id !== id);
+  }
+
+  function keepEntry(entry: CalendarEntry) {
+    entries = [...entries.filter((item) => item.id !== entry.id), entry];
+  }
 
   function rainText(mm: number) {
     const rounded = Math.round(mm * 10) / 10;
@@ -274,7 +294,7 @@
           {:else}
             <ul>
               {#each overdue as entry (entry.id)}
-                <li><a href="/calendar?date={entry.date}">{entryTitle(entry)}</a></li>
+                <li><button type="button" onclick={() => (detail = entry)}>{entryTitle(entry)}</button></li>
               {/each}
             </ul>
           {/if}
@@ -287,7 +307,7 @@
           {:else}
             <ul>
               {#each todayPlan as entry (entry.id)}
-                <li><a href="/calendar?date={entry.date}">{entryTitle(entry)}</a></li>
+                <li><button type="button" onclick={() => (detail = entry)}>{entryTitle(entry)}</button></li>
               {/each}
             </ul>
           {/if}
@@ -337,6 +357,18 @@
         </section>
       </aside>
     </div>
+
+    <EntryDialog bind:entry={detail} onEdit={editEntry} onDeleted={forgetEntry} />
+    <RecordDialog
+      bind:open={entryOpen}
+      kind={formEntry?.kind ?? 'sowing'}
+      addSession={0}
+      {editSession}
+      entry={formEntry}
+      selectedDate={formEntry?.date ?? ''}
+      selectedCrop={formEntry?.crop ?? ''}
+      onSaved={keepEntry}
+    />
   {/if}
 </main>
 
@@ -450,12 +482,17 @@
 
   li + li { margin-top: 8px; }
 
-  a {
+  button {
+    padding: 0;
+    border: 0;
+    background: none;
     color: #191d17;
-    text-decoration: none;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
   }
 
-  a:hover { color: #386a20; }
+  button:hover { color: #386a20; }
 
   .note {
     margin: 0;
