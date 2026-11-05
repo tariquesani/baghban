@@ -28,7 +28,6 @@
   });
   let year = $state(linkedYear(search));
   let appliedSearch = $state('');
-  let filledQuery = $state('');
   let kind = $state('');
   let selected = $state<CalendarSelection | null>(null);
   let saved = $state<CalendarEntry[]>([]);
@@ -116,22 +115,7 @@
     const date = new URLSearchParams(query).get('date') ?? '';
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return;
     year = Number(date.slice(0, 4));
-    const crop = untrack(() => saved.find((entry) => entry.date === date)?.crop ?? '');
-    selected = { scope: 'cell', date, crop };
-  });
-
-  $effect(() => {
-    const date = new URLSearchParams(search).get('date') ?? '';
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || filledQuery === date) return;
-    if (selected?.scope !== 'cell' || selected.date !== date) return;
-    if (selected.crop) {
-      filledQuery = date;
-      return;
-    }
-    const crop = saved.find((entry) => entry.date === date && entry.crop)?.crop ?? '';
-    if (!crop) return;
-    selected = { scope: 'cell', date, crop };
-    filledQuery = date;
+    selected = { scope: 'day', date };
   });
 
   $effect(() => {

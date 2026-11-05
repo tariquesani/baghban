@@ -8,7 +8,7 @@ const screens = {
       'The header shows this garden’s name, the local time, and the sky once a place is saved in Settings',
       'Currently Growing lists sowings that are still in the ground',
       'Coming up is this month. Choose a day to open that date on the calendar',
-      'Overdue, Today, and Lately link to the matching calendar day',
+      'Overdue and Today open that entry here. Coming up opens the calendar on that date',
       'Photos in the gallery come from calendar entries',
     ],
   },
