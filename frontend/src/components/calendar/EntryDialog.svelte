@@ -4,6 +4,7 @@
   import * as Dialog from '$lib/components/ui/dialog';
   import { ScrollArea } from '$lib/components/ui/scroll-area';
   import { deleteCalendarEntry } from '$lib/api/calendar.js';
+  import { deactivateCareRule } from '$lib/api/careRules.js';
   import { cropLabel, markTitle, storedEntryId, type CalendarEntry } from '$lib/domain/calendar.js';
   import { actionLabel } from '$lib/domain/entryForm.js';
   import { formatSowingDate } from '$lib/domain/sowing.js';
@@ -12,10 +13,12 @@
     entry = $bindable(null),
     onEdit,
     onDeleted,
+    onScheduleStopped = () => {},
   }: {
     entry?: CalendarEntry | null;
     onEdit: (entry: CalendarEntry) => void;
     onDeleted: (id: string) => void;
+    onScheduleStopped?: () => void;
   } = $props();
 
   let confirmOpen = $state(false);
@@ -24,6 +27,10 @@
 
   const stored = $derived(entry ? storedEntryId(entry.id) !== null : false);
   const editable = $derived(stored);
+  const scheduleId = $derived(entry && typeof entry.ruleId === 'number' ? entry.ruleId : null);
+  // Only an explicit false means stopped; null means the client has not learned yet.
+  const scheduleStopped = $derived(scheduleId !== null && entry?.ruleActive === false);
+  const scheduleLive = $derived(scheduleId !== null && !scheduleStopped);
   const heading = $derived(entry ? `${formatSowingDate(entry.date)} · ${cropLabel(entry.crop)}` : '');
 
   function closeEntry() {
@@ -37,6 +44,21 @@
     const current = entry;
     closeEntry();
     onEdit(current);
+  }
+
+  async function stopSchedule() {
+    if (!entry || scheduleId === null || busy) return;
+    busy = true;
+    error = '';
+    try {
+      await deactivateCareRule(scheduleId);
+      closeEntry();
+      onScheduleStopped();
+    } catch (cause: unknown) {
+      error = cause instanceof Error ? cause.message : 'Could not stop the schedule.';
+    } finally {
+      busy = false;
+    }
   }
 
   async function remove() {
@@ -82,6 +104,8 @@
         {#if entry.product}<p>{entry.product}</p>{/if}
         {#if entry.detail}<p>{entry.detail}</p>{/if}
         {#if entry.note}<p>{entry.note}</p>{/if}
+        {#if scheduleLive}<p class="schedule">Part of a repeating care schedule</p>{/if}
+        {#if scheduleStopped}<p class="schedule">Schedule stopped</p>{/if}
         {#if entry.photoUrl}<img class="photo" src={entry.photoUrl} alt={cropLabel(entry.crop)} />{/if}
         {#if error}<p class="error">{error}</p>{/if}
       </div>
@@ -89,6 +113,11 @@
       </div>
       {#if stored}
         <Dialog.Footer class="shrink-0">
+          {#if scheduleLive}
+            <Button type="button" variant="outline" disabled={busy} onclick={stopSchedule}>
+              Stop schedule
+            </Button>
+          {/if}
           {#if editable}
             <Button type="button" variant="outline" onclick={edit}>Edit</Button>
           {/if}
@@ -115,6 +144,11 @@
 <style>
   p {
     margin: 0;
+  }
+
+  .schedule {
+    color: #5c6658;
+    font-size: 0.9rem;
   }
 
   .photo {

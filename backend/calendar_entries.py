@@ -11,7 +11,7 @@ reads join crop.name so renames stay on the calendar.
 import json
 import re
 from contextlib import closing
-from datetime import datetime
+from datetime import date, datetime
 
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import Response
@@ -63,6 +63,8 @@ SELECT
     calendar_entry.status,
     calendar_entry.note,
     calendar_entry.photo_url,
+    calendar_entry.rule_id,
+    care_rule.active AS rule_active,
     harvest.quantity AS quantity,
     harvest.unit AS harvest_unit,
     harvest.weight_grams AS weight_grams,
@@ -76,6 +78,7 @@ SELECT
     pest.unit AS pest_unit
 FROM calendar_entry
 LEFT JOIN crop ON crop.id = calendar_entry.crop_id
+LEFT JOIN care_rule ON care_rule.id = calendar_entry.rule_id
 LEFT JOIN harvest ON harvest.entry_id = calendar_entry.id
 LEFT JOIN care ON care.entry_id = calendar_entry.id
 LEFT JOIN pest ON pest.entry_id = calendar_entry.id
@@ -84,8 +87,15 @@ LEFT JOIN pest ON pest.entry_id = calendar_entry.id
 router = APIRouter()
 
 
-def entry_table_sql(name: str = "calendar_entry", if_not_exists: bool = False) -> str:
+def entry_table_sql(
+    name: str = "calendar_entry",
+    if_not_exists: bool = False,
+    with_rule_id: bool = True,
+) -> str:
     clause = "IF NOT EXISTS " if if_not_exists else ""
+    rule_column = (
+        ",\n            rule_id   INTEGER REFERENCES care_rule(id)" if with_rule_id else ""
+    )
     return f"""
         CREATE TABLE {clause}{name} (
             id        INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -95,12 +105,15 @@ def entry_table_sql(name: str = "calendar_entry", if_not_exists: bool = False) -
             crop_id   INTEGER REFERENCES crop(id),
             status    TEXT NOT NULL CHECK (status IN ('planned', 'done')),
             note      TEXT NOT NULL DEFAULT '',
-            photo_url TEXT
+            photo_url TEXT{rule_column}
         )
     """
 
 
 def create_calendar_tables(connection) -> None:
+    from care_rules import create_care_rule_table
+
+    create_care_rule_table(connection)
     connection.execute(entry_table_sql(if_not_exists=True))
     connection.execute(
         """
@@ -222,7 +235,7 @@ def calendar_crop_id(connection) -> None:
         raise RuntimeError(f"Calendar crop names not in the catalogue: {names}")
 
     connection.execute("DROP TABLE IF EXISTS calendar_entry_next")
-    connection.execute(entry_table_sql("calendar_entry_next"))
+    connection.execute(entry_table_sql("calendar_entry_next", with_rule_id=False))
     connection.executemany(
         """
         INSERT INTO calendar_entry_next (
@@ -447,6 +460,16 @@ def entry_json(row) -> dict:
         crop_id = None
     else:
         crop_id = int(crop_id)
+    raw_rule = row["rule_id"] if "rule_id" in row.keys() else None
+    if raw_rule is None or raw_rule == "":
+        rule_id = None
+    else:
+        rule_id = int(raw_rule)
+    raw_active = row["rule_active"] if "rule_active" in row.keys() else None
+    if rule_id is None:
+        rule_active = None
+    else:
+        rule_active = bool(raw_active)
     body = {
         "id": int(row["id"]),
         "kind": row["kind"],
@@ -457,6 +480,8 @@ def entry_json(row) -> dict:
         "status": row["status"],
         "note": row["note"] or "",
         "photoUrl": row["photo_url"] or "",
+        "ruleId": rule_id,
+        "ruleActive": rule_active,
     }
     if row["kind"] == "care":
         body["action"] = row["action"]
@@ -727,7 +752,13 @@ def list_entries(filters: dict) -> list:
     if clauses:
         sql += " WHERE " + " AND ".join(clauses)
     sql += " ORDER BY calendar_entry.date, calendar_entry.id"
+    through = filters.get("through")
+    until = date.fromisoformat(through) if through else None
     with closing(connect()) as connection:
+        from care_rules import materialize_all
+
+        materialize_all(connection, until=until)
+        connection.commit()
         rows = connection.execute(sql, params).fetchall()
     return [entry_json(row) for row in rows]
 
@@ -800,6 +831,7 @@ def care_total(action: str, unit: str, product: str | None, bed_id, date_from: s
 def get_calendar(
     date_from: str | None = Query(default=None, alias="from"),
     date_to: str | None = Query(default=None, alias="to"),
+    through: str | None = None,
     kind: str | None = None,
     bed_id: str | None = Query(default=None, alias="bedId"),
     crop: str | None = None,
@@ -809,6 +841,7 @@ def get_calendar(
     filters = {
         "date_from": optional_date(date_from, "from"),
         "date_to": optional_date(date_to, "to"),
+        "through": optional_date(through, "through"),
         "kind": require_choice(kind, KINDS, "kind"),
         "bed_id": query_bed_id(bed_id),
         "crop": crop,

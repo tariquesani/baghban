@@ -5,3 +5,4 @@ pytest
 tzdata
 timezonefinder
 astral
+python-dateutil

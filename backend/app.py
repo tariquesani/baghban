@@ -25,6 +25,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 from beds import create_scene_tables, drop_plant_grid, garden_contents, router as beds_router
 from beds_crops import archive_bed_crops, copy_document_plants, create_beds_crops
 from calendar_entries import create_calendar_tables, router as calendar_router
+from care_rules import router as care_rules_router
 from crops import create_crop_tables, seed_crops, router as crops_router
 from migrate import migrate
 import sky
@@ -582,6 +583,7 @@ async def lifespan(_app: FastAPI):
 app = FastAPI(lifespan=lifespan)
 app.include_router(beds_router, prefix="/api")
 app.include_router(calendar_router, prefix="/api")
+app.include_router(care_rules_router, prefix="/api")
 app.include_router(crops_router, prefix="/api")
 
 

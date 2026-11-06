@@ -5,6 +5,7 @@
   import { tick } from 'svelte';
   import { listBeds } from '$lib/api/beds.js';
   import { createCalendarEntry, removePhoto, storePhoto, updateCalendarEntry } from '$lib/api/calendar.js';
+  import { createCareRule } from '$lib/api/careRules.js';
   import { listCrops } from '$lib/api/crops.js';
   import { readGarden } from '$lib/api/garden.js';
   import BedField from '../beds/BedField.svelte';
@@ -19,6 +20,12 @@
   import { ScrollArea } from '$lib/components/ui/scroll-area';
   import * as Select from '$lib/components/ui/select';
   import { Textarea } from '$lib/components/ui/textarea';
+  import {
+    careRuleRequest,
+    REPEAT_CHOICES,
+    WEEKDAYS,
+    WEEKLY_INTERVALS,
+  } from '$lib/domain/careRule.js';
   import { storedEntryId, type CalendarEntry } from '$lib/domain/calendar.js';
   import { calendarPhotoId } from '$lib/domain/photoId.js';
   import {
@@ -58,6 +65,7 @@
     lockedBedName = '',
     cropNames = null,
     onSaved,
+    onScheduleSaved = () => {},
   }: {
     open?: boolean;
     kind?: string;
@@ -70,6 +78,7 @@
     lockedBedName?: string;
     cropNames?: string[] | null;
     onSaved: (entry: CalendarEntry) => void;
+    onScheduleSaved?: () => void;
   } = $props();
 
   const statusItems = [
@@ -114,8 +123,19 @@
   let keptPhotoUrl = $state('');
   let photoCleared = $state(false);
   let editingId = $state('');
+  let editingRuleId = $state<number | null>(null);
+  let repeat = $state('none');
+  let repeatInterval = $state('3');
+  let weeklyInterval = $state('1');
+  let weekdays = $state<number[]>([]);
+  let endsOn = $state('');
+  let endsValue = $state<DateValue | undefined>();
+  let endsPickerOpen = $state(false);
   let seenAdd = 0;
   let seenEdit = 0;
+
+  const scheduling = $derived(recording === 'care' && editingRuleId === null);
+  const repeating = $derived(scheduling && repeat !== 'none');
 
   const copy = $derived(entryCopy(recording));
   const offeredCrops = $derived(cropsForNames(cropChoices, cropNames));
@@ -202,6 +222,31 @@
     clearField('date');
   }
 
+  function pickEndsOn(value: DateValue | undefined) {
+    if (!value) return;
+    endsOn = value.toString();
+    endsValue = value;
+    endsPickerOpen = false;
+    clearField('endsOn');
+  }
+
+  function toggleWeekday(day: number) {
+    weekdays = weekdays.includes(day)
+      ? weekdays.filter((value) => value !== day)
+      : [...weekdays, day].sort((a, b) => a - b);
+    clearField('weekdays');
+  }
+
+  function resetRepeat() {
+    repeat = 'none';
+    repeatInterval = '3';
+    weeklyInterval = '1';
+    weekdays = [];
+    endsOn = '';
+    endsValue = undefined;
+    endsPickerOpen = false;
+  }
+
   function applyMeasures(fields: {
     action: string;
     problem: string;
@@ -225,6 +270,7 @@
     recording = asKind(nextKind);
     const draft = entryDraft(recording, { date: selectedDate, crop: '', today, crops: [] });
     editingId = '';
+    editingRuleId = null;
     date = draft.date;
     dateValue = parseDate(draft.date);
     pickerMonth = dateValue;
@@ -244,6 +290,7 @@
     formError = '';
     fieldError = '';
     listError = '';
+    resetRepeat();
     clearPhoto();
   }
 
@@ -256,6 +303,7 @@
     const today = localDate();
     recording = source.kind;
     editingId = source.id;
+    editingRuleId = typeof source.ruleId === 'number' ? source.ruleId : null;
     date = source.date;
     dateValue = parseDate(source.date);
     pickerMonth = dateValue;
@@ -275,6 +323,7 @@
     formError = '';
     fieldError = '';
     listError = '';
+    resetRepeat();
     clearPhoto();
   }
 
@@ -342,6 +391,46 @@
   async function save(event: SubmitEvent) {
     event.preventDefault();
     if (busy) return;
+    if (repeating) {
+      const attachedId = storedEntryId(editingId);
+      const schedule = careRuleRequest(
+        {
+          repeat,
+          interval: repeat === 'weekly' ? weeklyInterval : repeatInterval,
+          weekdays,
+          endsOn,
+          crop,
+          date,
+          bedId,
+          note,
+          action,
+          product,
+          amount,
+          unit,
+          entryId: attachedId,
+        },
+        offeredCrops,
+        entryRequest,
+      );
+      if (!schedule.ok) {
+        fieldError = schedule.field;
+        formError = schedule.message;
+        return;
+      }
+      fieldError = '';
+      formError = '';
+      busy = true;
+      try {
+        await createCareRule(schedule.body);
+        onScheduleSaved();
+        open = false;
+      } catch (error: unknown) {
+        formError = error instanceof Error ? error.message : 'Could not save the schedule.';
+      } finally {
+        busy = false;
+      }
+      return;
+    }
     const request = entryRequest(
       recording,
       {
@@ -498,7 +587,7 @@
         {#if fieldError === 'date'}<Field.Error>{formError}</Field.Error>{/if}
       </Field.Field>
 
-      {#if recording !== 'diary'}
+      {#if recording !== 'diary' && !repeating}
         <Field.Field>
           <Field.Label for="{recording}-status">Status</Field.Label>
           <Select.Root
@@ -574,6 +663,128 @@
           <Field.Label for="{recording}-unit">Unit</Field.Label>
           <Input id="{recording}-unit" class="w-full" bind:value={unit} />
         </Field.Field>
+        {#if scheduling}
+          <Field.Field data-invalid={fieldError === 'repeat' || undefined}>
+            <Field.Label for="{recording}-repeat">Repeat</Field.Label>
+            <Select.Root
+              type="single"
+              name="repeat"
+              items={REPEAT_CHOICES}
+              value={repeat}
+              onValueChange={(value) => {
+                if (!value) return;
+                repeat = value;
+                clearField('repeat');
+              }}
+            >
+              <Select.Trigger id="{recording}-repeat" class="w-full" aria-invalid={fieldError === 'repeat' || undefined}>
+                <Select.Value />
+              </Select.Trigger>
+              <Select.Content>
+                <Select.Group>
+                  {#each REPEAT_CHOICES as item (item.value)}
+                    <Select.Item value={item.value} label={item.label}>{item.label}</Select.Item>
+                  {/each}
+                </Select.Group>
+              </Select.Content>
+            </Select.Root>
+            {#if fieldError === 'repeat'}<Field.Error>{formError}</Field.Error>{/if}
+          </Field.Field>
+          {#if repeat === 'daily'}
+            <Field.Field data-invalid={fieldError === 'interval' || undefined}>
+              <Field.Label for="{recording}-interval">Every N days</Field.Label>
+              <Input
+                id="{recording}-interval"
+                class="w-full"
+                inputmode="numeric"
+                bind:value={repeatInterval}
+                aria-invalid={fieldError === 'interval' || undefined}
+              />
+              {#if fieldError === 'interval'}<Field.Error>{formError}</Field.Error>{/if}
+            </Field.Field>
+          {/if}
+          {#if repeat === 'weekly'}
+            <Field.Field data-invalid={fieldError === 'interval' || undefined}>
+              <Field.Label for="{recording}-weekly-interval">How often</Field.Label>
+              <Select.Root
+                type="single"
+                name="weekly-interval"
+                items={WEEKLY_INTERVALS}
+                value={weeklyInterval}
+                onValueChange={(value) => {
+                  if (!value) return;
+                  weeklyInterval = value;
+                  clearField('interval');
+                }}
+              >
+                <Select.Trigger id="{recording}-weekly-interval" class="w-full" aria-invalid={fieldError === 'interval' || undefined}>
+                  <Select.Value />
+                </Select.Trigger>
+                <Select.Content>
+                  <Select.Group>
+                    {#each WEEKLY_INTERVALS as item (item.value)}
+                      <Select.Item value={item.value} label={item.label}>{item.label}</Select.Item>
+                    {/each}
+                  </Select.Group>
+                </Select.Content>
+              </Select.Root>
+              {#if fieldError === 'interval'}<Field.Error>{formError}</Field.Error>{/if}
+            </Field.Field>
+            <Field.Field data-invalid={fieldError === 'weekdays' || undefined}>
+              <Field.Label>Weekdays</Field.Label>
+              <div class="weekdays">
+                {#each WEEKDAYS as day (day.value)}
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={weekdays.includes(day.value) ? 'default' : 'outline'}
+                    aria-pressed={weekdays.includes(day.value)}
+                    onclick={() => toggleWeekday(day.value)}
+                  >
+                    {day.label}
+                  </Button>
+                {/each}
+              </div>
+              {#if fieldError === 'weekdays'}<Field.Error>{formError}</Field.Error>{/if}
+            </Field.Field>
+          {/if}
+          {#if repeating}
+            <Field.Field data-invalid={fieldError === 'endsOn' || undefined}>
+              <Field.Label for="{recording}-ends">Ends on (optional)</Field.Label>
+              <Popover.Root bind:open={endsPickerOpen}>
+                <Popover.Trigger id="{recording}-ends">
+                  {#snippet child({ props })}
+                    <Button
+                      {...props}
+                      type="button"
+                      variant="outline"
+                      class="w-full justify-start font-normal"
+                      data-empty={!endsOn}
+                      aria-invalid={fieldError === 'endsOn' || undefined}
+                    >
+                      <CalendarIcon data-icon="inline-start" />
+                      {formatSowingDate(endsOn) || 'No end date'}
+                    </Button>
+                  {/snippet}
+                </Popover.Trigger>
+                <Popover.Content class="w-auto p-0" align="start">
+                  <Calendar
+                    type="single"
+                    bind:value={endsValue}
+                    captionLayout="dropdown"
+                    onValueChange={pickEndsOn}
+                  />
+                </Popover.Content>
+              </Popover.Root>
+              {#if endsOn}
+                <Button type="button" variant="ghost" size="sm" onclick={() => { endsOn = ''; endsValue = undefined; }}>
+                  Clear end date
+                </Button>
+              {/if}
+              {#if fieldError === 'endsOn'}<Field.Error>{formError}</Field.Error>{/if}
+            </Field.Field>
+          {/if}
+        {/if}
       {/if}
 
       {#if recording === 'pest'}
@@ -671,6 +882,12 @@
   .form-error {
     margin: 0;
     color: #b42318;
+  }
+
+  .weekdays {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
   }
 
   .fields :global([data-slot='scroll-area-viewport']) {

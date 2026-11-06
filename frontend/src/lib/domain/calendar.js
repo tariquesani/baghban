@@ -88,6 +88,8 @@ const WEDGES = [
  * @property {string} [note]
  * @property {string} [photoUrl]
  * @property {number | null} [bedId]
+ * @property {number | null} [ruleId] Care schedule id when this row was generated from a rule.
+ * @property {boolean | null} [ruleActive] False when that schedule has been stopped.
  */
 
 /**

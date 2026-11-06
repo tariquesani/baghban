@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { tick, untrack } from 'svelte';
+  import { tick } from 'svelte';
   import CalendarDayPanel from '../components/calendar/CalendarDayPanel.svelte';
   import CalendarGrid from '../components/calendar/CalendarGrid.svelte';
   import CalendarKindFilter from '../components/calendar/CalendarKindFilter.svelte';
@@ -51,6 +51,7 @@
   }
 
   function showYear(next: number) {
+    if (next === year) return;
     year = next;
     selected = null;
   }
@@ -79,6 +80,12 @@
 
   function forgetEntry(id: string) {
     saved = saved.filter((item) => item.id !== id);
+  }
+
+  let reloadToken = $state(0);
+
+  function reloadEntries() {
+    reloadToken += 1;
   }
 
   function bedCrop(row: Record<string, unknown>): BedCrop | null {
@@ -135,10 +142,18 @@
   });
 
   $effect(() => {
+    const _reload = reloadToken;
+    const visibleYear = year;
     let cancel = false;
-    Promise.all([listCalendarEntries(), listBeds(), listAssignments().catch(() => [])])
+    // Rematerialize through the end of the year on screen (yearly cares need this).
+    Promise.all([
+      listCalendarEntries({ through: `${visibleYear}-12-31` }),
+      listBeds(),
+      listAssignments().catch(() => []),
+    ])
       .then(([rows, beds, assignmentRows]) => {
         if (cancel) return;
+        void _reload;
         plantings = Array.isArray(assignmentRows)
           ? assignmentRows.flatMap((row) => {
               const planting = row && typeof row === 'object' ? bedCrop(row as Record<string, unknown>) : null;
@@ -162,9 +177,8 @@
           const entry = storedEntry(row, bedName);
           if (entry) loaded.push(entry);
         }
-        const byId = new Map(loaded.map((entry) => [entry.id, entry]));
-        for (const entry of untrack(() => saved)) byId.set(entry.id, entry);
-        saved = [...byId.values()];
+        // Always take the API list after materialize so a year change cannot keep a stale set.
+        saved = loaded;
       })
       .catch(() => {});
     return () => {
@@ -210,7 +224,12 @@
     onOpen={(entry) => (detail = entry)}
   />
 
-  <EntryDialog bind:entry={detail} onEdit={editEntry} onDeleted={forgetEntry} />
+  <EntryDialog
+    bind:entry={detail}
+    onEdit={editEntry}
+    onDeleted={forgetEntry}
+    onScheduleStopped={reloadEntries}
+  />
 
   <RecordDialog
     bind:open={entryOpen}
@@ -221,6 +240,7 @@
     selectedDate={selected && selected.scope !== 'crop' ? selected.date : ''}
     selectedCrop={selected && selected.scope !== 'day' ? selected.crop : ''}
     onSaved={addSowing}
+    onScheduleSaved={reloadEntries}
   />
 </main>
 

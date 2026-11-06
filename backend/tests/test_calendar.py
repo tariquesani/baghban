@@ -41,7 +41,7 @@ def crop_id(client, name):
 
 
 def expected_entry(body, crop_name, entry_id=None):
-    result = {**body, "crop": crop_name}
+    result = {**body, "crop": crop_name, "ruleId": None, "ruleActive": None}
     if entry_id is not None:
         result["id"] = entry_id
     return result
@@ -622,10 +622,11 @@ def test_old_care_table_accepts_new_actions(tmp_path, monkeypatch):
         "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'care'"
     ).fetchone()[0]
     assert "CHECK" not in care_sql.upper()
-    assert connection.execute("PRAGMA user_version").fetchone()[0] == 3
+    assert connection.execute("PRAGMA user_version").fetchone()[0] == 4
     columns = {info[1] for info in connection.execute("PRAGMA table_info(calendar_entry)")}
     assert "crop_id" in columns
     assert "crop" not in columns
+    assert "rule_id" in columns
     assert connection.execute(
         "SELECT crop_id FROM calendar_entry WHERE id = 1"
     ).fetchone()[0] == 1

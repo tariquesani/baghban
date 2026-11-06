@@ -243,6 +243,13 @@ export function calendarRecord(saved, bedName) {
     unit: typeof saved.unit === 'string' ? saved.unit : '',
     quantity: typeof saved.quantity === 'number' ? saved.quantity : null,
     weightGrams: typeof saved.weightGrams === 'number' ? saved.weightGrams : null,
+    ruleId: typeof saved.ruleId === 'number' ? saved.ruleId : null,
+    ruleActive:
+      saved.ruleActive === true || saved.ruleActive === 1
+        ? true
+        : saved.ruleActive === false || saved.ruleActive === 0
+          ? false
+          : null,
   };
   record.detail = entryDetail(record);
   return record;

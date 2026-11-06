@@ -1,7 +1,14 @@
 import { api } from './api.js';
 
-export function listCalendarEntries() {
-  return api.get('/calendar');
+/**
+ * @param {{ through?: string }} [options] `through` is YYYY-MM-DD — extend care
+ *   schedule materialization through that date (e.g. end of the visible year).
+ */
+export function listCalendarEntries(options = {}) {
+  const params = new URLSearchParams();
+  if (options.through) params.set('through', options.through);
+  const query = params.toString();
+  return api.get(query ? `/calendar?${query}` : '/calendar');
 }
 
 /** @param {Record<string, unknown>} entry */
