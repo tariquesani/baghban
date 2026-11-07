@@ -194,6 +194,7 @@
   :global(body) {
     margin: 0;
     height: 100%;
+    height: 100dvh;
     overflow: hidden;
   }
 
@@ -201,6 +202,7 @@
     --page-head: 64px;
     display: flex;
     height: 100vh;
+    height: 100dvh;
     min-width: 0;
     background: #f0f4f0;
   }
@@ -209,6 +211,7 @@
     flex: 1;
     min-width: 0;
     height: 100vh;
+    height: 100dvh;
     display: flex;
     flex-direction: column;
     overflow-x: hidden;

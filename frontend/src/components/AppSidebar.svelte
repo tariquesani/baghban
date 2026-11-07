@@ -208,6 +208,7 @@
     flex-direction: column;
     min-width: 0;
     height: 100vh;
+    height: 100dvh;
     background: #fff;
     border-right: 1px solid var(--md-outline-variant);
     color: var(--md-on-surface);
