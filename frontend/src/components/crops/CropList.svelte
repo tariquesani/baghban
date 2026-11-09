@@ -24,7 +24,7 @@
     ready,
     iconVersion,
   }: {
-    crops: Array<{ id: number; name: string; category: string; emoji: string; icon: string; iconRev?: number | null }>;
+    crops: Array<{ id: number; name: string; category: string; emoji: string; icon: string }>;
     selectedId: number | '';
     query: string;
     category: string;
@@ -116,7 +116,7 @@
                     <img
                       alt=""
                       class="size-8 object-contain"
-                      src={cropIconUrl(crop.id, crop.iconRev ?? iconVersion)}
+                      src="{cropIconUrl(crop.id)}?v={iconVersion}"
                     />
                   </Item.Media>
                 {:else if crop.emoji}

@@ -341,7 +341,6 @@ def choice_field(body: dict, key: str, choices: tuple, label: str) -> str:
 
 
 def parse_crop(body: dict, crop_id: int | None) -> dict:
-    body = {key: value for key, value in body.items() if key != "iconRev"}
     unknown = set(body) - FIELDS
     if unknown:
         name = sorted(unknown)[0]
@@ -394,15 +393,12 @@ def parse_crop(body: dict, crop_id: int | None) -> dict:
 
 
 def crop_json(row, aliases, companions, avoid) -> dict:
-    crop_id = int(row["id"])
-    icon = row["icon"] or ""
     return {
-        "id": crop_id,
+        "id": int(row["id"]),
         "name": row["name"],
         "category": row["category"],
         "emoji": row["emoji"] or "",
-        "icon": icon,
-        "iconRev": icon_revision(crop_id) if icon else None,
+        "icon": row["icon"] or "",
         "sqft": json_number(row["sqft"]),
         "spacing": json_number(row["spacing"]),
         "depthIn": json_number(row["depth_in"]),
@@ -686,15 +682,7 @@ def icon_filename(crop_id: int) -> str:
     return f"{crop_id}.png"
 
 
-ICON_CACHE_CONTROL = "public, max-age=31536000, immutable"
-
-
-def icon_revision(crop_id: int) -> int | None:
-    """File mtime so clients can bust an immutable icon URL after replace."""
-    path = icons_root() / icon_filename(crop_id)
-    if not path.is_file():
-        return None
-    return int(path.stat().st_mtime_ns)
+ICON_CACHE_CONTROL = "public, max-age=31536000"
 
 
 def store_crop_icon(crop_id: int, data: bytes) -> dict:

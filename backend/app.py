@@ -33,7 +33,7 @@ import sky
 
 MAX_BYTES = 2 * 1024 * 1024
 MAX_PHOTO_BYTES = 15 * 1024 * 1024
-PHOTO_CACHE_CONTROL = "public, max-age=86400"
+PHOTO_CACHE_CONTROL = "public, max-age=31536000"
 SCENE_FIELDS = ("beds", "obstacles", "nextId")
 DEFAULT_DB = Path(__file__).resolve().parent / "data" / "baghban.db"
 

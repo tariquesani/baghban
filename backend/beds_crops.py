@@ -120,23 +120,18 @@ def list_active_assignments() -> list:
             ORDER BY beds_crops.id
             """
         ).fetchall()
-    from crops import icon_revision
-
     assignments = []
     for row in rows:
         maturity = row["days_to_maturity"]
-        crop_id = int(row["crop_id"])
-        icon = row["icon"] or ""
         assignments.append(
             {
                 "id": int(row["id"]),
                 "bedId": int(row["bed_id"]),
                 "bedName": row["bed_name"] or "",
-                "cropId": crop_id,
+                "cropId": int(row["crop_id"]),
                 "name": row["crop_name"],
                 "emoji": row["emoji"] or "",
-                "icon": icon,
-                "iconRev": icon_revision(crop_id) if icon else None,
+                "icon": row["icon"] or "",
                 "createdOn": row["created_on"],
                 "daysToMaturity": None if maturity is None else int(maturity),
             }
