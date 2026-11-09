@@ -20,6 +20,7 @@
     category: string;
     emoji: string;
     icon: string;
+    iconRev?: number | null;
     sqft: number | null;
     spacing: number | null;
     depthIn: number | null;
@@ -57,7 +58,7 @@
   }: {
     draft: CropDraft;
     creating: boolean;
-    choices: Array<{ id: number; name: string; emoji: string; icon: string; aliases: string[] }>;
+    choices: Array<{ id: number; name: string; emoji: string; icon: string; iconRev?: number | null; aliases: string[] }>;
     busy: boolean;
     error: string;
     narrow: boolean;
@@ -256,7 +257,7 @@
             <img
               alt=""
               class="size-10 shrink-0 object-contain"
-              src="{cropIconUrl(draft.id)}?v={iconVersion}"
+              src={cropIconUrl(draft.id, draft.iconRev ?? iconVersion)}
             />
           {/if}
           <Input

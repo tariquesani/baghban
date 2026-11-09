@@ -108,7 +108,7 @@
   let todayStamp = $state(localDate());
   let statusChosen = $state(false);
   let cropEdited = $state(false);
-  let cropChoices = $state<{ id: number; name: string; emoji: string; icon: string }[]>([]);
+  let cropChoices = $state<{ id: number; name: string; emoji: string; icon: string; iconRev: number | null }[]>([]);
   let bedRows = $state<{ id: number; name: string; plants: string[] }[]>([]);
   let bedsLoaded = $state(false);
   let loading = $state(false);
@@ -144,6 +144,7 @@
       value: choice.name,
       id: choice.id,
       icon: choice.icon,
+      iconRev: choice.iconRev,
       emoji: choice.emoji,
     })),
   );
@@ -524,7 +525,7 @@
               >
                 <span class={cn('flex min-w-0 flex-1 items-center gap-2 text-left', !crop && 'text-muted-foreground')}>
                   {#if chosenCrop}
-                    <CropMark id={chosenCrop.id} icon={chosenCrop.icon} emoji={chosenCrop.emoji} />
+                    <CropMark id={chosenCrop.id} icon={chosenCrop.icon} iconRev={chosenCrop.iconRev} emoji={chosenCrop.emoji} />
                   {/if}
                   <span class="truncate">{crop || 'Choose a crop'}</span>
                 </span>
@@ -544,7 +545,7 @@
                       data-checked={crop === item.value}
                       onSelect={() => chooseCrop(item.value)}
                     >
-                      <CropMark id={item.id} icon={item.icon} emoji={item.emoji} />
+                      <CropMark id={item.id} icon={item.icon} iconRev={item.iconRev} emoji={item.emoji} />
                       {item.value}
                     </Command.Item>
                   {/each}

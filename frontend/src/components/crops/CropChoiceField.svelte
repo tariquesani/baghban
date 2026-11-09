@@ -14,6 +14,7 @@
     name: string;
     emoji: string;
     icon: string;
+    iconRev?: number | null;
     aliases: string[];
   };
 
@@ -107,7 +108,7 @@
                   closeAndFocusTrigger();
                 }}
               >
-                <CropMark id={crop.id} icon={crop.icon} emoji={crop.emoji} />
+                <CropMark id={crop.id} icon={crop.icon} iconRev={crop.iconRev} emoji={crop.emoji} />
                 {crop.name}
               </Command.Item>
             {/each}

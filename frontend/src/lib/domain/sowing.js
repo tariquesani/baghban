@@ -33,7 +33,7 @@ export function statusForSowingDate(date, today) {
 
 /**
  * @param {unknown} crops
- * @returns {{ id: number, name: string, emoji: string, icon: string }[]}
+ * @returns {{ id: number, name: string, emoji: string, icon: string, iconRev: number | null }[]}
  */
 export function sowingCropChoices(crops) {
   if (!Array.isArray(crops)) return [];
@@ -44,6 +44,7 @@ export function sowingCropChoices(crops) {
       name: crop.name.trim(),
       emoji: typeof crop.emoji === 'string' ? crop.emoji : '',
       icon: typeof crop.icon === 'string' ? crop.icon : '',
+      iconRev: typeof crop.iconRev === 'number' ? crop.iconRev : null,
     }))
     .sort((left, right) => left.name.localeCompare(right.name));
 }
@@ -150,7 +151,7 @@ export function bedCropNames(plants) {
  * Catalogue crops that are not already growing in the bed.
  * @param {unknown} crops
  * @param {unknown} planted
- * @returns {{ id: number, name: string, emoji: string, icon: string, aliases: string[] }[]}
+ * @returns {{ id: number, name: string, emoji: string, icon: string, iconRev: number | null, aliases: string[] }[]}
  */
 export function cropsNotInBed(crops, planted) {
   if (!Array.isArray(crops)) return [];
@@ -166,6 +167,7 @@ export function cropsNotInBed(crops, planted) {
       name: crop.name.trim(),
       emoji: typeof crop.emoji === 'string' ? crop.emoji : '',
       icon: typeof crop.icon === 'string' ? crop.icon : '',
+      iconRev: typeof crop.iconRev === 'number' ? crop.iconRev : null,
       aliases: Array.isArray(crop.aliases)
         ? crop.aliases.filter((alias) => typeof alias === 'string')
         : [],
@@ -204,7 +206,7 @@ export function cropsForNames(crops, names) {
   }
   const missing = wanted
     .filter((name) => !used.has(name.key))
-    .map((name) => ({ id: 0, name: name.text, emoji: '', icon: '' }));
+    .map((name) => ({ id: 0, name: name.text, emoji: '', icon: '', iconRev: null }));
   return [...matched, ...missing];
 }
 

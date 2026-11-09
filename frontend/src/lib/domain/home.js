@@ -30,6 +30,7 @@ import { actionLabel, entryDetail } from './entryForm.js';
  *   name: string,
  *   emoji: string,
  *   icon: string,
+ *   iconRev?: number | null,
  *   createdOn: string,
  *   daysToMaturity: number | null,
  * }} Assignment
@@ -41,6 +42,7 @@ import { actionLabel, entryDetail } from './entryForm.js';
  *   name: string,
  *   emoji: string,
  *   icon: string,
+ *   iconRev: number | null,
  *   days: string,
  *   harvest: string,
  *   maturity: string,
@@ -226,6 +228,7 @@ export function growingCards(assignments, entries, today) {
       name: assignment.name,
       emoji: assignment.emoji,
       icon: typeof assignment.icon === 'string' ? assignment.icon : '',
+      iconRev: typeof assignment.iconRev === 'number' ? assignment.iconRev : null,
       days: sown ? ageLabel(age) : '',
       harvest: harvestLabel(harvests),
       maturity,

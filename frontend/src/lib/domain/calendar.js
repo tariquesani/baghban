@@ -193,10 +193,10 @@ export function cropLabel(crop) {
  * The dashboard grid does not use this. Archived crops stay when they are in
  * the list, so an older row can still match.
  * @param {unknown} crops
- * @returns {Record<string, { id: number, icon: string, emoji: string }>}
+ * @returns {Record<string, { id: number, icon: string, iconRev: number | null, emoji: string }>}
  */
 export function cropMarks(crops) {
-  /** @type {Record<string, { id: number, icon: string, emoji: string }>} */
+  /** @type {Record<string, { id: number, icon: string, iconRev: number | null, emoji: string }>} */
   const marks = {};
   if (!Array.isArray(crops)) return marks;
   for (const crop of crops) {
@@ -206,6 +206,7 @@ export function cropMarks(crops) {
     marks[name] = {
       id: crop.id,
       icon: typeof crop.icon === 'string' ? crop.icon : '',
+      iconRev: typeof crop.iconRev === 'number' ? crop.iconRev : null,
       emoji: typeof crop.emoji === 'string' ? crop.emoji : '',
     };
   }
