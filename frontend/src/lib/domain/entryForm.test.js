@@ -42,6 +42,32 @@ test('a diary note is done, and a future care stays planned', () => {
   assert.equal(care.action, '');
 });
 
+test('uproot is done and needs a bed', () => {
+  const draft = entryDraft('uproot', {
+    date: '2026-11-02',
+    crop: 'basil',
+    today: '2026-10-30',
+    crops,
+  });
+  assert.equal(draft.status, 'done');
+  assert.equal(entryRequest('uproot', { ...shared, status: 'planned' }, crops).field, 'bed');
+  assert.deepEqual(
+    entryRequest('uproot', { ...shared, bedId: '4', status: 'planned' }, crops),
+    {
+      ok: true,
+      body: {
+        kind: 'uproot',
+        date: '2026-11-02',
+        bedId: 4,
+        cropId: 1,
+        status: 'done',
+        note: 'After rain',
+        photoUrl: '',
+      },
+    },
+  );
+});
+
 test('care needs an action, and blank measures stay empty', () => {
   assert.equal(entryRequest('care', { ...shared, action: '' }, crops).ok, false);
   assert.deepEqual(

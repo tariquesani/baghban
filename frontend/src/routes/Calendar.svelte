@@ -70,6 +70,7 @@
     saved = [...saved.filter((item) => item.id !== entry.id), entry];
     year = Number(entry.date.slice(0, 4));
     selected = { scope: 'cell', date: entry.date, crop: entry.crop };
+    if (entry.kind === 'sowing' || entry.kind === 'uproot') reloadEntries();
   }
 
   function editEntry(entry: CalendarEntry) {

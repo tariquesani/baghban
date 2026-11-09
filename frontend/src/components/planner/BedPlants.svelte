@@ -1,5 +1,4 @@
 <script lang="ts">
-  import XIcon from '@lucide/svelte/icons/x';
   import AddCropDialog from './AddCropDialog.svelte';
   import RecordDialog from '../calendar/RecordDialog.svelte';
   import { Badge } from '$lib/components/ui/badge';
@@ -13,9 +12,10 @@
 
   let addOpen = $state(false);
   let entryOpen = $state(false);
-  let entryKind = $state<'care' | 'pest' | 'harvest'>('care');
+  let entryKind = $state<'care' | 'pest' | 'harvest' | 'uproot'>('care');
   let entrySession = $state(0);
   let entryDate = $state(localDate());
+  let entryCrop = $state('');
 
   const cropNames = $derived(bedCropNames(details.plants));
   const onlyCrop = $derived(cropNames.length === 1 ? cropNames[0] : '');
@@ -24,16 +24,21 @@
     return Number.isInteger(id) ? id : null;
   });
 
-  function remove(name: string) {
+  function syncCanvasAfterUproot(name: string) {
     const removePlant = (globalThis as { removePlant?: (name: string) => void }).removePlant;
     removePlant?.(name);
   }
 
-  function record(kind: 'care' | 'pest' | 'harvest') {
+  function record(kind: 'care' | 'pest' | 'harvest' | 'uproot', crop = '') {
     entryKind = kind;
+    entryCrop = crop || onlyCrop;
     entryDate = localDate();
     entrySession += 1;
     entryOpen = true;
+  }
+
+  function onEntrySaved(entry: { kind: string; crop: string }) {
+    if (entry.kind === 'uproot' && entry.crop) syncCanvasAfterUproot(entry.crop);
   }
 </script>
 
@@ -42,12 +47,7 @@
   {#if details.plants.length}
     <div class="flex flex-wrap gap-1">
       {#each details.plants as name (name)}
-        <Badge variant="secondary" class="h-auto gap-0.5 px-1.5 py-0.5 text-[10px]">
-          {name}
-          <Button type="button" variant="ghost" size="icon-xs" class="size-4" aria-label={`Remove ${name}`} onclick={() => remove(name)}>
-            <XIcon />
-          </Button>
-        </Badge>
+        <Badge variant="secondary" class="h-auto px-1.5 py-0.5 text-[10px]">{name}</Badge>
       {/each}
     </div>
   {/if}
@@ -68,6 +68,9 @@
       <Button id="bed-pest" type="button" variant="outline" size="sm" class="h-7 w-full text-xs" onclick={() => record('pest')}>
         Pest Control
       </Button>
+      <Button id="bed-uproot" type="button" variant="outline" size="sm" class="h-7 w-full text-xs" onclick={() => record('uproot')}>
+        Uproot
+      </Button>
     {/if}
   </div>
 </Field.FieldSet>
@@ -80,9 +83,9 @@
   addSession={entrySession}
   editSession={0}
   selectedDate={entryDate}
-  selectedCrop={onlyCrop}
+  selectedCrop={entryCrop || onlyCrop}
   lockedBedId={bedNumber}
   lockedBedName={details.name}
   {cropNames}
-  onSaved={() => {}}
+  onSaved={onEntrySaved}
 />

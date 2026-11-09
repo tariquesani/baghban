@@ -151,6 +151,10 @@
             <i data-lucide="bug-off"></i>
             <span class="rail-label">Add Pest Control</span>
           </button>
+          <button type="button" class="rail-btn" title="Uproot Crop" onclick={() => choose(() => onAddEntry('uproot'))}>
+            <i data-lucide="shovel"></i>
+            <span class="rail-label">Uproot Crop</span>
+          </button>
           <button type="button" class="rail-btn" title="Add Diary Note" onclick={() => choose(() => onAddEntry('diary'))}>
             <i data-lucide="notebook-pen"></i>
             <span class="rail-label">Add Diary Note</span>

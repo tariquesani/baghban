@@ -1,11 +1,12 @@
-"""Calendar entries: sowing, care, pest, harvest, and diary.
+"""Calendar entries: sowing, care, pest, harvest, diary, and uproot.
 
 POST /api/calendar inserts a row and returns its integer id.
 PUT /api/calendar/{id} replaces that entry. Care, pest, and harvest rows are
 written with the calendar row, and replaced when a new body drops them.
 Photos stay on /api/photos/{id}. An entry stores a bed id, or none for the
 whole garden. The bed's name lives on the bed table. A crop is stored by id;
-reads join crop.name so renames stay on the calendar.
+reads join crop.name so renames stay on the calendar. A done uproot finishes
+the matching beds_crops assignment on the entry date.
 """
 
 import json
@@ -19,7 +20,7 @@ from fastapi.responses import Response
 from catalogue import CARE_ACTIONS
 
 PHOTO_URL = re.compile(r"/api/photos/([A-Za-z0-9][A-Za-z0-9_-]{0,80})")
-KINDS = ("sowing", "care", "pest", "harvest", "diary")
+KINDS = ("sowing", "care", "pest", "harvest", "uproot", "diary")
 STATUSES = ("planned", "done")
 
 
@@ -47,6 +48,7 @@ SHARED_FIELDS = {
 FIELDS = {
     "sowing": SHARED_FIELDS,
     "diary": SHARED_FIELDS,
+    "uproot": SHARED_FIELDS,
     "care": SHARED_FIELDS | {"action", "product", "amount", "unit"},
     "pest": SHARED_FIELDS | {"problem", "product", "amount", "unit"},
     "harvest": SHARED_FIELDS | {"quantity", "unit", "weightGrams"},
@@ -99,7 +101,7 @@ def entry_table_sql(
     return f"""
         CREATE TABLE {clause}{name} (
             id        INTEGER PRIMARY KEY AUTOINCREMENT,
-            kind      TEXT NOT NULL CHECK (kind IN ('sowing', 'care', 'pest', 'harvest', 'diary')),
+            kind      TEXT NOT NULL CHECK (kind IN ('sowing', 'care', 'pest', 'harvest', 'diary', 'uproot')),
             date      TEXT NOT NULL,
             bed_id    INTEGER REFERENCES bed(id),
             crop_id   INTEGER REFERENCES crop(id),
@@ -108,6 +110,65 @@ def entry_table_sql(
             photo_url TEXT{rule_column}
         )
     """
+
+
+def allow_uproot_kind(connection) -> None:
+    """Let calendar_entry.kind store uproot. Older files stopped at diary."""
+    row = connection.execute(
+        "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'calendar_entry'"
+    ).fetchone()
+    if row is None:
+        return
+    sql = row[0] or ""
+    if "'uproot'" in sql:
+        return
+    columns = {info[1] for info in connection.execute("PRAGMA table_info(calendar_entry)")}
+    has_rule = "rule_id" in columns
+    connection.execute("DROP TABLE IF EXISTS calendar_entry_next")
+    connection.execute(entry_table_sql("calendar_entry_next", with_rule_id=has_rule))
+    if has_rule:
+        connection.execute(
+            """
+            INSERT INTO calendar_entry_next (
+                id, kind, date, bed_id, crop_id, status, note, photo_url, rule_id
+            )
+            SELECT
+                id, kind, date, bed_id, crop_id, status, note, photo_url, rule_id
+            FROM calendar_entry
+            """
+        )
+    else:
+        connection.execute(
+            """
+            INSERT INTO calendar_entry_next (
+                id, kind, date, bed_id, crop_id, status, note, photo_url
+            )
+            SELECT
+                id, kind, date, bed_id, crop_id, status, note, photo_url
+            FROM calendar_entry
+            """
+        )
+    connection.execute("DROP TABLE calendar_entry")
+    connection.execute("ALTER TABLE calendar_entry_next RENAME TO calendar_entry")
+    sequence = connection.execute(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'sqlite_sequence'"
+    ).fetchone()
+    max_id = connection.execute("SELECT MAX(id) FROM calendar_entry").fetchone()[0]
+    if sequence is not None and max_id is not None:
+        connection.execute("DELETE FROM sqlite_sequence WHERE name = 'calendar_entry_next'")
+        found = connection.execute(
+            "SELECT 1 FROM sqlite_sequence WHERE name = 'calendar_entry'"
+        ).fetchone()
+        if found is None:
+            connection.execute(
+                "INSERT INTO sqlite_sequence (name, seq) VALUES ('calendar_entry', ?)",
+                (max_id,),
+            )
+        else:
+            connection.execute(
+                "UPDATE sqlite_sequence SET seq = ? WHERE name = 'calendar_entry'",
+                (max_id,),
+            )
 
 
 def create_calendar_tables(connection) -> None:
@@ -411,8 +472,8 @@ def parse_entry(body: dict, entry_id: int | None) -> dict:
     status = body.get("status")
     if status not in STATUSES:
         raise HTTPException(status_code=400, detail="Invalid status")
-    if kind == "diary" and status != "done":
-        raise HTTPException(status_code=400, detail="A diary entry is done")
+    if kind in ("diary", "uproot") and status != "done":
+        raise HTTPException(status_code=400, detail=f"A {kind} entry is done")
 
     entry = {
         "kind": kind,
@@ -423,6 +484,11 @@ def parse_entry(body: dict, entry_id: int | None) -> dict:
         "note": text_field(body, "note"),
         "photo_url": photo_url_field(body) or None,
     }
+    if kind == "uproot":
+        if entry["bed_id"] is None:
+            raise HTTPException(status_code=400, detail="Uproot needs a bed")
+        if entry["crop_id"] is None:
+            raise HTTPException(status_code=400, detail="Uproot needs a crop")
     if kind == "care":
         action = body.get("action")
         if action not in CARE_ACTIONS:
@@ -607,6 +673,17 @@ def occupy_from_sowing(connection, entry: dict) -> None:
     place_crop_id(connection, entry["bed_id"], entry["crop_id"], entry["date"])
 
 
+def vacate_from_uproot(connection, entry: dict) -> None:
+    """A done uproot finishes the crop in that bed on the entry date."""
+    if entry["kind"] != "uproot" or entry["status"] != "done":
+        return
+    if entry["bed_id"] is None or entry["crop_id"] is None:
+        return
+    from beds_crops import archive_crop_id
+
+    archive_crop_id(connection, entry["bed_id"], entry["crop_id"], entry["date"])
+
+
 def create_entry(body: dict) -> dict:
     entry = parse_entry(body, None)
     with closing(connect()) as connection:
@@ -632,6 +709,7 @@ def create_entry(body: dict) -> dict:
             entry_id = cursor.lastrowid
             write_children(connection, entry_id, entry)
             occupy_from_sowing(connection, entry)
+            vacate_from_uproot(connection, entry)
             connection.commit()
             return entry_json(fetch_entry(connection, entry_id))
         except HTTPException:
@@ -679,6 +757,7 @@ def replace_entry(entry_id: int, body: dict) -> dict:
                 ),
             )
             write_children(connection, entry_id, entry)
+            vacate_from_uproot(connection, entry)
             connection.commit()
             saved = entry_json(fetch_entry(connection, entry_id))
         except HTTPException:

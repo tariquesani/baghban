@@ -51,7 +51,7 @@
     statusForSowingDate,
   } from '$lib/domain/sowing.js';
 
-  type EntryKind = 'sowing' | 'care' | 'pest' | 'harvest' | 'diary';
+  type EntryKind = 'sowing' | 'care' | 'pest' | 'harvest' | 'diary' | 'uproot';
 
   let {
     open = $bindable(false),
@@ -149,7 +149,9 @@
   );
   const chosenCrop = $derived(cropItems.find((item) => item.value === crop));
   const bedChoices = $derived(sowingBedChoices(bedRows));
-  const cropBeds = $derived(recording === 'care' || recording === 'pest' || recording === 'harvest');
+  const cropBeds = $derived(
+    recording === 'care' || recording === 'pest' || recording === 'harvest' || recording === 'uproot',
+  );
   const offeredBeds = $derived(cropBeds ? bedsHoldingCrop(bedRows, crop) : bedChoices);
   const bedItems = $derived(
     lockedBedId != null
@@ -280,7 +282,7 @@
     crop = '';
     cropEdited = false;
     status = draft.status;
-    statusChosen = recording === 'diary';
+    statusChosen = recording === 'diary' || recording === 'uproot';
     bedId = lockedBedId != null ? String(lockedBedId) : draft.bedId;
     note = '';
     applyMeasures(draft);
@@ -312,7 +314,7 @@
     cropQuery = '';
     crop = source.crop;
     cropEdited = true;
-    status = recording === 'diary' ? 'done' : source.status;
+    status = recording === 'diary' || recording === 'uproot' ? 'done' : source.status;
     statusChosen = true;
     bedId = typeof source.bedId === 'number' ? String(source.bedId) : 'none';
     note = source.note ?? '';
@@ -587,7 +589,7 @@
         {#if fieldError === 'date'}<Field.Error>{formError}</Field.Error>{/if}
       </Field.Field>
 
-      {#if recording !== 'diary' && !repeating}
+      {#if recording !== 'diary' && recording !== 'uproot' && !repeating}
         <Field.Field>
           <Field.Label for="{recording}-status">Status</Field.Label>
           <Select.Root

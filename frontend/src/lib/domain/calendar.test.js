@@ -96,6 +96,16 @@ test('five marks split the left side, care above pest', () => {
   assert.equal(wedges[2].points, '0,50 0,100 50,50');
 });
 
+test('six marks also split the right side', () => {
+  const wedges = dayWedges(['uproot', 'diary', 'pest', 'sowing', 'harvest', 'care']);
+  assert.deepEqual(
+    wedges.map((wedge) => wedge.kind),
+    ['sowing', 'care', 'pest', 'harvest', 'uproot', 'diary'],
+  );
+  assert.equal(wedges[4].points, '100,50 100,100 50,50');
+  assert.equal(wedges[5].points, '100,0 100,50 50,50');
+});
+
 test('a pest treatment is its own kind', () => {
   const day = dayEntries(SAMPLE_ENTRIES, '2026-10-19', 'Tomato', '');
   assert.equal(day[0].kind, 'pest');

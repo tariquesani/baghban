@@ -497,6 +497,62 @@ def test_done_sowing_occupies_an_empty_bed(tmp_path, monkeypatch):
     connection.close()
 
 
+def test_uproot_archives_the_crop_in_the_bed(tmp_path, monkeypatch):
+    monkeypatch.setenv("BAGHBAN_DB", str(tmp_path / "baghban.db"))
+
+    with TestClient(app) as client:
+        bed_id = add_bed(client)
+        tomatoes = crop_id(client, "Tomatoes")
+        placed = sowing(bed_id, tomatoes)
+        placed["status"] = "done"
+        placed["date"] = "2026-06-08"
+        assert client.post("/api/calendar", json=placed).status_code == 200
+
+        missing_bed = {
+            "kind": "uproot",
+            "date": "2026-09-01",
+            "bedId": None,
+            "cropId": tomatoes,
+            "status": "done",
+            "note": "",
+            "photoUrl": "",
+        }
+        assert client.post("/api/calendar", json=missing_bed).status_code == 400
+
+        planned = {
+            "kind": "uproot",
+            "date": "2026-09-01",
+            "bedId": bed_id,
+            "cropId": tomatoes,
+            "status": "planned",
+            "note": "",
+            "photoUrl": "",
+        }
+        assert client.post("/api/calendar", json=planned).status_code == 400
+
+        uprooted = {
+            "kind": "uproot",
+            "date": "2026-09-01",
+            "bedId": bed_id,
+            "cropId": tomatoes,
+            "status": "done",
+            "note": "Season over",
+            "photoUrl": "",
+        }
+        saved = client.post("/api/calendar", json=uprooted)
+        assert saved.status_code == 200
+        assert saved.json()["kind"] == "uproot"
+        assert saved.json()["note"] == "Season over"
+        assert client.get("/api/beds/crops").json() == []
+
+    connection = sqlite3.connect(tmp_path / "baghban.db")
+    rows = connection.execute(
+        "SELECT created_on, archived_on FROM beds_crops"
+    ).fetchall()
+    assert rows == [("2026-06-08", "2026-09-01")]
+    connection.close()
+
+
 def test_records_pruning_without_an_amount(tmp_path, monkeypatch):
     monkeypatch.setenv("BAGHBAN_DB", str(tmp_path / "baghban.db"))
 
@@ -622,7 +678,7 @@ def test_old_care_table_accepts_new_actions(tmp_path, monkeypatch):
         "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'care'"
     ).fetchone()[0]
     assert "CHECK" not in care_sql.upper()
-    assert connection.execute("PRAGMA user_version").fetchone()[0] == 5
+    assert connection.execute("PRAGMA user_version").fetchone()[0] == 6
     columns = {info[1] for info in connection.execute("PRAGMA table_info(calendar_entry)")}
     assert "crop_id" in columns
     assert "crop" not in columns

@@ -3,7 +3,7 @@
 /**
  * @param {string} date
  * @param {string} crop
- * @param {'sowing' | 'care' | 'pest' | 'harvest' | 'diary'} kind
+ * @param {'sowing' | 'care' | 'pest' | 'harvest' | 'diary' | 'uproot'} kind
  * @param {'planned' | 'done'} status
  * @param {{ weightGrams?: number, action?: string, bed?: string, problem?: string, product?: string, detail?: string, note?: string }} [extra]
  */

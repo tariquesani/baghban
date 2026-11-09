@@ -1,9 +1,11 @@
 <script lang="ts">
   import SetupName from '../components/setup/SetupName.svelte';
+  import SetupOrphans from '../components/setup/SetupOrphans.svelte';
   import SetupPlace from '../components/setup/SetupPlace.svelte';
   import SetupReset from '../components/setup/SetupReset.svelte';
   import SetupSize from '../components/setup/SetupSize.svelte';
   import * as Tabs from '$lib/components/ui/tabs';
+  import { listOrphanBeds, purgeOrphanBed } from '$lib/api/beds.js';
   import { readGarden, resetGarden, saveGardenSize, saveIdentity } from '$lib/api/garden.js';
   import { toast } from 'svelte-sonner';
   import {
@@ -51,6 +53,8 @@
   let nameError = $state('');
   let placeError = $state('');
   let sizeError = $state('');
+  let orphanError = $state('');
+  let orphans = $state<{ id: number; name: string; kind: string }[]>([]);
 
   let placed = $derived(saved.latitude !== '' || saved.longitude !== '');
 
@@ -80,6 +84,26 @@
     return err instanceof Error && err.message ? err.message : fallback;
   }
 
+  async function loadOrphans() {
+    try {
+      const rows = await listOrphanBeds();
+      orphans = Array.isArray(rows)
+        ? rows.flatMap((row) => {
+            if (!row || typeof row !== 'object') return [];
+            if (typeof row.id !== 'number' || typeof row.kind !== 'string') return [];
+            return [{
+              id: row.id,
+              name: typeof row.name === 'string' ? row.name : '',
+              kind: row.kind,
+            }];
+          })
+        : [];
+      orphanError = '';
+    } catch (err) {
+      orphanError = failure(err, 'Could not load orphan beds');
+    }
+  }
+
   async function load() {
     try {
       const payload = await readGarden() as GardenPayload | null;
@@ -89,8 +113,25 @@
       outside = [];
       loadError = '';
       ready = true;
+      void loadOrphans();
     } catch (err) {
       loadError = failure(err, 'Could not load setup');
+    }
+  }
+
+  async function purgeOrphan(id: number) {
+    if (busy) return;
+    busy = 'orphan';
+    orphanError = '';
+    try {
+      await purgeOrphanBed(id);
+      orphans = orphans.filter((bed) => bed.id !== id);
+      toast.success('Purged orphan bed');
+    } catch (err) {
+      orphanError = failure(err, 'Could not purge this bed');
+      void loadOrphans();
+    } finally {
+      busy = '';
     }
   }
 
@@ -195,6 +236,7 @@
       sizeError = '';
       loadError = '';
       toast.success('Started again');
+      void loadOrphans();
     } catch (err) {
       loadError = failure(err, 'Could not reset the garden');
     } finally {
@@ -209,10 +251,11 @@
   {#if loadError}<p class="text-sm text-destructive" role="alert">{loadError}</p>{/if}
   {#if ready}
     <Tabs.Root value="name" class="gap-4">
-      <Tabs.List class="grid h-auto w-full grid-cols-2 sm:grid-cols-4">
+      <Tabs.List class="grid h-auto w-full grid-cols-2 sm:grid-cols-3 lg:grid-cols-5">
         <Tabs.Trigger value="name">Name</Tabs.Trigger>
         <Tabs.Trigger value="place">Place</Tabs.Trigger>
         <Tabs.Trigger value="size">Size</Tabs.Trigger>
+        <Tabs.Trigger value="orphans">Orphans</Tabs.Trigger>
         <Tabs.Trigger value="again">Start again</Tabs.Trigger>
       </Tabs.List>
       <Tabs.Content value="name">
@@ -246,6 +289,14 @@
           {outside}
           busy={busy !== ''}
           onSave={saveSize}
+        />
+      </Tabs.Content>
+      <Tabs.Content value="orphans">
+        <SetupOrphans
+          beds={orphans}
+          busy={busy !== ''}
+          error={orphanError}
+          onPurge={purgeOrphan}
         />
       </Tabs.Content>
       <Tabs.Content value="again">

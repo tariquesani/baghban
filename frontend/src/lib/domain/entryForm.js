@@ -5,11 +5,11 @@ import { sowingDraft, sowingRequest } from './sowing.js';
 
 export { CARE_ACTIONS };
 
-export const ENTRY_KINDS = ['sowing', 'care', 'pest', 'harvest', 'diary'];
+export const ENTRY_KINDS = ['sowing', 'care', 'pest', 'harvest', 'uproot', 'diary'];
 
 /**
  * @param {string} kind
- * @returns {kind is 'sowing' | 'care' | 'pest' | 'harvest' | 'diary'}
+ * @returns {kind is 'sowing' | 'care' | 'pest' | 'harvest' | 'uproot' | 'diary'}
  */
 export function isEntryKind(kind) {
   return ENTRY_KINDS.includes(kind);
@@ -62,6 +62,13 @@ export function entryCopy(kind) {
       bedHint: 'Not in a bed keeps this note off the plan.',
       saveError: 'Could not save the diary note.',
     },
+    uproot: {
+      addTitle: 'Uproot crop',
+      editTitle: 'Edit uproot',
+      description: 'Marks the crop as taken out of the bed on this date.',
+      bedHint: 'Choose the bed the crop left.',
+      saveError: 'Could not save the uproot.',
+    },
   };
   return copies[kind] ?? copies.sowing;
 }
@@ -72,7 +79,7 @@ export function entryCopy(kind) {
  */
 export function entryDraft(kind, input) {
   const draft = sowingDraft(input);
-  if (kind === 'diary') draft.status = 'done';
+  if (kind === 'diary' || kind === 'uproot') draft.status = 'done';
   return {
     ...draft,
     action: '',
@@ -122,7 +129,7 @@ function counted(text, field, message, whole) {
  * @param {{ id: number, name: string }[]} [crops]
  */
 export function entryRequest(kind, draft, crops = []) {
-  const status = kind === 'diary' ? 'done' : draft.status;
+  const status = kind === 'diary' || kind === 'uproot' ? 'done' : draft.status;
   const shared = sowingRequest(
     {
       crop: draft.crop,
@@ -135,6 +142,12 @@ export function entryRequest(kind, draft, crops = []) {
     crops,
   );
   if (!shared.ok) return shared;
+  if (kind === 'uproot') {
+    if (shared.body.bedId == null) {
+      return { ok: false, field: 'bed', message: 'Choose a bed.' };
+    }
+    return { ok: true, body: { ...shared.body, kind: 'uproot', status: 'done' } };
+  }
   if (kind === 'sowing' || kind === 'diary') {
     return { ok: true, body: { ...shared.body, kind, status } };
   }

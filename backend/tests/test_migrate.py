@@ -15,7 +15,7 @@ def test_a_new_database_is_stamped_at_the_current_version(tmp_path, monkeypatch)
         pass
 
     connection = sqlite3.connect(db)
-    assert connection.execute("PRAGMA user_version").fetchone()[0] == 5
+    assert connection.execute("PRAGMA user_version").fetchone()[0] == 6
     care = connection.execute(
         "SELECT sql FROM sqlite_master WHERE name = 'care'"
     ).fetchone()[0]
@@ -30,6 +30,7 @@ def test_a_new_database_is_stamped_at_the_current_version(tmp_path, monkeypatch)
     assert "crop_id" in calendar
     assert "crop TEXT" not in calendar
     assert "rule_id" in calendar
+    assert "'uproot'" in calendar
     assert (
         connection.execute(
             "SELECT 1 FROM sqlite_master WHERE name = 'care_rule'"
@@ -43,7 +44,7 @@ def test_a_database_already_at_this_version_keeps_its_checks(tmp_path, monkeypat
     db = tmp_path / "baghban.db"
     monkeypatch.setenv("BAGHBAN_DB", str(db))
     connection = sqlite3.connect(db)
-    connection.execute("PRAGMA user_version = 5")
+    connection.execute("PRAGMA user_version = 6")
     connection.execute(
         """
         CREATE TABLE care (
@@ -62,7 +63,7 @@ def test_a_database_already_at_this_version_keeps_its_checks(tmp_path, monkeypat
         pass
 
     connection = sqlite3.connect(db)
-    assert connection.execute("PRAGMA user_version").fetchone()[0] == 5
+    assert connection.execute("PRAGMA user_version").fetchone()[0] == 6
     sql = connection.execute(
         "SELECT sql FROM sqlite_master WHERE name = 'care'"
     ).fetchone()[0]
@@ -91,7 +92,7 @@ def test_a_failed_step_rolls_back_the_version_and_the_change(tmp_path):
     connection.close()
     migrate(db)
     connection = sqlite3.connect(db)
-    assert connection.execute("PRAGMA user_version").fetchone()[0] == 5
+    assert connection.execute("PRAGMA user_version").fetchone()[0] == 6
     connection.close()
 
 
@@ -115,7 +116,7 @@ def test_an_existing_crop_gains_an_empty_icon(tmp_path):
     migrate(db)
 
     connection = sqlite3.connect(db)
-    assert connection.execute("PRAGMA user_version").fetchone()[0] == 5
+    assert connection.execute("PRAGMA user_version").fetchone()[0] == 6
     assert connection.execute("SELECT name, emoji, icon FROM crop").fetchone() == (
         "Mint",
         "🌿",
@@ -180,7 +181,7 @@ def test_calendar_crop_text_becomes_crop_id(tmp_path):
     migrate(db)
 
     connection = sqlite3.connect(db)
-    assert connection.execute("PRAGMA user_version").fetchone()[0] == 5
+    assert connection.execute("PRAGMA user_version").fetchone()[0] == 6
     rows = connection.execute(
         "SELECT id, crop_id FROM calendar_entry ORDER BY id"
     ).fetchall()
@@ -222,7 +223,7 @@ def test_care_recurrence_adds_rule_table_and_rule_id(tmp_path):
     migrate(db)
 
     connection = sqlite3.connect(db)
-    assert connection.execute("PRAGMA user_version").fetchone()[0] == 5
+    assert connection.execute("PRAGMA user_version").fetchone()[0] == 6
     columns = {info[1] for info in connection.execute("PRAGMA table_info(calendar_entry)")}
     assert "rule_id" in columns
     assert (
@@ -270,7 +271,7 @@ def test_allow_tree_kind_rebuilds_bed_check(tmp_path):
     migrate(db)
 
     connection = sqlite3.connect(db)
-    assert connection.execute("PRAGMA user_version").fetchone()[0] == 5
+    assert connection.execute("PRAGMA user_version").fetchone()[0] == 6
     sql = connection.execute(
         "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'bed'"
     ).fetchone()[0]
@@ -290,5 +291,59 @@ def test_allow_tree_kind_rebuilds_bed_check(tmp_path):
         "SELECT kind FROM bed WHERE name = 'Mango'"
     ).fetchone()[0]
     assert kind == "tree"
+    connection.close()
+
+
+def test_allow_uproot_kind_rebuilds_calendar_check(tmp_path):
+    db = tmp_path / "baghban.db"
+    connection = sqlite3.connect(db)
+    connection.execute("PRAGMA user_version = 5")
+    connection.execute(
+        """
+        CREATE TABLE calendar_entry (
+            id        INTEGER PRIMARY KEY AUTOINCREMENT,
+            kind      TEXT NOT NULL CHECK (kind IN ('sowing', 'care', 'pest', 'harvest', 'diary')),
+            date      TEXT NOT NULL,
+            bed_id    INTEGER,
+            crop_id   INTEGER,
+            status    TEXT NOT NULL CHECK (status IN ('planned', 'done')),
+            note      TEXT NOT NULL DEFAULT '',
+            photo_url TEXT,
+            rule_id   INTEGER
+        )
+        """
+    )
+    connection.execute(
+        """
+        INSERT INTO calendar_entry (id, kind, date, bed_id, crop_id, status, note)
+        VALUES (2, 'diary', '2026-10-01', NULL, NULL, 'done', 'Rain')
+        """
+    )
+    connection.commit()
+    connection.close()
+
+    migrate(db)
+
+    connection = sqlite3.connect(db)
+    assert connection.execute("PRAGMA user_version").fetchone()[0] == 6
+    sql = connection.execute(
+        "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'calendar_entry'"
+    ).fetchone()[0]
+    assert "'uproot'" in sql
+    row = connection.execute(
+        "SELECT id, kind, note FROM calendar_entry WHERE id = 2"
+    ).fetchone()
+    assert row == (2, "diary", "Rain")
+    connection.execute(
+        """
+        INSERT INTO calendar_entry (kind, date, bed_id, crop_id, status, note)
+        VALUES ('uproot', '2026-11-01', 1, 1, 'done', '')
+        """
+    )
+    connection.commit()
+    kind = connection.execute(
+        "SELECT kind FROM calendar_entry WHERE kind = 'uproot'"
+    ).fetchone()[0]
+    assert kind == "uproot"
     connection.close()
 

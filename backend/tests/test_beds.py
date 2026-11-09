@@ -340,3 +340,46 @@ def test_active_assignments_keep_the_crop_date_and_maturity(tmp_path, monkeypatc
         assert isinstance(rows[0]["cropId"], int)
         assert rows[0]["createdOn"]
         assert "daysToMaturity" in rows[0]
+
+
+def test_orphan_beds_list_and_purge(tmp_path, monkeypatch):
+    monkeypatch.setenv("BAGHBAN_DB", str(tmp_path / "baghban.db"))
+    with TestClient(app) as client:
+        empty = client.put("/api/beds", json=herbs()).json()
+        planted = client.put(
+            "/api/beds",
+            json={**herbs(), "name": "Tomatoes", "x": 6},
+        ).json()
+        noted = client.put(
+            "/api/beds",
+            json={**herbs(), "name": "Diary bed", "x": 12},
+        ).json()
+        tomatoes = next(
+            crop["id"] for crop in client.get("/api/crops").json() if crop["name"] == "Tomatoes"
+        )
+        assert client.put(f"/api/beds/{planted['id']}/crops", json={"name": TOMATO}).status_code == 200
+        assert client.post(
+            "/api/calendar",
+            json=diary(noted["id"], tomatoes),
+        ).status_code == 200
+
+        assert client.delete(f"/api/beds/{empty['id']}").status_code == 204
+        assert client.delete(f"/api/beds/{planted['id']}").status_code == 204
+        assert client.delete(f"/api/beds/{noted['id']}").status_code == 204
+
+        orphans = client.get("/api/beds/orphans").json()
+        assert orphans == [
+            {
+                "id": empty["id"],
+                "name": "Herbs",
+                "kind": "bed",
+                "areaSqFt": 32,
+            }
+        ]
+        assert client.delete(f"/api/beds/orphans/{planted['id']}").status_code == 400
+        assert client.delete(f"/api/beds/orphans/{noted['id']}").status_code == 400
+        assert client.delete(f"/api/beds/orphans/{empty['id']}").status_code == 204
+        assert client.get("/api/beds/orphans").json() == []
+        assert empty["id"] not in {
+            bed["id"] for bed in client.get("/api/beds").json()
+        }

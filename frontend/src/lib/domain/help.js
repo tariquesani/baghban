@@ -15,10 +15,10 @@ const screens = {
   '/calendar': {
     title: 'Calendar',
     tips: [
-      'Filter the year by sowing, care, pest control, harvest, or diary',
+      'Filter the year by sowing, care, pest control, harvest, uproot, or diary',
       'The years beside the heading move to the previous or next year',
       'Choose a day, a crop, or one cell. The panel below lists those entries',
-      'Add a sowing, care, harvest, pest control, or diary note from the sidebar',
+      'Add a sowing, care, harvest, pest control, uproot, or diary note from the sidebar',
       'Open an entry to read it, then edit it or remove it',
     ],
   },

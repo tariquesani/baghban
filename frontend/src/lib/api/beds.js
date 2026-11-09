@@ -7,3 +7,11 @@ export function listBeds() {
 export function listAssignments() {
   return api.get('/beds/crops');
 }
+
+export function listOrphanBeds() {
+  return api.get('/beds/orphans');
+}
+
+export function purgeOrphanBed(id) {
+  return api.delete(`/beds/orphans/${id}`);
+}

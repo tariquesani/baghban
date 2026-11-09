@@ -171,6 +171,7 @@
     <li><i class="swatch care"></i> Care</li>
     <li><i class="swatch pest"></i> Pest</li>
     <li><i class="swatch harvest"></i> Harvest, darker is more</li>
+    <li><i class="swatch uproot"></i> Uproot</li>
     <li><i class="swatch diary"></i> Diary</li>
     <li><i class="swatch planned"></i> Hollow is planned</li>
   </ul>
@@ -362,6 +363,7 @@
     );
   }
   .swatch.diary { background: #5f6b76; }
+  .swatch.uproot { background: #a35d3a; }
   .swatch.planned {
     background:
       linear-gradient(#a9762c, #a9762c) top / 100% 2px no-repeat,

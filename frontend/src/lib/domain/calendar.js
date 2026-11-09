@@ -1,6 +1,6 @@
-/** Year grid for sowing, care, pest, harvest, and diary. */
+/** Year grid for sowing, care, pest, harvest, diary, and uproot. */
 
-export const CALENDAR_KINDS = ['sowing', 'care', 'pest', 'harvest', 'diary'];
+export const CALENDAR_KINDS = ['sowing', 'care', 'pest', 'harvest', 'uproot', 'diary'];
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
@@ -46,12 +46,14 @@ export const KIND_LABEL = {
   care: 'Care',
   pest: 'Pest',
   harvest: 'Harvest',
+  uproot: 'Uproot',
   diary: 'Diary',
 };
 
 /**
- * Wedges in sowing, care, pest, harvest, diary order.
+ * Wedges in sowing, care, pest, harvest, uproot, diary order.
  * Five marks keep the four corners and split the left side: care above, pest below.
+ * Six marks also split the right side.
  */
 const WEDGES = [
   [],
@@ -66,6 +68,14 @@ const WEDGES = [
     '0,100 100,100 50,50',
     '100,0 100,100 50,50',
   ],
+  [
+    '0,0 100,0 50,50',
+    '0,0 0,50 50,50',
+    '0,50 0,100 50,50',
+    '0,100 100,100 50,50',
+    '100,50 100,100 50,50',
+    '100,0 100,50 50,50',
+  ],
 ];
 
 /**
@@ -74,7 +84,7 @@ const WEDGES = [
  * @property {string} date
  * @property {string} crop Empty when the entry is for the whole garden. Joined catalogue name.
  * @property {number | null} [cropId] Catalogue id when the entry names a crop.
- * @property {'sowing' | 'care' | 'pest' | 'harvest' | 'diary'} kind
+ * @property {'sowing' | 'care' | 'pest' | 'harvest' | 'uproot' | 'diary'} kind
  * @property {'planned' | 'done'} status
  * @property {string} [action] Care action from the shared catalogue. A retired value is kept.
  * @property {number | null} [amount]

@@ -156,6 +156,7 @@
   .pip.pest { background: #7b4b8a; }
   .pip.harvest { background: #10b981; }
   .pip.diary { background: #5f6b76; }
+  .pip.uproot { background: #a35d3a; }
 
   header {
     display: flex;

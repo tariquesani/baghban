@@ -96,6 +96,7 @@
   polygon.harvest.done[data-shade='7'] { fill: var(--harvest-7, #047857); }
   polygon.harvest.done[data-shade='8'] { fill: var(--harvest-8, #064e3b); }
   polygon.diary.done { fill: #5f6b76; }
+  polygon.uproot.done { fill: #a35d3a; }
 
   polygon.planned {
     fill: none;
@@ -108,4 +109,5 @@
   polygon.pest.planned { stroke: #7b4b8a; }
   polygon.harvest.planned { stroke: #10b981; }
   polygon.diary.planned { stroke: #5f6b76; }
+  polygon.uproot.planned { stroke: #a35d3a; }
 </style>

@@ -1,6 +1,6 @@
 /** Photo ids for calendar uploads. randomUUID is missing on plain HTTP. */
 
-const KINDS = new Set(['sowing', 'care', 'pest', 'harvest', 'diary']);
+const KINDS = new Set(['sowing', 'care', 'pest', 'harvest', 'uproot', 'diary']);
 
 /**
  * @param {string} kind

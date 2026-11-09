@@ -227,19 +227,24 @@ def place_crop(connection, bed_id: int, name: str, when: str) -> None:
     place_crop_id(connection, bed_id, int(crop["id"]), when)
 
 
+def archive_crop_id(connection, bed_id: int, crop_id: int, when: str) -> None:
+    """Finish the active assignment on `when`. A missing active row stays finished."""
+    connection.execute(
+        """
+        UPDATE beds_crops
+        SET archived_on = ?
+        WHERE bed_id = ? AND crop_id = ? AND archived_on IS NULL
+        """,
+        (when, bed_id, crop_id),
+    )
+
+
 def archive_crop(bed_id: int, name: str) -> None:
     """Mark the active assignment finished. A missing active row stays finished."""
     with closing(connect()) as connection:
         _require_bed(connection, bed_id)
         crop = _require_crop(connection, name)
-        connection.execute(
-            """
-            UPDATE beds_crops
-            SET archived_on = ?
-            WHERE bed_id = ? AND crop_id = ? AND archived_on IS NULL
-            """,
-            (today(), bed_id, int(crop["id"])),
-        )
+        archive_crop_id(connection, bed_id, int(crop["id"]), today())
         connection.commit()
 
 

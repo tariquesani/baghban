@@ -583,6 +583,63 @@ def hide_bed(bed_id: int) -> None:
         connection.commit()
 
 
+def _orphan_clause() -> str:
+    """Removed beds with no crop history and no calendar entries on the bed."""
+    return """
+        bed.removed = 1
+        AND NOT EXISTS (
+            SELECT 1 FROM beds_crops WHERE beds_crops.bed_id = bed.id
+        )
+        AND NOT EXISTS (
+            SELECT 1 FROM calendar_entry WHERE calendar_entry.bed_id = bed.id
+        )
+    """
+
+
+def list_orphan_beds() -> list[dict]:
+    with closing(connect()) as connection:
+        rows = connection.execute(
+            f"""
+            SELECT id, name, kind, area_sqft
+            FROM bed
+            WHERE {_orphan_clause()}
+            ORDER BY id
+            """
+        ).fetchall()
+    return [
+        {
+            "id": int(row["id"]),
+            "name": row["name"] or "",
+            "kind": row["kind"],
+            "areaSqFt": row["area_sqft"],
+        }
+        for row in rows
+    ]
+
+
+def purge_orphan_bed(bed_id: int) -> None:
+    """Hard-delete a removed bed that has no crop or calendar history."""
+    with closing(connect()) as connection:
+        row = connection.execute(
+            f"SELECT id FROM bed WHERE id = ? AND {_orphan_clause()}",
+            (bed_id,),
+        ).fetchone()
+        if row is None:
+            found = connection.execute(
+                "SELECT id, removed FROM bed WHERE id = ?",
+                (bed_id,),
+            ).fetchone()
+            if found is None:
+                raise HTTPException(status_code=404, detail="Bed not found")
+            raise HTTPException(status_code=400, detail="Bed is not an orphan")
+        connection.execute(
+            "UPDATE care_rule SET bed_id = NULL WHERE bed_id = ?",
+            (bed_id,),
+        )
+        connection.execute("DELETE FROM bed WHERE id = ?", (bed_id,))
+        connection.commit()
+
+
 def create_obstacle(body: dict) -> dict:
     obstacle = parse_obstacle(body, None)
     with closing(connect()) as connection:
@@ -678,6 +735,17 @@ def get_bed_crops() -> list:
     from beds_crops import list_active_assignments
 
     return list_active_assignments()
+
+
+@router.get("/beds/orphans")
+def get_orphan_beds() -> list:
+    return list_orphan_beds()
+
+
+@router.delete("/beds/orphans/{bed_id}")
+def delete_orphan_bed(bed_id: str) -> Response:
+    purge_orphan_bed(require_row_id(bed_id, "Bed not found"))
+    return Response(status_code=204)
 
 
 @router.put("/beds")
