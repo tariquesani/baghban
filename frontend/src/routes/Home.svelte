@@ -73,7 +73,6 @@
     name: string;
     emoji: string;
     icon: string;
-    iconRev: number | null;
     createdOn: string;
     daysToMaturity: number | null;
   };
@@ -154,7 +153,6 @@
       name: row.name,
       emoji: typeof row.emoji === 'string' ? row.emoji : '',
       icon: typeof row.icon === 'string' ? row.icon : '',
-      iconRev: typeof row.iconRev === 'number' ? row.iconRev : null,
       createdOn: row.createdOn,
       daysToMaturity: typeof row.daysToMaturity === 'number' ? row.daysToMaturity : null,
     };
@@ -264,7 +262,7 @@
               {#each growing as card (card.id)}
                 <article>
                   <h3>
-                    <CropMark id={card.cropId} icon={card.icon} iconRev={card.iconRev} emoji={card.emoji} />
+                    <CropMark id={card.cropId} icon={card.icon} emoji={card.emoji} />
                     {card.name}
                   </h3>
                   <p>{card.bedName}</p>

@@ -19,7 +19,6 @@ export function emptyCrop() {
     category: '',
     emoji: '',
     icon: '',
-    iconRev: null,
     sqft: null,
     spacing: null,
     depthIn: null,
