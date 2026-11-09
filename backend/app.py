@@ -20,6 +20,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, JSONResponse, Response
 
 from beds import create_scene_tables, drop_plant_grid, garden_contents, router as beds_router
@@ -581,6 +582,7 @@ async def lifespan(_app: FastAPI):
 
 
 app = FastAPI(lifespan=lifespan)
+app.add_middleware(GZipMiddleware, minimum_size=500)
 app.include_router(beds_router, prefix="/api")
 app.include_router(calendar_router, prefix="/api")
 app.include_router(care_rules_router, prefix="/api")
