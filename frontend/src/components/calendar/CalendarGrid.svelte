@@ -45,7 +45,7 @@
     to?: string;
     focus?: string;
     reveal?: string;
-    marks?: Record<string, { id: number; icon: string; emoji: string }>;
+    marks?: Record<string, { id: number; icon: string; iconRev?: number | null; emoji: string }>;
     onSelect: (day: { date: string; crop: string }) => void;
     onSelectDay?: (date: string) => void;
     onSelectCrop?: (crop: string) => void;
@@ -115,9 +115,9 @@
           aria-pressed={activeCrop === crop}
           aria-label="{cropLabel(crop)}, {year}"
           onclick={() => onSelectCrop(crop)}
-        >{#if mark}<CropMark id={mark.id} icon={mark.icon} emoji={mark.emoji} />{/if}<span class="name">{cropLabel(crop)}</span></button>
+        >{#if mark}<CropMark id={mark.id} icon={mark.icon} iconRev={mark.iconRev} emoji={mark.emoji} />{/if}<span class="name">{cropLabel(crop)}</span></button>
       {:else}
-        <div class={['label', { marked: Boolean(mark) }]}>{#if mark}<CropMark id={mark.id} icon={mark.icon} emoji={mark.emoji} />{/if}<span class="name">{cropLabel(crop)}</span></div>
+        <div class={['label', { marked: Boolean(mark) }]}>{#if mark}<CropMark id={mark.id} icon={mark.icon} iconRev={mark.iconRev} emoji={mark.emoji} />{/if}<span class="name">{cropLabel(crop)}</span></div>
       {/if}
     {/each}
   </div>

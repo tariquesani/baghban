@@ -39,7 +39,12 @@ function iconUrl(crop) {
   const file = text(crop.icon);
   const id = crop.id;
   if (!file || typeof id !== 'number') return '';
-  return `/api/crops/${id}/icon`;
+  const rev = crop.iconRev;
+  const base = `/api/crops/${id}/icon`;
+  if (typeof rev === 'number' || (typeof rev === 'string' && rev !== '')) {
+    return `${base}?v=${encodeURIComponent(String(rev))}`;
+  }
+  return base;
 }
 
 /**

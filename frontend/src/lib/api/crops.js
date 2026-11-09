@@ -32,9 +32,14 @@ export function archiveCrop(id) {
   return api.delete(`/crops/${encodeURIComponent(id)}`);
 }
 
-/** @param {number} id */
-export function cropIconUrl(id) {
-  return `/api/crops/${encodeURIComponent(id)}/icon`;
+/**
+ * @param {number} id
+ * @param {number | string | null | undefined} [rev]
+ */
+export function cropIconUrl(id, rev) {
+  const base = `/api/crops/${encodeURIComponent(id)}/icon`;
+  if (rev == null || rev === '') return base;
+  return `${base}?v=${encodeURIComponent(String(rev))}`;
 }
 
 /**

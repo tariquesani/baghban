@@ -18,6 +18,7 @@
     name: string;
     emoji: string;
     icon: string;
+    iconRev?: number | null;
     aliases: string[];
   };
 
@@ -188,7 +189,7 @@
                   disabled={loading}
                 >
                   <span class={cn('flex min-w-0 flex-1 items-center gap-2 text-left', !chosenLabel && 'text-muted-foreground')}>
-                    {#if chosen}<CropMark id={chosen.id} icon={chosen.icon} emoji={chosen.emoji} />{/if}
+                    {#if chosen}<CropMark id={chosen.id} icon={chosen.icon} iconRev={chosen.iconRev} emoji={chosen.emoji} />{/if}
                     <span class="truncate">{chosenLabel || (loading ? 'Loading crops...' : 'Choose a crop')}</span>
                   </span>
                   <ChevronDownIcon data-icon="inline-end" />
@@ -208,7 +209,7 @@
                         data-checked={chosen?.id === crop.id}
                         onSelect={() => choose(crop)}
                       >
-                        <CropMark id={crop.id} icon={crop.icon} emoji={crop.emoji} />
+                        <CropMark id={crop.id} icon={crop.icon} iconRev={crop.iconRev} emoji={crop.emoji} />
                         {crop.name}
                       </Command.Item>
                     {/each}

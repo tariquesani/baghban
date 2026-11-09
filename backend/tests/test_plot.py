@@ -45,6 +45,7 @@ def test_plot_photo_round_trip(tmp_path, monkeypatch):
         assert loaded.status_code == 200
         assert loaded.content == photo
         assert loaded.headers["content-type"].startswith("image/png")
+        assert loaded.headers["cache-control"] == "public, max-age=86400"
 
         monkeypatch.setattr("app.MAX_PHOTO_BYTES", len(photo))
         too_big = client.put("/api/photos/plot-1", content=photo + b"\x00")

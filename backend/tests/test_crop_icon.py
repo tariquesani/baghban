@@ -1,4 +1,5 @@
 import struct
+import time
 import zlib
 
 from fastapi.testclient import TestClient
@@ -63,10 +64,14 @@ def test_crop_icon_round_trip(tmp_path, monkeypatch):
         assert loaded.status_code == 200
         assert loaded.content == photo
         assert loaded.headers["content-type"].startswith("image/png")
-        assert loaded.headers["cache-control"] == "no-store"
+        assert loaded.headers["cache-control"] == "public, max-age=31536000, immutable"
+        assert isinstance(saved.json()["iconRev"], int)
 
+        time.sleep(0.02)
         again = client.put(f"/api/crops/{crop_id}/icon", content=replaced)
         assert again.status_code == 200
+        assert isinstance(again.json()["iconRev"], int)
+        assert again.json()["iconRev"] != saved.json()["iconRev"]
         assert client.get(f"/api/crops/{crop_id}/icon").content == replaced
 
         renamed = client.put(
