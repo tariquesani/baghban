@@ -29,6 +29,7 @@
 
 <div {@attach (element) => place(element, 'plantingActionsHost')}>
   <SidebarButton label="Add pot" icon="circle" onPress={() => globalThis.addPot()} />
+  <SidebarButton label="Add tree" icon="tree-deciduous" onPress={() => globalThis.addTree()} />
   <SidebarButton label="Add planter" icon="rectangle-horizontal" onPress={() => globalThis.addPlanter()} />
   <SidebarButton label="Add obstacle" icon="mountain" onPress={() => globalThis.addObstacle()} />
 </div>

@@ -100,6 +100,7 @@ test('a pot sends diam and a traced bed sends its outline', () => {
   queue.observe(plan({
     beds: [
       bed({ id: -1, type: 'pot', name: 'Pot', diam: 1, w: 1, h: 1, color: '#c1440e' }),
+      bed({ id: -3, type: 'tree', name: 'Tree', diam: 2, w: 2, h: 2, color: '#3d8f45' }),
       bed({
         id: -2,
         shape: 'polygon',
@@ -110,9 +111,12 @@ test('a pot sends diam and a traced bed sends its outline', () => {
   }), 0);
   const ready = queue.take(0);
   const pot = ready.find((request) => request.body.kind === 'pot');
+  const tree = ready.find((request) => request.body.kind === 'tree');
   const traced = ready.find((request) => request.body.outline);
   assert.equal(pot.body.diam, 1);
   assert.equal('id' in pot.body, false);
+  assert.equal(tree.body.diam, 2);
+  assert.equal(tree.body.color, '#3d8f45');
   assert.deepEqual(traced.body.outline, { points: TRIANGLE, pivot: { x: 1, y: 1 } });
   assert.equal('shape' in traced.body, false);
 });

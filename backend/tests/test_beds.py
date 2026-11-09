@@ -1,3 +1,5 @@
+import math
+
 from fastapi.testclient import TestClient
 
 from app import app
@@ -132,6 +134,24 @@ def test_rows_save_one_at_a_time(tmp_path, monkeypatch):
         assert patio["kind"] == "pot"
         assert patio["diam"] == 1.5
         assert patio["areaSqFt"] == 2.25
+        tree = client.put(
+            "/api/beds",
+            json={
+                "name": "Mango",
+                "kind": "tree",
+                "x": 10,
+                "y": 2,
+                "w": 2,
+                "h": 2,
+                "diam": 2,
+                "color": "#3d8f45",
+            },
+        )
+        assert tree.status_code == 200
+        canopy = tree.json()
+        assert canopy["kind"] == "tree"
+        assert canopy["diam"] == 2
+        assert canopy["areaSqFt"] == round(math.pi, 4)
         assert client.put(
             "/api/beds",
             json={"name": "Nope", "kind": "bed", "diam": 2},
@@ -151,13 +171,15 @@ def test_rows_save_one_at_a_time(tmp_path, monkeypatch):
         loaded = client.get("/api/garden").json()
         assert "plants" not in loaded
         by_id = {item["id"]: item for item in loaded["beds"]}
-        assert set(by_id) == {bed_id, patch["id"], patio["id"]}
+        assert set(by_id) == {bed_id, patch["id"], patio["id"], canopy["id"]}
         assert by_id[bed_id]["plants"] == [TOMATO, BASIL]
         assert by_id[bed_id]["x"] == 7
         assert "plantGrid" not in by_id[bed_id]
         assert by_id[bed_id]["removed"] is False
         assert by_id[patch["id"]]["plants"] == []
         assert by_id[patio["id"]]["diam"] == 1.5
+        assert by_id[canopy["id"]]["kind"] == "tree"
+        assert by_id[canopy["id"]]["diam"] == 2
         assert loaded["obstacles"] == []
 
         removed = client.delete(f"/api/beds/{patch['id']}")
@@ -180,6 +202,13 @@ def test_rows_save_one_at_a_time(tmp_path, monkeypatch):
                 "name": "Patio",
                 "kind": "pot",
                 "areaSqFt": 2.25,
+                "removed": False,
+            },
+            {
+                "id": canopy["id"],
+                "name": "Mango",
+                "kind": "tree",
+                "areaSqFt": round(math.pi, 4),
                 "removed": False,
             },
             {

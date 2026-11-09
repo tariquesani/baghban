@@ -273,6 +273,10 @@ function polygonLabelFrame(points) {
 
 function bedArea(bed) {
   if (isPolygon(bed)) return shoelaceArea(polygonOutline(bed));
+  if (bed.type === 'tree') {
+    const diam = bed.diam || bed.w || 0;
+    return Math.PI * (diam / 2) * (diam / 2);
+  }
   return (bed.w || 0) * (bed.h || 0);
 }
 

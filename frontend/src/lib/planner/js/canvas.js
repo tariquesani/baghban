@@ -503,7 +503,7 @@ function drawBed(b) {
   const cx = bx + w/2, cy = by + h/2;
   const rot = b.rotation || 0;
   const sel = isSelected(selectedObj, 'bed', b.id);
-  const isPot     = b.type === 'pot';
+  const isCircle  = b.type === 'pot' || b.type === 'tree';
   const isPlanter = b.type === 'planter';
   const empty = bedIsEmpty(b);
 
@@ -520,14 +520,15 @@ function drawBed(b) {
   ctx.shadowOffsetX = empty ? 0 : 2; ctx.shadowOffsetY = empty ? 0 : 2;
 
   ctx.fillStyle = empty ? 'rgba(255,255,255,0.55)' : b.color;
-  if (!isPot) {
+  if (!isCircle) {
     roundRect(x, y, w, h, 5); ctx.fill();
   }
 
   ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0;
   ctx.shadowOffsetX = 0; ctx.shadowOffsetY = 0;
 
-  if (isPot) {
+  if (isCircle) {
+    const isTree = b.type === 'tree';
     const r  = ft(b.diam) / 2;
     const potCx = x + r, potCy = y + r;
     ctx.shadowColor = empty ? 'transparent' : (sel ? 'rgba(255,159,10,0.4)' : 'rgba(0,0,0,0.18)');
@@ -551,15 +552,18 @@ function drawBed(b) {
       ctx.beginPath(); ctx.arc(potCx, potCy, r + 3, 0, Math.PI*2);
       ctx.strokeStyle = '#ff9f0a'; ctx.lineWidth = 3; ctx.stroke();
     }
-    // Name + diameter labels
+    // Name + size labels
     ctx.fillStyle = empty ? '#3d4742' : '#fff';
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     const hasPlants = !empty && b.plants && b.plants.length;
+    const sizeLabel = isTree
+      ? `${b.diam} ft · ${(Math.round(bedArea(b) * 10) / 10)} sq ft`
+      : `${b.diam * 12}"`;
     ctx.font = `bold ${clamp(9, 12, r / 2)}px sans-serif`;
     ctx.fillText(b.name, potCx, hasPlants || empty ? potCy - r * 0.45 : potCy - r * 0.18);
     ctx.font = `${clamp(8, 10, r / 3)}px sans-serif`;
     ctx.globalAlpha = 0.75;
-    ctx.fillText(`${b.diam * 12}"`, potCx, hasPlants || empty ? potCy - r * 0.18 : potCy + r * 0.32);
+    ctx.fillText(sizeLabel, potCx, hasPlants || empty ? potCy - r * 0.18 : potCy + r * 0.32);
     ctx.globalAlpha = 1;
     if (empty) ctx.fillText('Empty', potCx, potCy + r * 0.28);
     if (hasPlants && r > 16) {
@@ -567,6 +571,13 @@ function drawBed(b) {
     }
     ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
     ctx.restore();
+    if (isTree && sel && !pickOnly) {
+      const handleDist = 22 / viewZoom;
+      const sin = Math.sin(rot), cos = Math.cos(rot);
+      const topCX = cx + (h/2) * sin;
+      const topCY = cy - (h/2) * cos;
+      drawTurnHandle(topCX, topCY, topCX + handleDist * sin, topCY - handleDist * cos);
+    }
     return;
   }
 
@@ -798,7 +809,7 @@ function pointerCursor() {
   if (pickOnly) {
     if (!pointerWorld) return 'grab';
     const hit = hitTest(pointerWorld.x, pointerWorld.y);
-    if (hit && hit.type === 'bed' && hit.item.type !== 'pot') return 'pointer';
+    if (hit && hit.type === 'bed' && hit.item.type !== 'pot' && hit.item.type !== 'tree') return 'pointer';
     return 'grab';
   }
   if (spacePan) return 'grab';
@@ -871,7 +882,7 @@ function finishPointerGesture(event) {
 }
 
 function offerBed(item) {
-  if (!item || item.type === 'pot') return;
+  if (!item || item.type === 'pot' || item.type === 'tree') return;
   canvas.dispatchEvent(new CustomEvent('bedpick', {
     bubbles: true,
     detail: { id: item.id },

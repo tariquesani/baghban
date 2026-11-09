@@ -60,6 +60,8 @@ function publishDetails() {
   }
   const isBed = isBedSelected();
   const isPot = isBed && item.type === 'pot';
+  const isTree = isBed && item.type === 'tree';
+  const isCircle = isPot || isTree;
   const isPlanter = isBed && item.type === 'planter';
   const poly = isBed && isPolygon(item);
   const pos = visualPos(item);
@@ -67,7 +69,7 @@ function publishDetails() {
   document.dispatchEvent(new CustomEvent('selectiondetails', {
     detail: {
       id: item.id,
-      title: isPlanter ? 'Planter' : isPot ? 'Pot' : isBed ? 'Bed' : 'Obstacle',
+      title: isTree ? 'Tree' : isPlanter ? 'Planter' : isPot ? 'Pot' : isBed ? 'Bed' : 'Obstacle',
       name: item.name,
       width: item.w,
       length: item.h,
@@ -75,16 +77,18 @@ function publishDetails() {
       x: Math.round(pos.x * 10) / 10,
       y: Math.round(pos.y * 10) / 10,
       rotation: isPot ? 0 : rotationDegrees(item.rotation),
-      diameter: isPot ? (item.diam || 1) : 0,
+      diameter: isCircle ? (item.diam || 1) : 0,
+      areaSqFt: isTree ? Math.round(bedArea(item) * 10) / 10 : 0,
       planterLength: isPlanter ? Math.round(item.w * 12) : 0,
       planterWidth: isPlanter ? Math.round(item.h * 12) : 0,
       plants: isBed ? [...(item.plants || [])] : [],
       polyStats: summary ? summary.stats : '',
       neighborNote: summary ? summary.neighbor : '',
       plantWarn,
-      showSize: !(isPot || isPlanter || poly),
+      showSize: !(isCircle || isPlanter || poly),
       showNotes: isBed,
       showPot: isPot,
+      showTree: isTree,
       showPlanter: isPlanter,
       showRotation: !isPot,
       showPosition: !poly,
@@ -225,6 +229,14 @@ function addPot() {
   select(id, 'bed'); renderLists(); draw();
 }
 
+function addTree() {
+  if (!gardenReady()) return;
+  saveHistory();
+  const id = takeStandInId();
+  beds.push({ id, name:'Tree', x:2, y:2, diam:1, w:1, h:1, color:'#3d8f45', type:'tree', plants:[], notes:'' });
+  select(id, 'bed'); renderLists(); draw();
+}
+
 function addPlanter() {
   if (!gardenReady()) return;
   saveHistory();
@@ -257,9 +269,11 @@ function applyPlanterPreset(lengthIn, widthIn) {
 
 function updatePotDiam(val) {
   const bed = selectedBed();
-  if (!bed || bed.type !== 'pot') return;
-  saveHistory();
-  bed.diam = val; bed.w = val; bed.h = val;
+  if (!bed || (bed.type !== 'pot' && bed.type !== 'tree')) return;
+  const n = Number(val);
+  if (!Number.isFinite(n) || n < 0.5 || n > 100) return;
+  if (!_propHistorySaved) { saveHistory(); _propHistorySaved = true; }
+  bed.diam = n; bed.w = n; bed.h = n;
   draw(); renderLists();
   publishDetails();
 }
@@ -356,6 +370,10 @@ function deleteSelected() {
 // ─── Sidebar lists ────────────────────────────────────────────────────────────
 function bedListSize(b) {
   if (b.type === 'pot') return `${b.diam * 12}" pot`;
+  if (b.type === 'tree') {
+    const area = Math.round(bedArea(b) * 10) / 10;
+    return `${b.diam} ft · ${area} sq ft tree`;
+  }
   if (b.type === 'planter') return `${Math.round(b.w * 12)}×${Math.round(b.h * 12)}" planter`;
   if (isPolygon(b)) return `${bedArea(b).toFixed(1)} sq ft · ${b.points.length} sides`;
   return `${b.w}×${b.h} ft`;

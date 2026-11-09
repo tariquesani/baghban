@@ -130,6 +130,18 @@ test('a polygon outline and a pot become canvas shapes', () => {
         color: '#c1440e',
         plants: [],
       },
+      {
+        id: 4,
+        name: 'Mango',
+        kind: 'tree',
+        x: 12,
+        y: 2,
+        w: 2,
+        h: 2,
+        diam: 2,
+        color: '',
+        plants: [],
+      },
     ],
     obstacles: [],
   });
@@ -148,6 +160,9 @@ test('a polygon outline and a pot become canvas shapes', () => {
   assert.equal(scene.beds[1].type, 'pot');
   assert.equal(scene.beds[1].diam, 1.5);
   assert.equal(scene.beds[1].shape, undefined);
+  assert.equal(scene.beds[2].type, 'tree');
+  assert.equal(scene.beds[2].diam, 2);
+  assert.equal(scene.beds[2].color, '#3d8f45');
 });
 
 test('a bent side keeps its bulge and drops a straight side', () => {

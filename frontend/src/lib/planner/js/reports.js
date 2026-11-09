@@ -328,7 +328,16 @@ function generatePlantsHTML() {
         </div>` : '';
 
     const isPot     = bed.type === 'pot';
+    const isTree    = bed.type === 'tree';
     const isPlanter = bed.type === 'planter';
+    const placeLabel = isPlanter ? 'planter' : isTree ? 'tree' : isPot ? 'pot' : 'bed';
+    const kindBadge = isPlanter
+      ? '<span style="font-size:11px;font-weight:normal;background:rgba(156,102,68,0.18);border:1px solid #9c6644;border-radius:4px;padding:1px 6px;vertical-align:middle">🍱 planter</span>'
+      : isTree
+        ? '<span style="font-size:11px;font-weight:normal;background:rgba(61,143,69,0.18);border:1px solid #3d8f45;border-radius:4px;padding:1px 6px;vertical-align:middle">🌳 tree</span>'
+        : isPot
+          ? '<span style="font-size:11px;font-weight:normal;background:rgba(193,68,14,0.15);border:1px solid #c1440e;border-radius:4px;padding:1px 6px;vertical-align:middle">🪴 pot</span>'
+          : '';
 
     // Per-plant detail rows
     const plantRows = plants.map(pName => {
@@ -351,21 +360,21 @@ function generatePlantsHTML() {
           <div class="plant-meta">
             <span class="pill">📐 ${pd.sqft >= 1 ? pd.sqft + ' sq ft/plant' : perSqft + '/sq ft'}</span>
             <span class="pill">↔ ${pd.spacing}" apart</span>
-            ${(!isPot && !isPlanter) ? `<span class="pill">⬇ ${pd.depthIn}" soil</span>` : ''}
+            ${(!isPot && !isTree && !isPlanter) ? `<span class="pill">⬇ ${pd.depthIn}" soil</span>` : ''}
             <span class="pill">☀ ${pd.sun}</span>
             <span class="pill">💧 ${pd.water}</span>
             ${trellisTag}
           </div>
           ${(cTags || aTags) ? `<div class="plant-meta">${cTags}${aTags}</div>` : ''}
-          <div class="plant-notes">${countLabel} in this ${sqftTotal} sq ft ${isPlanter ? 'planter' : isPot ? 'pot' : 'bed'}. ${pd.notes}</div>
+          <div class="plant-notes">${countLabel} in this ${sqftTotal} sq ft ${placeLabel}. ${pd.notes}</div>
         </div>
       </div>`;
     }).join('');
 
     return `<div class="report-bed">
       <div class="report-bed-header">
-        <h3>${bed.name} ${isPlanter ? '<span style="font-size:11px;font-weight:normal;background:rgba(156,102,68,0.18);border:1px solid #9c6644;border-radius:4px;padding:1px 6px;vertical-align:middle">🍱 planter</span>' : isPot ? '<span style="font-size:11px;font-weight:normal;background:rgba(193,68,14,0.15);border:1px solid #c1440e;border-radius:4px;padding:1px 6px;vertical-align:middle">🪴 pot</span>' : ''}</h3>
-        <span>${isPlanter ? `${Math.round(bed.w * 12)}×${Math.round(bed.h * 12)} in · ${sqftTotal} sq ft` : isPolygon(bed) ? `${sqftTotal} sq ft` : `${bed.w} ft × ${bed.h} ft · ${sqftTotal} sq ft`}</span>
+        <h3>${bed.name} ${kindBadge}</h3>
+        <span>${isPlanter ? `${Math.round(bed.w * 12)}×${Math.round(bed.h * 12)} in · ${sqftTotal} sq ft` : isTree ? `${bed.diam} ft diam · ${sqftTotal} sq ft` : isPolygon(bed) ? `${sqftTotal} sq ft` : `${bed.w} ft × ${bed.h} ft · ${sqftTotal} sq ft`}</span>
       </div>
       ${addRow}
       <div class="report-bed-body">

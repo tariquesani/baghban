@@ -9,6 +9,7 @@ export type SelectionDetails = {
   y: number;
   rotation: number;
   diameter: number;
+  areaSqFt: number;
   planterLength: number;
   planterWidth: number;
   plants: string[];
@@ -18,6 +19,7 @@ export type SelectionDetails = {
   showSize: boolean;
   showNotes: boolean;
   showPot: boolean;
+  showTree: boolean;
   showPlanter: boolean;
   showRotation: boolean;
   showPosition: boolean;

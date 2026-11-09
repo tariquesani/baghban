@@ -68,7 +68,7 @@ function outlineFrom(bed) {
  */
 function bedFrom(bed) {
   const kind = bed.type || bed.kind;
-  const type = kind === 'pot' || kind === 'planter' ? kind : 'bed';
+  const type = kind === 'pot' || kind === 'tree' || kind === 'planter' ? kind : 'bed';
   /** @type {Record<string, any>} */
   const row = {
     id: bed.id,
@@ -84,7 +84,7 @@ function bedFrom(bed) {
     plants: Array.isArray(bed.plants) ? bed.plants.filter((name) => typeof name === 'string' && name) : [],
     outline: outlineFrom(bed),
   };
-  if (type === 'pot') row.diam = amount(bed.diam ?? bed.w);
+  if (type === 'pot' || type === 'tree') row.diam = amount(bed.diam ?? bed.w);
   return row;
 }
 
@@ -166,7 +166,7 @@ function bedBody(bed, includeId) {
     w: bed.w,
     h: bed.h,
   };
-  if (bed.type === 'pot') body.diam = bed.diam;
+  if (bed.type === 'pot' || bed.type === 'tree') body.diam = bed.diam;
   body.rotation = bed.rotation;
   body.color = bed.color;
   body.notes = bed.notes;

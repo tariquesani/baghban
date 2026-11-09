@@ -15,7 +15,7 @@ def test_a_new_database_is_stamped_at_the_current_version(tmp_path, monkeypatch)
         pass
 
     connection = sqlite3.connect(db)
-    assert connection.execute("PRAGMA user_version").fetchone()[0] == 4
+    assert connection.execute("PRAGMA user_version").fetchone()[0] == 5
     care = connection.execute(
         "SELECT sql FROM sqlite_master WHERE name = 'care'"
     ).fetchone()[0]
@@ -43,7 +43,7 @@ def test_a_database_already_at_this_version_keeps_its_checks(tmp_path, monkeypat
     db = tmp_path / "baghban.db"
     monkeypatch.setenv("BAGHBAN_DB", str(db))
     connection = sqlite3.connect(db)
-    connection.execute("PRAGMA user_version = 4")
+    connection.execute("PRAGMA user_version = 5")
     connection.execute(
         """
         CREATE TABLE care (
@@ -62,7 +62,7 @@ def test_a_database_already_at_this_version_keeps_its_checks(tmp_path, monkeypat
         pass
 
     connection = sqlite3.connect(db)
-    assert connection.execute("PRAGMA user_version").fetchone()[0] == 4
+    assert connection.execute("PRAGMA user_version").fetchone()[0] == 5
     sql = connection.execute(
         "SELECT sql FROM sqlite_master WHERE name = 'care'"
     ).fetchone()[0]
@@ -91,7 +91,7 @@ def test_a_failed_step_rolls_back_the_version_and_the_change(tmp_path):
     connection.close()
     migrate(db)
     connection = sqlite3.connect(db)
-    assert connection.execute("PRAGMA user_version").fetchone()[0] == 4
+    assert connection.execute("PRAGMA user_version").fetchone()[0] == 5
     connection.close()
 
 
@@ -115,7 +115,7 @@ def test_an_existing_crop_gains_an_empty_icon(tmp_path):
     migrate(db)
 
     connection = sqlite3.connect(db)
-    assert connection.execute("PRAGMA user_version").fetchone()[0] == 4
+    assert connection.execute("PRAGMA user_version").fetchone()[0] == 5
     assert connection.execute("SELECT name, emoji, icon FROM crop").fetchone() == (
         "Mint",
         "🌿",
@@ -180,7 +180,7 @@ def test_calendar_crop_text_becomes_crop_id(tmp_path):
     migrate(db)
 
     connection = sqlite3.connect(db)
-    assert connection.execute("PRAGMA user_version").fetchone()[0] == 4
+    assert connection.execute("PRAGMA user_version").fetchone()[0] == 5
     rows = connection.execute(
         "SELECT id, crop_id FROM calendar_entry ORDER BY id"
     ).fetchall()
@@ -222,7 +222,7 @@ def test_care_recurrence_adds_rule_table_and_rule_id(tmp_path):
     migrate(db)
 
     connection = sqlite3.connect(db)
-    assert connection.execute("PRAGMA user_version").fetchone()[0] == 4
+    assert connection.execute("PRAGMA user_version").fetchone()[0] == 5
     columns = {info[1] for info in connection.execute("PRAGMA table_info(calendar_entry)")}
     assert "rule_id" in columns
     assert (
@@ -232,3 +232,63 @@ def test_care_recurrence_adds_rule_table_and_rule_id(tmp_path):
         is not None
     )
     connection.close()
+
+
+def test_allow_tree_kind_rebuilds_bed_check(tmp_path):
+    db = tmp_path / "baghban.db"
+    connection = sqlite3.connect(db)
+    connection.execute("PRAGMA user_version = 4")
+    connection.execute(
+        """
+        CREATE TABLE bed (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL DEFAULT '',
+            kind TEXT NOT NULL CHECK (kind IN ('bed', 'planter', 'pot')),
+            x REAL NOT NULL DEFAULT 0,
+            y REAL NOT NULL DEFAULT 0,
+            w REAL NOT NULL DEFAULT 0,
+            h REAL NOT NULL DEFAULT 0,
+            diam REAL,
+            rotation REAL NOT NULL DEFAULT 0,
+            color TEXT NOT NULL DEFAULT '',
+            notes TEXT NOT NULL DEFAULT '',
+            area_sqft REAL NOT NULL DEFAULT 0,
+            outline TEXT,
+            removed INTEGER NOT NULL DEFAULT 0 CHECK (removed IN (0, 1))
+        )
+        """
+    )
+    connection.execute(
+        """
+        INSERT INTO bed (id, name, kind, x, y, w, h, diam, color, area_sqft)
+        VALUES (3, 'Patio', 'pot', 1, 2, 1.5, 1.5, 1.5, '#c1440e', 2.25)
+        """
+    )
+    connection.commit()
+    connection.close()
+
+    migrate(db)
+
+    connection = sqlite3.connect(db)
+    assert connection.execute("PRAGMA user_version").fetchone()[0] == 5
+    sql = connection.execute(
+        "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'bed'"
+    ).fetchone()[0]
+    assert "'tree'" in sql
+    row = connection.execute(
+        "SELECT id, name, kind, diam FROM bed WHERE id = 3"
+    ).fetchone()
+    assert row == (3, "Patio", "pot", 1.5)
+    connection.execute(
+        """
+        INSERT INTO bed (name, kind, x, y, w, h, diam, color, area_sqft)
+        VALUES ('Mango', 'tree', 4, 4, 2, 2, 2, '#3d8f45', 4)
+        """
+    )
+    connection.commit()
+    kind = connection.execute(
+        "SELECT kind FROM bed WHERE name = 'Mango'"
+    ).fetchone()[0]
+    assert kind == "tree"
+    connection.close()
+

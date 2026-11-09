@@ -61,7 +61,7 @@
   }
 </script>
 
-{#if details.showPoly || details.showPot || details.showPlanter || details.showRotation || details.showPosition}
+{#if details.showPoly || details.showPot || details.showTree || details.showPlanter || details.showRotation || details.showPosition}
   <Field.FieldGroup class="{section} {fields}">
     {#if details.showPoly}
       <Field.Description class={hint}>{details.polyStats}</Field.Description>
@@ -85,6 +85,23 @@
             </Select.Group>
           </Select.Content>
         </Select.Root>
+      </Field.Field>
+    {/if}
+
+    {#if details.showTree}
+      <Field.Field class={field}>
+        <Field.FieldLabel class={label} for="propTreeDiam">Diameter (ft)</Field.FieldLabel>
+        <Input
+          id="propTreeDiam"
+          class={control}
+          type="number"
+          min="0.5"
+          max="100"
+          step="0.1"
+          value={details.diameter}
+          oninput={(event) => setDiameter(event.currentTarget.value)}
+        />
+        <Field.Description class={hint}>{details.areaSqFt} sq ft canopy</Field.Description>
       </Field.Field>
     {/if}
 

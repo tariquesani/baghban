@@ -40,7 +40,7 @@
   let canvas = $state({
     ready: false,
     activeTool: 'select',
-    /** @type {null | { addBed: () => void, setTool: (tool: string) => void, addPot: () => void, addPlanter: () => void, addObstacle: () => void, printPlan: () => void }} */
+    /** @type {null | { addBed: () => void, setTool: (tool: string) => void, addPot: () => void, addTree: () => void, addPlanter: () => void, addObstacle: () => void, printPlan: () => void }} */
     actions: null,
   });
 

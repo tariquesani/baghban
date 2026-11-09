@@ -139,8 +139,9 @@ function footprint(item) {
     const pivot = item.pivot || centroid(points);
     return points.map((point) => rotate(point, pivot, rotation));
   }
-  const width = item.type === 'pot' ? (item.diam || item.w || 0) : (item.w || 0);
-  const height = item.type === 'pot' ? (item.diam || item.h || 0) : (item.h || 0);
+  const circular = item.type === 'pot' || item.type === 'tree';
+  const width = circular ? (item.diam || item.w || 0) : (item.w || 0);
+  const height = circular ? (item.diam || item.h || 0) : (item.h || 0);
   const originX = item.x || 0;
   const originY = item.y || 0;
   const corners = [

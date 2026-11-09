@@ -148,6 +148,7 @@
     /** @param {string} tool */
     setTool(tool) { globalThis.setTool(tool); },
     addPot() { globalThis.addPot(); },
+    addTree() { globalThis.addTree(); },
     addPlanter() { globalThis.addPlanter(); },
     addObstacle() { globalThis.addObstacle(); },
     printPlan() { globalThis.printPlan(); },

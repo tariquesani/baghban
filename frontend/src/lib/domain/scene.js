@@ -1,5 +1,6 @@
 const BED_COLOR = '#2d6a30';
 const POT_COLOR = '#c1440e';
+const TREE_COLOR = '#3d8f45';
 const PLANTER_COLOR = '#9c6644';
 const OBSTACLE_COLOR = '#888';
 
@@ -49,15 +50,16 @@ function point(value) {
  */
 function bedKind(row) {
   const kind = row.type || row.kind;
-  if (kind === 'pot' || kind === 'planter' || kind === 'bed') return kind;
+  if (kind === 'pot' || kind === 'tree' || kind === 'planter' || kind === 'bed') return kind;
   return 'bed';
 }
 
 /**
- * @param {'bed' | 'planter' | 'pot'} kind
+ * @param {'bed' | 'planter' | 'pot' | 'tree'} kind
  */
 function bedColor(kind) {
   if (kind === 'pot') return POT_COLOR;
+  if (kind === 'tree') return TREE_COLOR;
   if (kind === 'planter') return PLANTER_COLOR;
   return BED_COLOR;
 }
@@ -97,7 +99,7 @@ function bedForCanvas(row) {
     plants: Array.isArray(row.plants) ? [...row.plants] : [],
     notes: text(row.notes),
   };
-  if (kind === 'pot') bed.diam = numberOr(row.diam, bed.w);
+  if (kind === 'pot' || kind === 'tree') bed.diam = numberOr(row.diam, bed.w);
   if (polygon) {
     bed.shape = polygon.shape;
     bed.points = polygon.points;

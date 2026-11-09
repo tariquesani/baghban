@@ -13,6 +13,7 @@
    *     addBed: () => void,
    *     setTool: (tool: string) => void,
    *     addPot: () => void,
+   *     addTree: () => void,
    *     addPlanter: () => void,
    *     addObstacle: () => void,
    *     printPlan: () => void,
@@ -174,6 +175,10 @@
           <button type="button" class="rail-btn" title="Add pot" onclick={() => choose(() => actions.addPot())}>
             <i data-lucide="circle"></i>
             <span class="rail-label">Add pot</span>
+          </button>
+          <button type="button" class="rail-btn" title="Add tree" onclick={() => choose(() => actions.addTree())}>
+            <i data-lucide="tree-deciduous"></i>
+            <span class="rail-label">Add tree</span>
           </button>
           <button type="button" class="rail-btn" title="Add planter" onclick={() => choose(() => actions.addPlanter())}>
             <i data-lucide="rectangle-horizontal"></i>

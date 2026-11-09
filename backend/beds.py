@@ -13,7 +13,8 @@ from contextlib import closing
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import Response
 
-BED_KINDS = ("bed", "planter", "pot")
+BED_KINDS = ("bed", "planter", "pot", "tree")
+CIRCLE_KINDS = ("pot", "tree")
 BED_FIELDS = {
     "id",
     "name",
@@ -40,14 +41,14 @@ def drop_plant_grid(connection) -> None:
         connection.execute("ALTER TABLE bed DROP COLUMN plant_grid")
 
 
-def create_scene_tables(connection) -> None:
-    """Integer bed and obstacle rows used by the live API."""
-    connection.execute(
-        """
-        CREATE TABLE IF NOT EXISTS bed (
+def bed_table_sql(name: str = "bed", if_not_exists: bool = False) -> str:
+    clause = "IF NOT EXISTS " if if_not_exists else ""
+    kinds = ", ".join(f"'{kind}'" for kind in BED_KINDS)
+    return f"""
+        CREATE TABLE {clause}{name} (
             id         INTEGER PRIMARY KEY AUTOINCREMENT,
             name       TEXT NOT NULL DEFAULT '',
-            kind       TEXT NOT NULL CHECK (kind IN ('bed', 'planter', 'pot')),
+            kind       TEXT NOT NULL CHECK (kind IN ({kinds})),
             x          REAL NOT NULL DEFAULT 0,
             y          REAL NOT NULL DEFAULT 0,
             w          REAL NOT NULL DEFAULT 0,
@@ -60,8 +61,59 @@ def create_scene_tables(connection) -> None:
             outline    TEXT,
             removed    INTEGER NOT NULL DEFAULT 0 CHECK (removed IN (0, 1))
         )
+    """
+
+
+def allow_tree_kind(connection) -> None:
+    """Let bed.kind store tree. Older files only allowed bed, planter, and pot."""
+    row = connection.execute(
+        "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'bed'"
+    ).fetchone()
+    if row is None:
+        return
+    sql = row[0] or ""
+    if "'tree'" in sql:
+        return
+    connection.execute("DROP TABLE IF EXISTS bed_next")
+    connection.execute(bed_table_sql("bed_next"))
+    connection.execute(
+        """
+        INSERT INTO bed_next (
+            id, name, kind, x, y, w, h, diam, rotation, color, notes,
+            area_sqft, outline, removed
+        )
+        SELECT
+            id, name, kind, x, y, w, h, diam, rotation, color, notes,
+            area_sqft, outline, removed
+        FROM bed
         """
     )
+    connection.execute("DROP TABLE bed")
+    connection.execute("ALTER TABLE bed_next RENAME TO bed")
+    sequence = connection.execute(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'sqlite_sequence'"
+    ).fetchone()
+    max_id = connection.execute("SELECT MAX(id) FROM bed").fetchone()[0]
+    if sequence is not None and max_id is not None:
+        connection.execute("DELETE FROM sqlite_sequence WHERE name = 'bed_next'")
+        found = connection.execute(
+            "SELECT 1 FROM sqlite_sequence WHERE name = 'bed'"
+        ).fetchone()
+        if found is None:
+            connection.execute(
+                "INSERT INTO sqlite_sequence (name, seq) VALUES ('bed', ?)",
+                (max_id,),
+            )
+        else:
+            connection.execute(
+                "UPDATE sqlite_sequence SET seq = ? WHERE name = 'bed'",
+                (max_id,),
+            )
+
+
+def create_scene_tables(connection) -> None:
+    """Integer bed and obstacle rows used by the live API."""
+    connection.execute(bed_table_sql(if_not_exists=True))
     connection.execute(
         """
         CREATE TABLE IF NOT EXISTS obstacle (
@@ -175,8 +227,9 @@ def bed_area(bed: dict) -> float:
     """Square feet, using the same rule as the canvas.
 
     A polygon uses the shoelace of its outline. A side with a bulge is sampled
-    along that curve first, about an inch apart. Anything else is width times
-    height. The legacy document still passes ``shape`` and ``points``.
+    along that curve first, about an inch apart. A tree uses the circle from
+    its diameter. Anything else is width times height. The legacy document
+    still passes ``shape`` and ``points``.
     """
     points = _outline_points(bed)
     if points is not None:
@@ -184,6 +237,12 @@ def bed_area(bed: dict) -> float:
         area = _shoelace(sampled) if sampled is not None else None
         if area is not None:
             return round(area, 4)
+    kind = bed.get("kind") or bed.get("type")
+    if kind == "tree":
+        diam = _number(bed.get("diam"))
+        if diam is None:
+            diam = _number(bed.get("w")) or 0.0
+        return round(math.pi * (diam / 2) ** 2, 4)
     width = _number(bed.get("w")) or 0.0
     height = _number(bed.get("h")) or 0.0
     return round(width * height, 4)
@@ -333,9 +392,9 @@ def parse_bed(body: dict, bed_id: int | None) -> dict:
     _check_id(body, bed_id)
     kind = _kind(body)
     diam = _optional_real(body, "diam")
-    if kind != "pot":
+    if kind not in CIRCLE_KINDS:
         if diam is not None:
-            raise HTTPException(status_code=400, detail="diam is only for a pot")
+            raise HTTPException(status_code=400, detail="diam is only for a pot or tree")
         diam = None
     outline = _outline(body)
     parsed = {
@@ -352,7 +411,13 @@ def parse_bed(body: dict, bed_id: int | None) -> dict:
         "outline": outline,
     }
     parsed["area_sqft"] = bed_area(
-        {"w": parsed["w"], "h": parsed["h"], "outline": outline}
+        {
+            "kind": parsed["kind"],
+            "w": parsed["w"],
+            "h": parsed["h"],
+            "diam": parsed["diam"],
+            "outline": outline,
+        }
     )
     return parsed
 
