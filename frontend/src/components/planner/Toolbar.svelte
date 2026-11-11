@@ -2,6 +2,8 @@
   import ToolbarButton from './ToolbarButton.svelte';
 
   let snapped = $state(false);
+  let photoVisible = $state(true);
+  let hasPhoto = $state(false);
 
   /**
    * @param {HTMLElement} element
@@ -17,12 +19,36 @@
   function toggleSnap() {
     snapped = !snapped;
   }
+
+  function syncPhoto() {
+    hasPhoto = !!globalThis.hasPlotPhoto?.();
+    photoVisible = globalThis.plotPhotoVisible?.() ?? true;
+  }
+
+  function togglePhoto() {
+    if (!hasPhoto) return;
+    photoVisible = globalThis.togglePlotPhoto?.() ?? !photoVisible;
+    queuePromise.resolve().then(() => window.lucide?.createIcons());
+  }
 </script>
+
+<svelte:document onplotimage={syncPhoto} onplotphoto={syncPhoto} />
 
 <div
   class="map-tools"
-  {@attach (element) => place(element, 'toolbarHost')}
+  {@attach (element) => {
+    syncPhoto();
+    return place(element, 'toolbarHost');
+  }}
 >
+  <ToolbarButton
+    id="plotPhotoToggle"
+    label={hasPhoto ? (photoVisible ? 'Hide plot photo' : 'Show plot photo') : 'No plot photo'}
+    icon={photoVisible ? 'image' : 'image-off'}
+    pressed={hasPhoto ? photoVisible : null}
+    active={hasPhoto && photoVisible}
+    onPress={togglePhoto}
+  />
   <ToolbarButton
     id="snapToggle"
     label="Snap to ½ ft grid"

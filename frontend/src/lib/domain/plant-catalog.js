@@ -16,6 +16,7 @@ export function plantCatalogFromCrops(crops) {
   return rows
     .filter((crop) => crop && typeof crop === 'object' && canvasLabel(crop))
     .map((crop) => ({
+      id: typeof crop.id === 'number' ? crop.id : 0,
       name: canvasLabel(crop),
       category: text(crop.category),
       emoji: text(crop.emoji),

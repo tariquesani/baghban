@@ -4,9 +4,10 @@
   import SetupPlace from '../components/setup/SetupPlace.svelte';
   import SetupReset from '../components/setup/SetupReset.svelte';
   import SetupSize from '../components/setup/SetupSize.svelte';
+  import SetupUproot from '../components/setup/SetupUproot.svelte';
   import * as Tabs from '$lib/components/ui/tabs';
   import { listOrphanBeds, purgeOrphanBed } from '$lib/api/beds.js';
-  import { readGarden, resetGarden, saveGardenSize, saveIdentity } from '$lib/api/garden.js';
+  import { readGarden, resetGarden, saveGardenSize, saveIdentity, uprootAllPlants } from '$lib/api/garden.js';
   import { toast } from 'svelte-sonner';
   import {
     identityFields,
@@ -225,6 +226,22 @@
     }
   }
 
+  async function clearAllPlants() {
+    if (busy) return;
+    busy = 'uproot';
+    try {
+      const payload = await uprootAllPlants() as GardenPayload | null;
+      applyIdentity(payload?.garden);
+      applyPlan(payload);
+      loadError = '';
+      toast.success('Uprooted all plants');
+    } catch (err) {
+      loadError = failure(err, 'Could not uproot the plants');
+    } finally {
+      busy = '';
+    }
+  }
+
   async function startAgain() {
     if (busy) return;
     busy = 'reset';
@@ -299,7 +316,8 @@
           onPurge={purgeOrphan}
         />
       </Tabs.Content>
-      <Tabs.Content value="again">
+      <Tabs.Content value="again" class="flex flex-col gap-4">
+        <SetupUproot busy={busy !== ''} onUproot={clearAllPlants} />
         <SetupReset busy={busy !== ''} onReset={startAgain} />
       </Tabs.Content>
     </Tabs.Root>

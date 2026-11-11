@@ -6,7 +6,7 @@ const screens = {
     title: 'Dashboard',
     tips: [
       'The header shows this garden’s name, the local time, and the sky once a place is saved in Settings',
-      'Currently Growing lists sowings that are still in the ground',
+      'Currently Growing lists sowings still in the ground, with crop count and total harvest under the list',
       'Coming up is this month. Choose a day to open that date on the calendar',
       'Overdue and Today open that entry here. Coming up opens the calendar on that date',
       'Photos in the gallery come from calendar entries',
@@ -52,6 +52,7 @@ const screens = {
       'Place is a latitude and longitude. The timezone comes from that place',
       'With dimensions as the scale, Size is the width and length in feet',
       'A plan scale is recalibrated from the planner. Settings links you there',
+      'Uproot all plants clears every crop and leaves the layout in place',
       'Start again clears the beds, plants, obstacles, plan photo, and scale. The name and place stay',
     ],
   },

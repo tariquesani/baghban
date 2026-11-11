@@ -42,8 +42,8 @@ function draw() {
 
   const GW = ft(garden.width), GH = ft(garden.height);
 
-  // Garden background, with the plot photo underneath when one is loaded
-  if (plotImage) {
+  // Garden background, with the plot photo underneath when one is loaded and shown
+  if (plotImage && showPlotPhoto) {
     ctx.drawImage(plotImage, 0, 0, GW, GH);
   } else {
     ctx.fillStyle = '#dff0d8';

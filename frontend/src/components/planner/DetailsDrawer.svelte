@@ -1,12 +1,10 @@
 <script lang="ts">
   import { MediaQuery } from 'svelte/reactivity';
   import XIcon from '@lucide/svelte/icons/x';
-  import SproutIcon from '@lucide/svelte/icons/sprout';
   import { Button } from '$lib/components/ui/button';
   import * as Drawer from '$lib/components/ui/drawer';
   import * as ScrollArea from '$lib/components/ui/scroll-area';
   import BedPlants from './BedPlants.svelte';
-  import { section } from './inspector';
   import DetailsActions from './DetailsActions.svelte';
   import DetailsForm from './DetailsForm.svelte';
   import DetailsProperties from './DetailsProperties.svelte';
@@ -26,11 +24,6 @@
   function close() {
     const select = (globalThis as { select?: (id: null) => void }).select;
     select?.(null);
-  }
-
-  function openOrganizer() {
-    const openReport = (globalThis as { openReport?: () => void }).openReport;
-    openReport?.();
   }
 </script>
 
@@ -56,15 +49,6 @@
     </Drawer.Header>
     <ScrollArea.Root class="min-h-0 flex-1">
       {#if details}
-        <DetailsActions />
-        {#if details.showPlants}
-          <div class={section}>
-            <Button type="button" size="sm" class="h-7 w-full text-xs" onclick={openOrganizer}>
-              <SproutIcon data-icon="inline-start" />
-              Plant organizer
-            </Button>
-          </div>
-        {/if}
         <DetailsForm {details} />
         <DetailsProperties {details} />
         {#if details.showPlants}
@@ -72,6 +56,7 @@
             <BedPlants {details} />
           {/key}
         {/if}
+        <DetailsActions showOrganizer={details.showPlants} />
       {/if}
     </ScrollArea.Root>
   </Drawer.Content>

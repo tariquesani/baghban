@@ -30,6 +30,24 @@ function idbGet(plotId) {
   })).catch(() => null);
 }
 
+function hasPlotPhoto() {
+  return !!plotImage;
+}
+
+function plotPhotoVisible() {
+  return showPlotPhoto;
+}
+
+function setPlotPhotoVisible(show) {
+  showPlotPhoto = !!show;
+  draw();
+  return showPlotPhoto;
+}
+
+function togglePlotPhoto() {
+  return setPlotPhotoVisible(!showPlotPhoto);
+}
+
 function updateCalibReadout() {
   const el = document.getElementById('calibReadout');
   if (el) {

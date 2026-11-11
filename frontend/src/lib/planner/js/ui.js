@@ -78,7 +78,7 @@ function publishDetails() {
       y: Math.round(pos.y * 10) / 10,
       rotation: isPot ? 0 : rotationDegrees(item.rotation),
       diameter: isCircle ? (item.diam || 1) : 0,
-      areaSqFt: isTree ? Math.round(bedArea(item) * 10) / 10 : 0,
+      areaSqFt: isBed ? Math.round(bedArea(item) * 10) / 10 : 0,
       planterLength: isPlanter ? Math.round(item.w * 12) : 0,
       planterWidth: isPlanter ? Math.round(item.h * 12) : 0,
       plants: isBed ? [...(item.plants || [])] : [],
@@ -202,10 +202,25 @@ function showPlantWarn(msg) {
   }, 4000);
 }
 
+function plantLabelName(label) {
+  const text = String(label || '').trim();
+  const space = text.indexOf(' ');
+  if (space <= 0) return text;
+  const head = text.slice(0, space);
+  if (/^\p{L}/u.test(head)) return text;
+  return text.slice(space + 1).trim();
+}
+
 function removePlant(plant) {
   const bed = selectedBed(); if (!bed) return;
+  const wanted = plantLabelName(plant).toLowerCase();
+  if (!wanted) return;
+  const next = (bed.plants || []).filter(
+    (label) => plantLabelName(label).toLowerCase() !== wanted,
+  );
+  if (next.length === (bed.plants || []).length) return;
   saveHistory();
-  bed.plants = bed.plants.filter(p => p !== plant);
+  bed.plants = next;
   draw();
   notePlanChanged();
   publishDetails();

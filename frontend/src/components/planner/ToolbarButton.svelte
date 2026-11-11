@@ -30,5 +30,7 @@
   aria-pressed={pressed === null ? undefined : pressed}
   onclick={onPress}
 >
-  <i data-lucide={icon}></i>
+  {#key icon}
+    <i data-lucide={icon}></i>
+  {/key}
 </button>

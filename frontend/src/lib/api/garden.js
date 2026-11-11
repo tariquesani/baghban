@@ -29,3 +29,7 @@ export function saveGardenSize(size, plot) {
 export function resetGarden() {
   return api.post('/garden/reset');
 }
+
+export function uprootAllPlants() {
+  return api.post('/garden/uproot-plants');
+}

@@ -273,17 +273,14 @@
               {/each}
             </div>
           {/if}
+          <footer class="growing-foot">
+            <p>{cropCount(growing.length)} in ground, total harvest {season}</p>
+          </footer>
         </section>
 
         <ComingUp start={span.start} end={span.end} {entries} {soon} />
 
         <GardenPlan areas={planAreas(garden?.beds ?? [])} />
-
-        <section class="card">
-          <h2>This season</h2>
-          <p class="stat">{season}</p>
-          <p class="lead">{cropCount(growing.length)} in the ground</p>
-        </section>
       </div>
 
       <aside>
@@ -441,17 +438,20 @@
 
   article p:nth-of-type(1) { color: #5c6560; }
 
-  .empty, .lead {
+  .empty {
     margin: 4px 0 0;
     color: #5c6560;
     font-size: 0.9rem;
   }
 
-  .stat {
-    margin-top: 8px;
-    color: #386a20;
-    font-size: 1.6rem;
-    font-weight: 600;
+  .growing-foot {
+    margin-top: 14px;
+  }
+
+  .growing-foot p {
+    margin: 0;
+    color: #5c6560;
+    font-size: 0.9rem;
   }
 
   .sky {

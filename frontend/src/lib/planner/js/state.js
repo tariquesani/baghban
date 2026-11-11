@@ -7,6 +7,7 @@ let pendingCalib = null;
 let plot = { plotId: null, widthPx: 0, heightPx: 0, calibration: null, feetPerPixel: 0, photoUrl: null };
 let plotImage = null;
 let plotDataUrl = null;
+let showPlotPhoto = true;
 let tool = 'select';
 let calibClicks = [];
 let calibHover = null;

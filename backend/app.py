@@ -24,7 +24,12 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, JSONResponse, Response
 
 from beds import create_scene_tables, drop_plant_grid, garden_contents, router as beds_router
-from beds_crops import archive_bed_crops, copy_document_plants, create_beds_crops
+from beds_crops import (
+    archive_all_crops,
+    archive_bed_crops,
+    copy_document_plants,
+    create_beds_crops,
+)
 from calendar_entries import create_calendar_tables, router as calendar_router
 from care_rules import router as care_rules_router
 from crops import create_crop_tables, seed_crops, router as crops_router
@@ -544,6 +549,14 @@ def reset_garden() -> dict | None:
     return read_garden()
 
 
+def uproot_all_plants() -> dict | None:
+    """Clear every active crop from every bed. Layout and scale stay."""
+    with closing(connect()) as connection:
+        archive_all_crops(connection)
+        connection.commit()
+    return read_garden()
+
+
 def save_settings(garden: tuple, plot: tuple) -> dict:
     saved_at = datetime.now(timezone.utc).isoformat()
     with closing(connect()) as connection:
@@ -636,6 +649,14 @@ async def put_garden_identity(request: Request) -> dict:
 @app.post("/api/garden/reset")
 def post_garden_reset() -> Response:
     payload = reset_garden()
+    if payload is None:
+        return Response(status_code=204)
+    return JSONResponse(payload)
+
+
+@app.post("/api/garden/uproot-plants")
+def post_garden_uproot_plants() -> Response:
+    payload = uproot_all_plants()
     if payload is None:
         return Response(status_code=204)
     return JSONResponse(payload)

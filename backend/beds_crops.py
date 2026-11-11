@@ -260,6 +260,19 @@ def archive_bed_crops(connection, bed_id: int) -> None:
     )
 
 
+def archive_all_crops(connection) -> int:
+    """Finish every active crop assignment. Beds and layout stay."""
+    cursor = connection.execute(
+        """
+        UPDATE beds_crops
+        SET archived_on = ?
+        WHERE archived_on IS NULL
+        """,
+        (today(),),
+    )
+    return int(cursor.rowcount or 0)
+
+
 def copy_document_plants(connection) -> None:
     """Move plant names out of garden_plan.document, then drop that column.
 

@@ -150,7 +150,7 @@ export function bedCropNames(plants) {
  * Catalogue crops that are not already growing in the bed.
  * @param {unknown} crops
  * @param {unknown} planted
- * @returns {{ id: number, name: string, emoji: string, icon: string, aliases: string[] }[]}
+ * @returns {{ id: number, name: string, emoji: string, icon: string, aliases: string[], avoid: number[] }[]}
  */
 export function cropsNotInBed(crops, planted) {
   if (!Array.isArray(crops)) return [];
@@ -168,6 +168,9 @@ export function cropsNotInBed(crops, planted) {
       icon: typeof crop.icon === 'string' ? crop.icon : '',
       aliases: Array.isArray(crop.aliases)
         ? crop.aliases.filter((alias) => typeof alias === 'string')
+        : [],
+      avoid: Array.isArray(crop.avoid)
+        ? crop.avoid.filter((id) => typeof id === 'number')
         : [],
     }))
     .sort((left, right) => left.name.localeCompare(right.name));

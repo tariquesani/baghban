@@ -445,3 +445,51 @@ def test_reset_keeps_the_name_and_the_calendar(tmp_path, monkeypatch):
     assert sowing[0] == "Tomatoes"
     assert connection.execute("SELECT COUNT(*) FROM obstacle").fetchone()[0] == 0
     connection.close()
+
+
+def test_uproot_plants_keeps_the_layout(tmp_path, monkeypatch):
+    monkeypatch.setenv("BAGHBAN_DB", str(tmp_path / "baghban.db"))
+    with TestClient(app) as client:
+        assert client.put("/api/garden", json=settings()).status_code == 200
+        created = client.put(
+            "/api/beds",
+            json={
+                "name": "Herbs",
+                "kind": "bed",
+                "x": 1,
+                "y": 1,
+                "w": 4,
+                "h": 8,
+                "rotation": 0,
+                "color": "",
+                "notes": "",
+            },
+        )
+        assert created.status_code == 200
+        bed_id = created.json()["id"]
+        tomato = "🍅 Tomatoes"
+        basil = "🌿 Basil"
+        assert client.put(f"/api/beds/{bed_id}/crops", json={"name": tomato}).status_code == 200
+        assert client.put(f"/api/beds/{bed_id}/crops", json={"name": basil}).status_code == 200
+        loaded = client.get("/api/garden").json()
+        assert loaded["beds"][0]["plants"] == [tomato, basil]
+
+        cleared = client.post("/api/garden/uproot-plants")
+        assert cleared.status_code == 200
+        body = cleared.json()
+        assert body["beds"][0]["id"] == bed_id
+        assert body["beds"][0]["plants"] == []
+        assert body["garden"]["width"] == 40
+        assert body["plot"]["plotId"] == "plot-9"
+        assert body["obstacles"] == []
+
+    connection = sqlite3.connect(tmp_path / "baghban.db")
+    active = connection.execute(
+        "SELECT COUNT(*) FROM beds_crops WHERE archived_on IS NULL"
+    ).fetchone()
+    finished = connection.execute(
+        "SELECT COUNT(*) FROM beds_crops WHERE archived_on IS NOT NULL"
+    ).fetchone()
+    assert active[0] == 0
+    assert finished[0] == 2
+    connection.close()

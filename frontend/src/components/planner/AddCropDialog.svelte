@@ -10,6 +10,7 @@
   import * as Field from '$lib/components/ui/field';
   import * as Popover from '$lib/components/ui/popover';
   import CropMark from '../crops/CropMark.svelte';
+  import { addCropConflicts } from '$lib/domain/planting.js';
   import { cropsNotInBed, localDate, sowingRequest } from '$lib/domain/sowing.js';
   import { cn } from '$lib/utils.js';
 
@@ -19,6 +20,7 @@
     emoji: string;
     icon: string;
     aliases: string[];
+    avoid?: number[];
   };
 
   let {
@@ -48,6 +50,7 @@
   const available = $derived(cropsNotInBed(catalogue, plants));
   const chosenLabel = $derived(chosen ? chosen.name : '');
   const place = $derived(bedName.trim() || 'this bed');
+  const conflicts = $derived(addCropConflicts(chosen, plants, catalogue));
 
   $effect(() => {
     if (!open) return;
@@ -218,6 +221,11 @@
             </Popover.Content>
           </Popover.Root>
           {#if fieldError === 'crop'}<Field.Error>{formError}</Field.Error>{/if}
+          {#if conflicts.length}
+            <Field.Description>
+              Conflicts with {conflicts.join(', ')} already in {place}.
+            </Field.Description>
+          {/if}
         </Field.Field>
         <Field.Field orientation="horizontal" class="w-fit">
           <Checkbox
