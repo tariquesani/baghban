@@ -534,8 +534,14 @@ function drawBed(b) {
     ctx.shadowColor = empty ? 'transparent' : (sel ? 'rgba(255,159,10,0.4)' : 'rgba(0,0,0,0.18)');
     ctx.shadowBlur = empty ? 0 : (sel ? 12 : 5);
     ctx.shadowOffsetX = empty ? 0 : 2; ctx.shadowOffsetY = empty ? 0 : 2;
-    ctx.fillStyle = empty ? 'rgba(255,255,255,0.55)' : b.color;
+    if (isTree) {
+      ctx.globalAlpha = 0.4;
+      ctx.fillStyle = empty ? '#ffffff' : b.color;
+    } else {
+      ctx.fillStyle = empty ? 'rgba(255,255,255,0.55)' : b.color;
+    }
     ctx.beginPath(); ctx.arc(potCx, potCy, r, 0, Math.PI*2); ctx.fill();
+    ctx.globalAlpha = 1;
     ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0;
     ctx.shadowOffsetX = 0; ctx.shadowOffsetY = 0;
     if (empty) {

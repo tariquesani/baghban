@@ -1,13 +1,12 @@
 <script lang="ts">
   import * as AlertDialog from '$lib/components/ui/alert-dialog';
+  import { Badge } from '$lib/components/ui/badge';
   import { Button } from '$lib/components/ui/button';
   import * as Dialog from '$lib/components/ui/dialog';
-  import { ScrollArea } from '$lib/components/ui/scroll-area';
   import { deleteCalendarEntry } from '$lib/api/calendar.js';
   import { deactivateCareRule } from '$lib/api/careRules.js';
-  import { cropLabel, markTitle, storedEntryId, type CalendarEntry } from '$lib/domain/calendar.js';
-  import { actionLabel } from '$lib/domain/entryForm.js';
-  import { formatSowingDate } from '$lib/domain/sowing.js';
+  import { cropLabel, formatDay, markTitle, storedEntryId, type CalendarEntry } from '$lib/domain/calendar.js';
+  import { actionLabel, entryDetail } from '$lib/domain/entryForm.js';
 
   let {
     entry = $bindable(null),
@@ -31,7 +30,25 @@
   // Only an explicit false means stopped; null means the client has not learned yet.
   const scheduleStopped = $derived(scheduleId !== null && entry?.ruleActive === false);
   const scheduleLive = $derived(scheduleId !== null && !scheduleStopped);
-  const heading = $derived(entry ? `${formatSowingDate(entry.date)} · ${cropLabel(entry.crop)}` : '');
+  const statusLabel = $derived(entry?.status === 'planned' ? 'Planned' : 'Done');
+  const facts = $derived.by(() => {
+    if (!entry) return [];
+    const rows: [string, string][] = [
+      ['Crop', cropLabel(entry.crop)],
+      ['Bed', (entry.bed || '').trim()],
+      ['Action', actionLabel(entry.action || '')],
+      ['Problem', (entry.problem || '').trim()],
+      ['Product', (entry.product || '').trim()],
+      ['Amount', entryDetail(entry)],
+    ];
+    return rows.flatMap(([label, value]) => (value ? [{ label, value }] : []));
+  });
+  const hasBody = $derived(
+    facts.length > 0 ||
+      Boolean(entry?.note?.trim()) ||
+      scheduleLive ||
+      scheduleStopped,
+  );
 
   function closeEntry() {
     confirmOpen = false;
@@ -87,32 +104,51 @@
     if (!next) closeEntry();
   }}
 >
-  <Dialog.Content class="flex max-h-[85vh] flex-col overflow-hidden sm:max-w-md">
+  <Dialog.Content class={['gap-4', entry?.photoUrl ? 'sm:max-w-3xl' : 'sm:max-w-lg']}>
     {#if entry}
-      <Dialog.Header class="shrink-0 pr-8">
-        <Dialog.Title>{markTitle(entry.kind)}</Dialog.Title>
-        <Dialog.Description>
-          {heading} · {entry.status === 'done' ? 'Done' : 'Planned'}
-        </Dialog.Description>
+      {#if entry.photoUrl}
+        <div class="flex items-center justify-center">
+          <img
+            src={entry.photoUrl}
+            alt={cropLabel(entry.crop) || markTitle(entry.kind)}
+            class="max-h-[calc(100vh-16rem)] max-w-full object-contain"
+          />
+        </div>
+      {/if}
+      <Dialog.Header class="gap-1">
+        <Dialog.Title class="flex flex-wrap items-center gap-2">
+          <Badge>{formatDay(entry.date)} · {markTitle(entry.kind)}</Badge>
+          <Badge variant="outline">{statusLabel}</Badge>
+        </Dialog.Title>
+        {#if hasBody}
+          <Dialog.Description class="flex flex-col gap-1">
+            {#if facts.length}
+              <span class="flex flex-wrap items-baseline gap-x-8 gap-y-0.5">
+                {#each facts as fact (fact.label)}
+                  <span>
+                    <span class="me-1 text-xs">{fact.label}</span>
+                    <span class="text-foreground">{fact.value}</span>
+                  </span>
+                {/each}
+              </span>
+            {/if}
+            {#if entry.note?.trim()}
+              <span class="text-foreground">{entry.note.trim()}</span>
+            {/if}
+            {#if scheduleLive}
+              <span class="text-muted-foreground">Part of a repeating care schedule</span>
+            {/if}
+            {#if scheduleStopped}
+              <span class="text-muted-foreground">Schedule stopped</span>
+            {/if}
+          </Dialog.Description>
+        {/if}
       </Dialog.Header>
-      <div class="fields min-h-0 flex-auto">
-      <ScrollArea class="h-full w-full">
-      <div class="flex flex-col gap-3">
-        {#if entry.bed}<p>{entry.bed}</p>{/if}
-        {#if entry.action}<p>{actionLabel(entry.action)}</p>{/if}
-        {#if entry.problem}<p>{entry.problem}</p>{/if}
-        {#if entry.product}<p>{entry.product}</p>{/if}
-        {#if entry.detail}<p>{entry.detail}</p>{/if}
-        {#if entry.note}<p>{entry.note}</p>{/if}
-        {#if scheduleLive}<p class="schedule">Part of a repeating care schedule</p>{/if}
-        {#if scheduleStopped}<p class="schedule">Schedule stopped</p>{/if}
-        {#if entry.photoUrl}<img class="photo" src={entry.photoUrl} alt={cropLabel(entry.crop)} />{/if}
-        {#if error}<p class="error">{error}</p>{/if}
-      </div>
-      </ScrollArea>
-      </div>
+      {#if error}
+        <p class="text-destructive m-0 text-sm">{error}</p>
+      {/if}
       {#if stored}
-        <Dialog.Footer class="shrink-0">
+        <Dialog.Footer>
           {#if scheduleLive}
             <Button type="button" variant="outline" disabled={busy} onclick={stopSchedule}>
               Stop schedule
@@ -140,34 +176,3 @@
     </AlertDialog.Footer>
   </AlertDialog.Content>
 </AlertDialog.Root>
-
-<style>
-  p {
-    margin: 0;
-  }
-
-  .schedule {
-    color: #5c6658;
-    font-size: 0.9rem;
-  }
-
-  .photo {
-    display: block;
-    width: auto;
-    height: auto;
-    max-width: 100%;
-    max-height: 240px;
-    align-self: center;
-    object-fit: contain;
-    border-radius: 8px;
-  }
-
-  .error {
-    color: #b42318;
-  }
-
-  .fields :global([data-slot='scroll-area-viewport']) {
-    height: auto;
-    max-height: calc(85vh - 14rem);
-  }
-</style>
