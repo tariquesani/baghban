@@ -6,7 +6,10 @@ import {
   cropCount,
   formatWeight,
   growingCards,
+  growingFootNote,
   galleryPhotos,
+  plantingAreas,
+  uniqueCrops,
   harvestByCrop,
   latelyNote,
   monthWindow,
@@ -65,6 +68,28 @@ test('weight uses grams under a kilogram and one decimal above', () => {
   assert.equal(formatWeight(11400), '11.4 kg');
   assert.equal(cropCount(1), '1 crop');
   assert.equal(cropCount(5), '5 crops');
+  assert.equal(plantingAreas(1), '1 planting area');
+  assert.equal(plantingAreas(3), '3 planting areas');
+});
+
+test('growing footer counts unique crops and planting areas', () => {
+  const westTomato = { ...tomato, id: 2, bedId: 5, bedName: 'West bed', cropId: 9 };
+  const eastTomato = { ...tomato, cropId: 9 };
+  const lettuce = {
+    id: 3,
+    bedId: 6,
+    bedName: 'North bed',
+    cropId: 12,
+    name: 'Lettuce',
+    emoji: '🥬',
+    createdOn: '2026-07-01',
+    daysToMaturity: 45,
+  };
+  const cards = growingCards([eastTomato, westTomato, lettuce], [], '2026-11-01');
+  assert.equal(uniqueCrops(cards), 2);
+  assert.equal(cards.length, 3);
+  assert.equal(growingFootNote(cards, '1.4 kg'), '2 crops in 3 planting areas, total harvest 1.4 kg');
+  assert.equal(growingFootNote([cards[0]], '840 g'), '1 crop in 1 planting area, total harvest 840 g');
 });
 
 test('a growing card uses the latest done sowing and this year of harvests', () => {

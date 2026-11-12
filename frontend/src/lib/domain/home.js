@@ -105,6 +105,36 @@ export function cropCount(count) {
 }
 
 /**
+ * Distinct crops among growing cards (by cropId, or name when id is missing).
+ * @param {{ cropId?: number, name?: string }[]} cards
+ */
+export function uniqueCrops(cards) {
+  /** @type {Set<string>} */
+  const keys = new Set();
+  for (const card of cards || []) {
+    if (typeof card.cropId === 'number' && card.cropId > 0) keys.add(`id:${card.cropId}`);
+    else if (card.name) keys.add(`name:${card.name}`);
+  }
+  return keys.size;
+}
+
+/**
+ * @param {number} count
+ */
+export function plantingAreas(count) {
+  return count === 1 ? '1 planting area' : `${count} planting areas`;
+}
+
+/**
+ * Footer line under Currently Growing.
+ * @param {{ cropId?: number, name?: string }[]} cards
+ * @param {string} harvest
+ */
+export function growingFootNote(cards, harvest) {
+  return `${cropCount(uniqueCrops(cards))} in ${plantingAreas(cards.length)}, total harvest ${harvest}`;
+}
+
+/**
  * Planted, empty, and total area of the beds on the plan, each to one decimal.
  * @param {{ areaSqFt?: number | null, w?: number | null, h?: number | null, plants?: string[], removed?: boolean }[]} beds
  * @returns {{ planted: string, empty: string, total: string }}

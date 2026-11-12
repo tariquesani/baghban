@@ -15,10 +15,10 @@
   import {
     civilDate,
     comingEntries,
-    cropCount,
     entryTitle,
     galleryPhotos,
     growingCards,
+    growingFootNote,
     harvestByCrop,
     latelyNote,
     monthWindow,
@@ -274,7 +274,7 @@
             </div>
           {/if}
           <footer class="growing-foot">
-            <p>{cropCount(growing.length)} in ground, total harvest {season}</p>
+            <p>{growingFootNote(growing, season)}</p>
           </footer>
         </section>
 

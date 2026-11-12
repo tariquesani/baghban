@@ -4,11 +4,11 @@ Baghban is a personal garden management system  for a vegetable garden. It keeps
 
 ## What you can do
 
-- **Home** — garden name and place, current weather, wind, sunrise, sunset, and moon, plus crops currently growing, today's plans, the next 14 days, and this season's harvest.
+- **Home** — garden name and place, current weather, wind, sunrise, sunset, and moon, plus crops currently growing, today's plans, the next 14 days, this season's harvest, and a photo gallery.
 - **Planner** — draw beds, pots, planters, and obstacles on a scaled plot, and assign crops to beds.
-- **Calendar** — record sowing, care, pest control, harvest, and diary entries.
+- **Calendar** — record sowing, care, pest control, harvest, uproot, and diary entries, with optional photos and recurring care rules.
 - **Crops** — a catalogue of vegetables, herbs, flowers, and fruit, with spacing, sun, water, and companion notes.
-- **Setup** — garden name, size, and latitude and longitude. The server derives the timezone from that point.
+- **Setup** — garden name, size, latitude and longitude, plot calibration, uproot-all, and reset. The server derives the timezone from that point.
 
 Weather comes from [Yr](https://developer.yr.no/), through the Norwegian Meteorological Institute's location forecast. No API key is required. Sunrise, sunset, and the moon are calculated on the server. The home-page map is a static [OpenStreetMap](https://www.openstreetmap.org/) thumbnail of the saved coordinates.
 
@@ -21,7 +21,19 @@ Weather comes from [Yr](https://developer.yr.no/), through the Norwegian Meteoro
 - **Season plans** — a saved layout for each growing season, kept alongside the one before it.
 - **Local planting windows** — suggested sowing and transplanting dates for this garden's climate.
 - **Weather-aware care** — a watering task held back when rain is already on the way.
-- **Backup** — export and restore the garden as a file, separate from the database.
+
+## Backup and restore
+
+There is no in-app export yet. Back up the whole data folder with any tool you like (zip, copy, host backup). That folder holds both the database and the photos; copying only `baghban.db` leaves photos behind.
+
+| Setup | Path to back up |
+|-------|-----------------|
+| Local run | `backend/data/` |
+| Docker / CasaOS | `/DATA/AppData/baghban/backend/data/` (under the app bind mount) |
+
+If you set `BAGHBAN_DB`, back up that database file and the `photos/` directory beside it.
+
+Prefer a quiet moment or a stopped API so the zip is consistent. To restore, replace the data folder with the backup and restart the API or container.
 
 ## Stack
 
@@ -114,3 +126,7 @@ frontend/   Svelte app (planner canvas, pages, and domain tests)
 ```
 
 Save a location on Setup before Home can show weather, sunrise, and the map. With no coordinates, the clock, timezone, and moon still appear.
+
+## Credits
+
+Baghban began as inspiration from [mvrieperry/garden-planner](https://github.com/mvrieperry/garden-planner), a browser-based garden planning tool whose canvas planner was the starting point for this project.
