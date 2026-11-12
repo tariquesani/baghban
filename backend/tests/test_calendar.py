@@ -2,7 +2,7 @@ import sqlite3
 import struct
 import zlib
 
-from fastapi.testclient import TestClient
+from authed_client import TestClient
 
 from app import app
 
@@ -678,7 +678,7 @@ def test_old_care_table_accepts_new_actions(tmp_path, monkeypatch):
         "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'care'"
     ).fetchone()[0]
     assert "CHECK" not in care_sql.upper()
-    assert connection.execute("PRAGMA user_version").fetchone()[0] == 6
+    assert connection.execute("PRAGMA user_version").fetchone()[0] == 7
     columns = {info[1] for info in connection.execute("PRAGMA table_info(calendar_entry)")}
     assert "crop_id" in columns
     assert "crop" not in columns

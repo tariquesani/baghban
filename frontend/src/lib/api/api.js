@@ -1,11 +1,29 @@
 /**
  * Talk to FastAPI. `path` is the resource under `/api`, such as `/garden`.
  * A 204 or an empty body comes back as null.
+ */
+
+export class ApiError extends Error {
+  /**
+   * @param {string} message
+   * @param {number} status
+   */
+  constructor(message, status) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+  }
+}
+
+/**
  * @param {string} path
  * @param {RequestInit} [options]
  */
 async function send(path, options) {
-  const response = await fetch(`/api${path}`, options);
+  const response = await fetch(`/api${path}`, {
+    ...options,
+    credentials: 'include',
+  });
   if (response.status === 204) return null;
   if (!response.ok) {
     let detail = '';
@@ -18,7 +36,7 @@ async function send(path, options) {
         detail = '';
       }
     }
-    throw new Error(detail || `Request failed (${response.status})`);
+    throw new ApiError(detail || `Request failed (${response.status})`, response.status);
   }
   const type = response.headers.get('content-type') || '';
   if (type.startsWith('image/')) return response.blob();

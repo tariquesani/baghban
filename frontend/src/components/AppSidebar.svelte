@@ -22,6 +22,7 @@
    *   onClose: () => void,
    *   onHelp: () => void,
    *   onAddEntry: (kind: string) => void,
+   *   onLogout: () => void,
    * }} props
    */
   let {
@@ -36,6 +37,7 @@
     onClose,
     onHelp,
     onAddEntry,
+    onLogout,
   } = $props();
 
   const entries = [
@@ -71,6 +73,11 @@
   function openHelp() {
     if (!wide) onClose();
     onHelp();
+  }
+
+  function signOut() {
+    if (!wide) onClose();
+    onLogout();
   }
 
   $effect(() => {
@@ -200,6 +207,12 @@
       {/if}
     {/each}
   </div>
+  <div class="rail-footer">
+    <button type="button" class="rail-btn" title="Logout" onclick={signOut}>
+      <i data-lucide="log-out"></i>
+      <span class="rail-label">Logout</span>
+    </button>
+  </div>
 </aside>
 
 <style>
@@ -281,6 +294,12 @@
     overflow-y: auto;
     overflow-x: hidden;
     padding: 8px;
+  }
+
+  .rail-footer {
+    flex: 0 0 auto;
+    padding: 8px;
+    border-top: 1px solid var(--md-outline-variant);
   }
 
   .rail-btn {

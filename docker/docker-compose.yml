@@ -4,6 +4,9 @@
 #
 # Set BAGHBAN_GIT_TOKEN in the CasaOS app UI when the source repo is private
 # (GitHub PAT with repo read access). Do not put the token in this file.
+# Auth defaults to admin/admin with secrets auto-written under the data volume.
+# Optional overrides in the CasaOS UI: BAGHBAN_USERNAME, BAGHBAN_PASSWORD,
+# BAGHBAN_API_TOKEN, BAGHBAN_SESSION_SECRET.
 # Image tag is :master; app code syncs from the master branch on each start.
 
 services:

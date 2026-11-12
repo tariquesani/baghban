@@ -1,5 +1,5 @@
 from fastapi import HTTPException
-from fastapi.testclient import TestClient
+from authed_client import TestClient
 
 from app import app, frontend_file
 

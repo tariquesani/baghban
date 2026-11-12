@@ -1,6 +1,6 @@
 from datetime import date, timedelta
 
-from fastapi.testclient import TestClient
+from authed_client import TestClient
 
 from app import app
 from care_rules import due_dates

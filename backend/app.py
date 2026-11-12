@@ -19,10 +19,17 @@ from datetime import datetime, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, JSONResponse, Response
 
+from auth import (
+    bootstrap_credentials,
+    create_auth_table,
+    ensure_auth_secrets,
+    require_auth,
+    router as auth_router,
+)
 from beds import create_scene_tables, drop_plant_grid, garden_contents, router as beds_router
 from beds_crops import (
     archive_all_crops,
@@ -152,7 +159,10 @@ def init_db() -> None:
         create_beds_crops(connection)
         drop_plant_grid(connection)
         copy_document_plants(connection)
+        create_auth_table(connection)
+        bootstrap_credentials(connection)
         connection.commit()
+    ensure_auth_secrets()
 
 
 def ensure_garden_identity(connection) -> None:
@@ -597,10 +607,12 @@ async def lifespan(_app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 app.add_middleware(GZipMiddleware, minimum_size=500)
-app.include_router(beds_router, prefix="/api")
-app.include_router(calendar_router, prefix="/api")
-app.include_router(care_rules_router, prefix="/api")
-app.include_router(crops_router, prefix="/api")
+app.include_router(auth_router, prefix="/api")
+_api_auth = [Depends(require_auth)]
+app.include_router(beds_router, prefix="/api", dependencies=_api_auth)
+app.include_router(calendar_router, prefix="/api", dependencies=_api_auth)
+app.include_router(care_rules_router, prefix="/api", dependencies=_api_auth)
+app.include_router(crops_router, prefix="/api", dependencies=_api_auth)
 
 
 async def limited_body(request: Request, limit: int, too_big: str) -> bytes:
@@ -618,14 +630,14 @@ async def limited_body(request: Request, limit: int, too_big: str) -> bytes:
     return raw
 
 
-@app.get("/api/sky")
+@app.get("/api/sky", dependencies=_api_auth)
 def get_sky(timezone: str = "") -> dict:
     payload = read_garden()
     garden = payload["garden"] if payload else {}
     return sky.sky_reading(garden, timezone, sky.fetch_yr)
 
 
-@app.get("/api/garden")
+@app.get("/api/garden", dependencies=_api_auth)
 def get_garden() -> Response:
     payload = read_garden()
     if payload is None:
@@ -633,20 +645,20 @@ def get_garden() -> Response:
     return JSONResponse(payload)
 
 
-@app.put("/api/garden")
+@app.put("/api/garden", dependencies=_api_auth)
 async def put_garden(request: Request) -> dict:
     raw = await limited_body(request, MAX_BYTES, "Plan is larger than 2 MB")
     garden, plot = parse_settings(read_json_object(raw))
     return save_settings(garden, plot)
 
 
-@app.put("/api/garden/identity")
+@app.put("/api/garden/identity", dependencies=_api_auth)
 async def put_garden_identity(request: Request) -> dict:
     raw = await limited_body(request, MAX_BYTES, "Plan is larger than 2 MB")
     return save_identity(read_json_object(raw))
 
 
-@app.post("/api/garden/reset")
+@app.post("/api/garden/reset", dependencies=_api_auth)
 def post_garden_reset() -> Response:
     payload = reset_garden()
     if payload is None:
@@ -654,7 +666,7 @@ def post_garden_reset() -> Response:
     return JSONResponse(payload)
 
 
-@app.post("/api/garden/uproot-plants")
+@app.post("/api/garden/uproot-plants", dependencies=_api_auth)
 def post_garden_uproot_plants() -> Response:
     payload = uproot_all_plants()
     if payload is None:
@@ -675,7 +687,7 @@ def reject_oversized(request: Request, raw: bytes, limit: int, message: str) -> 
         raise HTTPException(status_code=413, detail=message)
 
 
-@app.put("/api/photos/{photo_id}")
+@app.put("/api/photos/{photo_id}", dependencies=_api_auth)
 async def put_photo(photo_id: str, request: Request) -> dict:
     require_photo_id(photo_id)
     raw = await request.body()
@@ -685,7 +697,7 @@ async def put_photo(photo_id: str, request: Request) -> dict:
     return {"url": write_photo(photo_id, raw)}
 
 
-@app.delete("/api/photos/{photo_id}")
+@app.delete("/api/photos/{photo_id}", dependencies=_api_auth)
 def delete_photo(photo_id: str) -> Response:
     require_photo_id(photo_id)
     found = find_photo(photo_id)
@@ -694,7 +706,7 @@ def delete_photo(photo_id: str) -> Response:
     return Response(status_code=204)
 
 
-@app.get("/api/photos/{photo_id}")
+@app.get("/api/photos/{photo_id}", dependencies=_api_auth)
 def get_photo(photo_id: str) -> FileResponse:
     require_photo_id(photo_id)
     path = find_photo(photo_id)

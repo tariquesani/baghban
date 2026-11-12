@@ -162,6 +162,12 @@ Leave `BAGHBAN_GIT_TOKEN` unset when the repository is public.
 | `BAGHBAN_GIT_REPO` | `https://github.com/tariquesani/baghban.git` | HTTPS clone URL for the source repo |
 | `BAGHBAN_GIT_REF` | `master` | Branch or tag to check out |
 | `BAGHBAN_GIT_TOKEN` | (unset) | Injected into the clone URL for private repos |
+| `BAGHBAN_USERNAME` | (optional) | Overrides default `admin` on first credential bootstrap |
+| `BAGHBAN_PASSWORD` | (optional) | Overrides default `admin` on first credential bootstrap |
+| `BAGHBAN_API_TOKEN` | (optional) | Overrides auto-generated `api.token` in the data dir |
+| `BAGHBAN_SESSION_SECRET` | (optional) | Overrides auto-generated `session.secret` in the data dir |
+
+Auth works with no env set: login is `admin` / `admin`, and secrets are created under the bind-mounted data dir. Change the password in **Settings → Account**. Set the env vars only if you want to pin secrets yourself.
 
 ### Image defaults (not set in CasaOS)
 
@@ -183,6 +189,7 @@ These are defined in `Dockerfile.main` and only need changing for advanced tunin
 | `git clone` / `git fetch` fails | Missing or invalid `BAGHBAN_GIT_TOKEN` for a private repo; use a PAT with `repo` scope |
 | Container stays on "starting" for several minutes | First clone, `pip install`, and the frontend build. Check the logs. |
 | API responds and the UI does not | The frontend build failed. `docker logs baghban-main` shows the `npm run build` error. |
+| Cannot log in after reset | Default is `admin` / `admin` until changed in Settings; secrets live in `backend/data/session.secret` and `api.token` |
 | Garden is empty after a recreate | The host folder `/DATA/AppData/baghban` was replaced. The database lives at `backend/data/baghban.db` inside that folder. |
 
 View logs from CasaOS or:

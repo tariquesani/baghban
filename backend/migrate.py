@@ -12,6 +12,7 @@ table does not rewrite aliases and links.
 import sqlite3
 from pathlib import Path
 
+from auth import create_auth_table
 from beds import allow_tree_kind
 from calendar_entries import allow_uproot_kind, calendar_crop_id, drop_care_action_check
 from care_rules import care_recurrence
@@ -27,6 +28,11 @@ def drop_label_checks(connection) -> None:
         raise RuntimeError("Catalogue migration broke a foreign key")
 
 
+def add_app_auth(connection) -> None:
+    """Single-row login credentials for the SPA and session cookies."""
+    create_auth_table(connection)
+
+
 MIGRATIONS = (
     drop_label_checks,
     add_crop_icon,
@@ -34,6 +40,7 @@ MIGRATIONS = (
     care_recurrence,
     allow_tree_kind,
     allow_uproot_kind,
+    add_app_auth,
 )
 
 

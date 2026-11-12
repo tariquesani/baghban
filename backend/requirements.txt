@@ -6,3 +6,4 @@ tzdata
 timezonefinder
 astral
 python-dateutil
+itsdangerous

@@ -2,7 +2,7 @@ import logging
 import sqlite3
 from contextlib import closing
 
-from fastapi.testclient import TestClient
+from authed_client import TestClient
 
 from app import app, connect
 

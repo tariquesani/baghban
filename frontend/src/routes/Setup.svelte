@@ -1,4 +1,5 @@
 <script lang="ts">
+  import SetupAccount from '../components/setup/SetupAccount.svelte';
   import SetupName from '../components/setup/SetupName.svelte';
   import SetupOrphans from '../components/setup/SetupOrphans.svelte';
   import SetupPlace from '../components/setup/SetupPlace.svelte';
@@ -6,6 +7,7 @@
   import SetupSize from '../components/setup/SetupSize.svelte';
   import SetupUproot from '../components/setup/SetupUproot.svelte';
   import * as Tabs from '$lib/components/ui/tabs';
+  import { updateCredentials } from '$lib/api/auth.js';
   import { listOrphanBeds, purgeOrphanBed } from '$lib/api/beds.js';
   import { readGarden, resetGarden, saveGardenSize, saveIdentity, uprootAllPlants } from '$lib/api/garden.js';
   import { toast } from 'svelte-sonner';
@@ -35,6 +37,14 @@
     obstacles: Record<string, unknown>[];
   };
 
+  let {
+    username = '',
+    onUsername,
+  }: {
+    username?: string;
+    onUsername?: (username: string) => void;
+  } = $props();
+
   let ready = $state(false);
   let loadError = $state('');
   let busy = $state('');
@@ -55,6 +65,7 @@
   let placeError = $state('');
   let sizeError = $state('');
   let orphanError = $state('');
+  let accountError = $state('');
   let orphans = $state<{ id: number; name: string; kind: string }[]>([]);
 
   let placed = $derived(saved.latitude !== '' || saved.longitude !== '');
@@ -261,6 +272,26 @@
     }
   }
 
+  async function saveAccount(payload: {
+    currentPassword: string;
+    username?: string;
+    newPassword?: string;
+  }) {
+    if (busy) return;
+    busy = 'account';
+    accountError = '';
+    try {
+      const result = await updateCredentials(payload) as { username?: string };
+      const next = typeof result?.username === 'string' ? result.username : username;
+      onUsername?.(next);
+      toast.success('Saved account');
+    } catch (err) {
+      accountError = failure(err, 'Could not update account');
+    } finally {
+      busy = '';
+    }
+  }
+
   void load();
 </script>
 
@@ -268,10 +299,11 @@
   {#if loadError}<p class="text-sm text-destructive" role="alert">{loadError}</p>{/if}
   {#if ready}
     <Tabs.Root value="name" class="gap-4">
-      <Tabs.List class="grid h-auto w-full grid-cols-2 sm:grid-cols-3 lg:grid-cols-5">
+      <Tabs.List class="grid h-auto w-full grid-cols-2 sm:grid-cols-3 lg:grid-cols-6">
         <Tabs.Trigger value="name">Name</Tabs.Trigger>
         <Tabs.Trigger value="place">Place</Tabs.Trigger>
         <Tabs.Trigger value="size">Size</Tabs.Trigger>
+        <Tabs.Trigger value="account">Account</Tabs.Trigger>
         <Tabs.Trigger value="orphans">Orphans</Tabs.Trigger>
         <Tabs.Trigger value="again">Start again</Tabs.Trigger>
       </Tabs.List>
@@ -306,6 +338,14 @@
           {outside}
           busy={busy !== ''}
           onSave={saveSize}
+        />
+      </Tabs.Content>
+      <Tabs.Content value="account">
+        <SetupAccount
+          {username}
+          error={accountError}
+          busy={busy !== ''}
+          onSave={saveAccount}
         />
       </Tabs.Content>
       <Tabs.Content value="orphans">

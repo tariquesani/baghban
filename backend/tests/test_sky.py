@@ -3,7 +3,7 @@ from contextlib import closing
 from datetime import datetime
 
 import httpx
-from fastapi.testclient import TestClient
+from authed_client import TestClient
 from zoneinfo import ZoneInfo
 
 from app import app, connect

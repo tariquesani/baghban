@@ -1,12 +1,15 @@
 <script>
   import './app.css';
   import { Toaster } from '$lib/components/ui/sonner';
+  import { ApiError } from '$lib/api/api.js';
+  import { login, logout, me } from '$lib/api/auth.js';
   import AppSidebar from './components/AppSidebar.svelte';
   import Help from './components/Help.svelte';
   import { helpForPath } from '$lib/domain/help.js';
   import Calendar from './routes/Calendar.svelte';
   import Crops from './routes/Crops.svelte';
   import Home from './routes/Home.svelte';
+  import Login from './routes/Login.svelte';
   import Planner from './routes/Planner.svelte';
   import Setup from './routes/Setup.svelte';
   import SiteFooter from './components/SiteFooter.svelte';
@@ -37,6 +40,12 @@
   let entrySession = $state(0);
   let entryKind = $state('sowing');
   let helpOpen = $state(false);
+  let authChecked = $state(false);
+  let authenticated = $state(false);
+  /** @type {string} */
+  let authUsername = $state('');
+  let loginBusy = $state(false);
+  let loginError = $state('');
   let canvas = $state({
     ready: false,
     activeTool: 'select',
@@ -54,9 +63,60 @@
     : path === '/settings' ? 'Settings'
     : 'Dashboard',
   );
-  let documentTitle = $derived(`Baghban: ${pageTitle}`);
+  let documentTitle = $derived(authenticated ? `Baghban: ${pageTitle}` : 'Baghban: Login');
   let help = $derived(helpForPath(path));
   let fillsScreen = $derived(path === '/planner' || path === '/crops');
+
+  async function checkAuth() {
+    try {
+      const session = await me();
+      authenticated = true;
+      authUsername = typeof session?.username === 'string' ? session.username : '';
+      loginError = '';
+    } catch (err) {
+      authenticated = false;
+      authUsername = '';
+      if (err instanceof ApiError && err.status === 503) {
+        loginError = err.message || 'Auth is not configured on the server.';
+      }
+    } finally {
+      authChecked = true;
+    }
+  }
+
+  /**
+   * @param {string} username
+   * @param {string} password
+   */
+  async function submitLogin(username, password) {
+    if (loginBusy) return;
+    loginBusy = true;
+    loginError = '';
+    try {
+      await login(username, password);
+      await checkAuth();
+      if (!authenticated) loginError = 'Login failed.';
+    } catch (err) {
+      loginError = err instanceof Error && err.message ? err.message : 'Login failed.';
+      authenticated = false;
+    } finally {
+      loginBusy = false;
+    }
+  }
+
+  async function signOut() {
+    drawerOpen = false;
+    helpOpen = false;
+    entryOpen = false;
+    try {
+      await logout();
+    } catch {
+      // Still clear local auth state if the cookie clear request fails.
+    }
+    authenticated = false;
+    authUsername = '';
+    loginError = '';
+  }
 
   function syncPath() {
     path = normalize(window.location.pathname);
@@ -123,6 +183,8 @@
     search = nextSearch;
     drawerOpen = false;
   }
+
+  void checkAuth();
 </script>
 
 <svelte:head>
@@ -131,6 +193,12 @@
 <svelte:window onpopstate={syncPath} onresize={noteViewport} />
 <svelte:document onclick={followLink} onsidebaropen={openDrawer} />
 
+{#if !authChecked}
+  <div class="auth-boot">Loading…</div>
+{:else if !authenticated}
+  <Toaster position="top-right" />
+  <Login error={loginError} busy={loginBusy} onLogin={submitLogin} />
+{:else}
 <div class="shell" style:--rail-width={railWidth}>
   <Toaster position="top-right" />
   {#if drawerOpen}
@@ -153,6 +221,7 @@
     onClose={() => drawerOpen = false}
     onHelp={openHelp}
     onAddEntry={askForEntry}
+    onLogout={signOut}
   />
   <div class={['shell-main', fillsScreen && 'fills-screen']}>
     <header class="page-head">
@@ -175,7 +244,7 @@
       {#if path === '/planner'}
         <Planner {search} onCanvas={noteCanvas} />
       {:else if path === '/settings'}
-        <Setup />
+        <Setup username={authUsername} onUsername={name => { authUsername = name; }} />
       {:else if path === '/calendar'}
         <Calendar bind:entryOpen {entrySession} {entryKind} {search} />
       {:else if path === '/crops'}
@@ -188,6 +257,7 @@
   </div>
   <Help open={helpOpen} title={help.title} tips={help.tips} onClose={() => helpOpen = false} />
 </div>
+{/if}
 
 <style>
   :global(html),
@@ -300,5 +370,15 @@
     padding: 0;
     background: rgba(25, 29, 23, 0.4);
     cursor: pointer;
+  }
+
+  .auth-boot {
+    display: grid;
+    place-items: center;
+    min-height: 100vh;
+    min-height: 100dvh;
+    font-family: Roboto, sans-serif;
+    color: #42493d;
+    background: #f0f4f0;
   }
 </style>

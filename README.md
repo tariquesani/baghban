@@ -80,6 +80,32 @@ uvicorn app:app --host 127.0.0.1 --port 8000
 
 The database is created on first run at `backend/data/baghban.db`. Photos are stored beside it in `backend/data/photos/`. Both are local and are not part of the repository. Set `BAGHBAN_DB` to use a different database file.
 
+### Authentication
+
+Every `/api` route except login and logout requires auth. On first boot the app is ready with no auth env vars:
+
+- Login defaults to **`admin` / `admin`** (change this in **Settings → Account**).
+- A session secret and API token are written beside the database as `session.secret` and `api.token` (under `backend/data/` by default). The token is also logged once when it is first created.
+
+The browser uses username/password login and a long-lived HttpOnly session cookie (`baghban_session`, 30 days, `SameSite=Lax`, not `Secure` so it works on HTTP home LAN). Scripts use a bearer token. An empty `Authorization: Bearer` header is rejected with a clear error.
+
+Optional overrides (non-empty values win over the files / defaults):
+
+| Variable | Role |
+|----------|------|
+| `BAGHBAN_USERNAME` | Initial login name if the auth row is still empty |
+| `BAGHBAN_PASSWORD` | Initial login password if the auth row is still empty |
+| `BAGHBAN_API_TOKEN` | API bearer token instead of `api.token` |
+| `BAGHBAN_SESSION_SECRET` | Cookie signing secret instead of `session.secret` |
+
+Example script call (token from the generated file or env):
+
+```bash
+curl -H "Authorization: Bearer $(tr -d '\n' < backend/data/api.token)" http://127.0.0.1:8000/api/garden
+```
+
+Without TLS on the LAN, anyone who can read network traffic or the browser cookie store can impersonate the session. Prefer a trusted network.
+
 ### Frontend
 
 From `frontend`:

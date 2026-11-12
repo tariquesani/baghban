@@ -1,7 +1,7 @@
 import struct
 import zlib
 
-from fastapi.testclient import TestClient
+from authed_client import TestClient
 
 from app import app
 from crops import MAX_ICON_BYTES
