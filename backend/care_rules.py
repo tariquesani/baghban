@@ -9,13 +9,22 @@ from __future__ import annotations
 
 import json
 from contextlib import closing
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 
 from dateutil.rrule import DAILY, WEEKLY, YEARLY, rrule
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import Response
 
 from catalogue import CARE_ACTIONS
+from http_util import (
+    bed_id_field,
+    crop_id_field,
+    json_number,
+    number_field,
+    read_json_body,
+    require_date,
+    text_field,
+)
 
 FREQS = ("daily", "weekly", "yearly")
 HORIZON_DAYS = 365
@@ -77,76 +86,6 @@ def require_rule_id(rule_id: str) -> int:
     if not rule_id.isdigit() or rule_id.startswith("0"):
         raise HTTPException(status_code=404, detail="Rule not found")
     return int(rule_id)
-
-
-def require_date(value, name: str) -> str:
-    if not isinstance(value, str):
-        raise HTTPException(status_code=400, detail=f"{name} must be YYYY-MM-DD")
-    try:
-        parsed = datetime.strptime(value, "%Y-%m-%d").date()
-    except ValueError:
-        raise HTTPException(status_code=400, detail=f"{name} must be YYYY-MM-DD") from None
-    if parsed.isoformat() != value:
-        raise HTTPException(status_code=400, detail=f"{name} must be YYYY-MM-DD")
-    return value
-
-
-def text_field(body: dict, key: str) -> str:
-    if key not in body or body[key] is None:
-        return ""
-    value = body[key]
-    if not isinstance(value, str):
-        raise HTTPException(status_code=400, detail=f"{key} must be a string")
-    return value
-
-
-def bed_id_field(body: dict) -> int | None:
-    if "bedId" not in body or body["bedId"] is None or body["bedId"] == "":
-        return None
-    value = body["bedId"]
-    if isinstance(value, bool) or not isinstance(value, int) or value < 1:
-        raise HTTPException(status_code=400, detail="bedId must be an integer")
-    return value
-
-
-def crop_id_field(body: dict) -> int | None:
-    if "cropId" not in body or body["cropId"] is None or body["cropId"] == "":
-        return None
-    value = body["cropId"]
-    if isinstance(value, bool) or not isinstance(value, int) or value < 1:
-        raise HTTPException(status_code=400, detail="cropId must be an integer")
-    return value
-
-
-def number_field(body: dict, key: str):
-    if key not in body or body[key] is None:
-        return None
-    value = body[key]
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
-        raise HTTPException(status_code=400, detail=f"{key} must be a number")
-    if isinstance(value, float) and value.is_integer():
-        return int(value)
-    return value
-
-
-def json_number(value):
-    if value is None:
-        return None
-    if isinstance(value, float) and value.is_integer():
-        return int(value)
-    return value
-
-
-def parse_body(raw: bytes) -> dict:
-    if not raw:
-        raise HTTPException(status_code=400, detail="Body must be a JSON object")
-    try:
-        body = json.loads(raw)
-    except json.JSONDecodeError:
-        raise HTTPException(status_code=400, detail="Body must be JSON") from None
-    if not isinstance(body, dict):
-        raise HTTPException(status_code=400, detail="Body must be a JSON object")
-    return body
 
 
 def weekdays_field(body: dict, freq: str) -> list[int]:
@@ -618,7 +557,7 @@ def get_care_rules() -> list:
 
 @router.post("/care-rules")
 async def post_care_rule(request: Request) -> dict:
-    return create_rule(parse_body(await request.body()))
+    return create_rule(await read_json_body(request))
 
 
 @router.get("/care-rules/{rule_id}")
@@ -633,7 +572,7 @@ def get_care_rule(rule_id: str) -> dict:
 
 @router.put("/care-rules/{rule_id}")
 async def put_care_rule(rule_id: str, request: Request) -> dict:
-    return replace_rule(require_rule_id(rule_id), parse_body(await request.body()))
+    return replace_rule(require_rule_id(rule_id), await read_json_body(request))
 
 
 @router.post("/care-rules/{rule_id}/deactivate")

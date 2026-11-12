@@ -13,6 +13,9 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse, Response
 
 from catalogue import CATEGORIES, SUNS, WATERS
+from http_util import json_number, read_json_body, reject_oversized
+from http_util import number_field as read_number
+from http_util import text_field as read_text
 FIELDS = {
     "id",
     "name",
@@ -242,48 +245,12 @@ def require_crop_id(crop_id: str) -> int:
     return int(crop_id)
 
 
-def parse_body(raw: bytes) -> dict:
-    if not raw:
-        raise HTTPException(status_code=400, detail="Body must be a JSON object")
-    try:
-        body = json.loads(raw)
-    except json.JSONDecodeError:
-        raise HTTPException(status_code=400, detail="Body must be JSON") from None
-    if not isinstance(body, dict):
-        raise HTTPException(status_code=400, detail="Body must be a JSON object")
-    return body
-
-
-def json_number(value):
-    if value is None:
-        return None
-    if isinstance(value, float) and value.is_integer():
-        return int(value)
-    return value
-
-
 def text_field(body: dict, key: str) -> str:
-    if key not in body or body[key] is None:
-        return ""
-    value = body[key]
-    if not isinstance(value, str):
-        raise HTTPException(status_code=400, detail=f"{key} must be a string")
-    return value.strip()
+    return read_text(body, key, strip=True)
 
 
 def number_field(body: dict, key: str, whole: bool = False):
-    if key not in body or body[key] is None:
-        return None
-    value = body[key]
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
-        raise HTTPException(status_code=400, detail=f"{key} must be a number")
-    if value < 0:
-        raise HTTPException(status_code=400, detail=f"{key} must be zero or more")
-    if whole and not float(value).is_integer():
-        raise HTTPException(status_code=400, detail=f"{key} must be a whole number")
-    if isinstance(value, float) and value.is_integer():
-        return int(value)
-    return value
+    return read_number(body, key, whole=whole, non_negative=True)
 
 
 def bool_field(body: dict, key: str) -> bool:
@@ -782,7 +749,7 @@ def get_crops(
 
 @router.post("/crops")
 async def post_crop(request: Request) -> dict:
-    return create_crop(parse_body(await request.body()))
+    return create_crop(await read_json_body(request))
 
 
 @router.get("/crops/{crop_id}")
@@ -792,7 +759,7 @@ def get_crop(crop_id: str) -> dict:
 
 @router.put("/crops/{crop_id}")
 async def put_crop(crop_id: str, request: Request) -> dict:
-    return save_crop(require_crop_id(crop_id), parse_body(await request.body()))
+    return save_crop(require_crop_id(crop_id), await read_json_body(request))
 
 
 @router.delete("/crops/{crop_id}")
@@ -803,8 +770,6 @@ def delete_crop(crop_id: str) -> Response:
 
 @router.put("/crops/{crop_id}/icon")
 async def put_crop_icon(crop_id: str, request: Request) -> dict:
-    from app import reject_oversized
-
     raw = await request.body()
     reject_oversized(request, raw, MAX_ICON_BYTES, "Icon is larger than 1 MB")
     if not raw:

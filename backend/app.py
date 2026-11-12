@@ -40,10 +40,19 @@ from beds_crops import (
 from calendar_entries import create_calendar_tables, router as calendar_router
 from care_rules import router as care_rules_router
 from crops import create_crop_tables, seed_crops, router as crops_router
+from http_util import (
+    MAX_JSON_BYTES,
+    blank_text,
+    optional_int,
+    optional_real,
+    read_json_body,
+    reject_oversized,
+    text_field,
+)
 from migrate import migrate
 import sky
 
-MAX_BYTES = 2 * 1024 * 1024
+MAX_BYTES = MAX_JSON_BYTES
 MAX_PHOTO_BYTES = 15 * 1024 * 1024
 PHOTO_CACHE_CONTROL = "public, max-age=31536000"
 SCENE_FIELDS = ("beds", "obstacles", "nextId")
@@ -270,54 +279,6 @@ def read_garden() -> dict | None:
                 return None
             row = empty_garden()
         return assemble(connection, row)
-
-
-def read_json_object(raw: bytes) -> dict:
-    if not raw:
-        raise HTTPException(status_code=400, detail="Body must be a JSON object")
-    try:
-        body = json.loads(raw)
-    except json.JSONDecodeError:
-        raise HTTPException(status_code=400, detail="Body must be JSON") from None
-    if not isinstance(body, dict):
-        raise HTTPException(status_code=400, detail="Body must be a JSON object")
-    return body
-
-
-def optional_real(mapping: dict, key: str):
-    if key not in mapping or mapping[key] is None:
-        return None
-    value = mapping[key]
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
-        raise HTTPException(status_code=400, detail=f"{key} must be a number")
-    return float(value)
-
-
-def optional_int(mapping: dict, key: str):
-    if key not in mapping or mapping[key] is None:
-        return None
-    value = mapping[key]
-    if isinstance(value, bool) or not isinstance(value, int):
-        raise HTTPException(status_code=400, detail=f"{key} must be an integer")
-    return value
-
-
-def text_field(mapping: dict, key: str) -> str:
-    if key not in mapping or mapping[key] is None:
-        return ""
-    value = mapping[key]
-    if not isinstance(value, str):
-        raise HTTPException(status_code=400, detail=f"{key} must be text")
-    return value
-
-
-def blank_text(mapping: dict, key: str) -> str | None:
-    if key not in mapping or mapping[key] is None or mapping[key] == "":
-        return None
-    value = mapping[key]
-    if not isinstance(value, str):
-        raise HTTPException(status_code=400, detail=f"{key} must be text")
-    return value
 
 
 def garden_columns(garden) -> tuple:
@@ -615,21 +576,6 @@ app.include_router(care_rules_router, prefix="/api", dependencies=_api_auth)
 app.include_router(crops_router, prefix="/api", dependencies=_api_auth)
 
 
-async def limited_body(request: Request, limit: int, too_big: str) -> bytes:
-    announced = request.headers.get("content-length")
-    if announced is not None:
-        try:
-            announced_size = int(announced)
-        except ValueError:
-            raise HTTPException(status_code=400, detail="Invalid Content-Length") from None
-        if announced_size > limit:
-            raise HTTPException(status_code=413, detail=too_big)
-    raw = await request.body()
-    if len(raw) > limit:
-        raise HTTPException(status_code=413, detail=too_big)
-    return raw
-
-
 @app.get("/api/sky", dependencies=_api_auth)
 def get_sky(timezone: str = "") -> dict:
     payload = read_garden()
@@ -647,15 +593,19 @@ def get_garden() -> Response:
 
 @app.put("/api/garden", dependencies=_api_auth)
 async def put_garden(request: Request) -> dict:
-    raw = await limited_body(request, MAX_BYTES, "Plan is larger than 2 MB")
-    garden, plot = parse_settings(read_json_object(raw))
+    body = await read_json_body(
+        request, limit=MAX_BYTES, too_big="Plan is larger than 2 MB"
+    )
+    garden, plot = parse_settings(body)
     return save_settings(garden, plot)
 
 
 @app.put("/api/garden/identity", dependencies=_api_auth)
 async def put_garden_identity(request: Request) -> dict:
-    raw = await limited_body(request, MAX_BYTES, "Plan is larger than 2 MB")
-    return save_identity(read_json_object(raw))
+    body = await read_json_body(
+        request, limit=MAX_BYTES, too_big="Plan is larger than 2 MB"
+    )
+    return save_identity(body)
 
 
 @app.post("/api/garden/reset", dependencies=_api_auth)
@@ -672,19 +622,6 @@ def post_garden_uproot_plants() -> Response:
     if payload is None:
         return Response(status_code=204)
     return JSONResponse(payload)
-
-
-def reject_oversized(request: Request, raw: bytes, limit: int, message: str) -> None:
-    announced = request.headers.get("content-length")
-    if announced is not None:
-        try:
-            announced_size = int(announced)
-        except ValueError:
-            raise HTTPException(status_code=400, detail="Invalid Content-Length") from None
-        if announced_size > limit:
-            raise HTTPException(status_code=413, detail=message)
-    if len(raw) > limit:
-        raise HTTPException(status_code=413, detail=message)
 
 
 @app.put("/api/photos/{photo_id}", dependencies=_api_auth)

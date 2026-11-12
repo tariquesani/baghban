@@ -21,6 +21,8 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import JSONResponse
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 
+from http_util import read_json_body
+
 COOKIE_NAME = "baghban_session"
 COOKIE_MAX_AGE = 30 * 24 * 60 * 60
 SESSION_SALT = "baghban-session"
@@ -319,24 +321,10 @@ def require_auth(request: Request) -> dict:
     raise HTTPException(status_code=401, detail="Unauthorized")
 
 
-def read_json_object(raw: bytes) -> dict:
-    import json
-
-    if not raw:
-        raise HTTPException(status_code=400, detail="Body is empty")
-    try:
-        payload = json.loads(raw)
-    except json.JSONDecodeError as exc:
-        raise HTTPException(status_code=400, detail="Body must be JSON") from exc
-    if not isinstance(payload, dict):
-        raise HTTPException(status_code=400, detail="Body must be a JSON object")
-    return payload
-
-
 @router.post("/login")
 async def login(request: Request) -> Response:
     ensure_ready()
-    body = read_json_object(await request.body())
+    body = await read_json_body(request)
     username = body.get("username")
     password = body.get("password")
     if not isinstance(username, str) or not isinstance(password, str):
@@ -373,7 +361,7 @@ async def update_credentials(
     request: Request,
     _auth: dict = Depends(require_auth),
 ) -> Response:
-    body = read_json_object(await request.body())
+    body = await read_json_body(request)
     current_password = body.get("currentPassword")
     if not isinstance(current_password, str) or not current_password:
         raise HTTPException(status_code=400, detail="currentPassword is required")

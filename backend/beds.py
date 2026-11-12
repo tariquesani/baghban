@@ -13,6 +13,8 @@ from contextlib import closing
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import Response
 
+from http_util import read_json_body
+
 BED_KINDS = ("bed", "planter", "pot", "tree")
 CIRCLE_KINDS = ("pot", "tree")
 BED_FIELDS = {
@@ -271,18 +273,6 @@ def connect():
     from app import connect as open_db
 
     return open_db()
-
-
-def parse_body(raw: bytes) -> dict:
-    if not raw:
-        raise HTTPException(status_code=400, detail="Body must be a JSON object")
-    try:
-        body = json.loads(raw)
-    except json.JSONDecodeError:
-        raise HTTPException(status_code=400, detail="Body must be JSON") from None
-    if not isinstance(body, dict):
-        raise HTTPException(status_code=400, detail="Body must be a JSON object")
-    return body
 
 
 def require_row_id(value: str, missing: str) -> int:
@@ -750,7 +740,7 @@ def delete_orphan_bed(bed_id: str) -> Response:
 
 @router.put("/beds")
 async def put_bed(request: Request) -> dict:
-    return create_bed(parse_body(await request.body()))
+    return create_bed(await read_json_body(request))
 
 
 def crop_name(body: dict) -> str:
@@ -765,7 +755,7 @@ async def put_bed_crop(bed_id: str, request: Request) -> dict:
 
     return assign_crop(
         require_row_id(bed_id, "Bed not found"),
-        crop_name(parse_body(await request.body())),
+        crop_name(await read_json_body(request)),
     )
 
 
@@ -775,14 +765,14 @@ async def put_bed_crop_archive(bed_id: str, request: Request) -> Response:
 
     archive_crop(
         require_row_id(bed_id, "Bed not found"),
-        crop_name(parse_body(await request.body())),
+        crop_name(await read_json_body(request)),
     )
     return Response(status_code=204)
 
 
 @router.put("/beds/{bed_id}")
 async def put_bed_id(bed_id: str, request: Request) -> dict:
-    return update_bed(require_row_id(bed_id, "Bed not found"), parse_body(await request.body()))
+    return update_bed(require_row_id(bed_id, "Bed not found"), await read_json_body(request))
 
 
 @router.delete("/beds/{bed_id}")
@@ -793,14 +783,14 @@ def delete_bed(bed_id: str) -> Response:
 
 @router.put("/obstacles")
 async def put_obstacle(request: Request) -> dict:
-    return create_obstacle(parse_body(await request.body()))
+    return create_obstacle(await read_json_body(request))
 
 
 @router.put("/obstacles/{obstacle_id}")
 async def put_obstacle_id(obstacle_id: str, request: Request) -> dict:
     return update_obstacle(
         require_row_id(obstacle_id, "Obstacle not found"),
-        parse_body(await request.body()),
+        await read_json_body(request),
     )
 
 

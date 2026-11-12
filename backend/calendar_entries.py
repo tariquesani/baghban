@@ -9,15 +9,25 @@ reads join crop.name so renames stay on the calendar. A done uproot finishes
 the matching beds_crops assignment on the entry date.
 """
 
-import json
 import re
 from contextlib import closing
-from datetime import date, datetime
+from datetime import date
 
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import Response
 
 from catalogue import CARE_ACTIONS
+from http_util import (
+    bed_id_field,
+    crop_id_field,
+    json_number,
+    number_field,
+    optional_date,
+    read_json_body,
+    require_choice,
+    require_date,
+    text_field,
+)
 
 PHOTO_URL = re.compile(r"/api/photos/([A-Za-z0-9][A-Za-z0-9_-]{0,80})")
 KINDS = ("sowing", "care", "pest", "harvest", "uproot", "diary")
@@ -337,32 +347,6 @@ def require_entry_id(entry_id: str) -> int:
     return int(entry_id)
 
 
-def require_date(value, name: str) -> str:
-    if not isinstance(value, str):
-        raise HTTPException(status_code=400, detail=f"{name} must be YYYY-MM-DD")
-    try:
-        parsed = datetime.strptime(value, "%Y-%m-%d").date()
-    except ValueError:
-        raise HTTPException(status_code=400, detail=f"{name} must be YYYY-MM-DD") from None
-    if parsed.isoformat() != value:
-        raise HTTPException(status_code=400, detail=f"{name} must be YYYY-MM-DD")
-    return value
-
-
-def optional_date(value: str | None, name: str) -> str | None:
-    if value is None:
-        return None
-    return require_date(value, name)
-
-
-def require_choice(value: str | None, choices: tuple, name: str) -> str | None:
-    if value is None:
-        return None
-    if value not in choices:
-        raise HTTPException(status_code=400, detail=f"Invalid {name}")
-    return value
-
-
 def query_bed_id(value: str | None):
     """None skips the filter. '' means entries with no bed. Otherwise an int."""
     if value is None:
@@ -372,54 +356,6 @@ def query_bed_id(value: str | None):
     if not value.isdigit() or value.startswith("0"):
         raise HTTPException(status_code=400, detail="bedId must be an integer")
     return int(value)
-
-
-def text_field(body: dict, key: str) -> str:
-    if key not in body or body[key] is None:
-        return ""
-    value = body[key]
-    if not isinstance(value, str):
-        raise HTTPException(status_code=400, detail=f"{key} must be a string")
-    return value
-
-
-def bed_id_field(body: dict) -> int | None:
-    if "bedId" not in body or body["bedId"] is None or body["bedId"] == "":
-        return None
-    value = body["bedId"]
-    if isinstance(value, bool) or not isinstance(value, int) or value < 1:
-        raise HTTPException(status_code=400, detail="bedId must be an integer")
-    return value
-
-
-def crop_id_field(body: dict) -> int | None:
-    if "cropId" not in body or body["cropId"] is None or body["cropId"] == "":
-        return None
-    value = body["cropId"]
-    if isinstance(value, bool) or not isinstance(value, int) or value < 1:
-        raise HTTPException(status_code=400, detail="cropId must be an integer")
-    return value
-
-
-def number_field(body: dict, key: str, whole: bool = False):
-    if key not in body or body[key] is None:
-        return None
-    value = body[key]
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
-        raise HTTPException(status_code=400, detail=f"{key} must be a number")
-    if whole and not float(value).is_integer():
-        raise HTTPException(status_code=400, detail=f"{key} must be a whole number")
-    if isinstance(value, float) and value.is_integer():
-        return int(value)
-    return value
-
-
-def json_number(value):
-    if value is None:
-        return None
-    if isinstance(value, float) and value.is_integer():
-        return int(value)
-    return value
 
 
 def photo_url_field(body: dict) -> str:
@@ -442,18 +378,6 @@ def discard_photo(url: str | None) -> None:
     found = find_photo(match.group(1))
     if found is not None:
         found.unlink()
-
-
-def parse_body(raw: bytes) -> dict:
-    if not raw:
-        raise HTTPException(status_code=400, detail="Body must be a JSON object")
-    try:
-        body = json.loads(raw)
-    except json.JSONDecodeError:
-        raise HTTPException(status_code=400, detail="Body must be JSON") from None
-    if not isinstance(body, dict):
-        raise HTTPException(status_code=400, detail="Body must be a JSON object")
-    return body
 
 
 def parse_entry(body: dict, entry_id: int | None) -> dict:
@@ -970,7 +894,7 @@ def get_care_total(
 
 @router.post("/calendar")
 async def post_entry(request: Request) -> dict:
-    return create_entry(parse_body(await request.body()))
+    return create_entry(await read_json_body(request))
 
 
 @router.get("/calendar/{entry_id}")
@@ -985,7 +909,7 @@ def get_entry(entry_id: str) -> dict:
 
 @router.put("/calendar/{entry_id}")
 async def put_entry(entry_id: str, request: Request) -> dict:
-    return replace_entry(require_entry_id(entry_id), parse_body(await request.body()))
+    return replace_entry(require_entry_id(entry_id), await read_json_body(request))
 
 
 @router.delete("/calendar/{entry_id}")
