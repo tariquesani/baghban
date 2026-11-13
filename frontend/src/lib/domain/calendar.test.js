@@ -287,3 +287,28 @@ test('a crop in a bed keeps a lane through the years it occupies', () => {
     'Tomato',
   ]);
 });
+
+test('a kind filter keeps only crops with that kind in the year', () => {
+  const beds = [
+    { name: 'Radish', createdOn: '2026-11-01', archivedOn: null },
+    { name: 'Tomato', createdOn: '2024-03-01', archivedOn: null },
+  ];
+  assert.deepEqual(calendarRows(SAMPLE_ENTRIES, 2026, beds, 'harvest'), [
+    'Bhindi',
+    'Coriander',
+    'Tomato',
+  ]);
+  assert.deepEqual(calendarRows(SAMPLE_ENTRIES, 2026, beds, 'sowing'), [
+    'Bhindi',
+    'Coriander',
+    'Methi',
+    'Tomato',
+  ]);
+  assert.deepEqual(calendarRows(SAMPLE_ENTRIES, 2026, [], 'diary'), [
+    '',
+    'Bhindi',
+    'Coriander',
+    'Tomato',
+  ]);
+  assert.deepEqual(calendarRows([], 2026, beds, 'harvest'), ['']);
+});
