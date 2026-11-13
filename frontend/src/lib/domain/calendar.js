@@ -388,25 +388,31 @@ function occupiesSpan(assignment, start, end) {
  * from a bed assignment that overlaps the year. The same catalogue name is
  * one lane. The garden lane leads when an entry has no crop, and it is the
  * only lane when the year has neither.
+ * When kindFilter is set, only lanes with a matching entry that year remain;
+ * assignment-only crops drop out.
  * @param {CalendarEntry[]} entries
  * @param {number} year
  * @param {BedCrop[]} [assignments]
+ * @param {string} [kindFilter] Empty shows every kind.
  * @returns {string[]}
  */
-export function calendarRows(entries, year, assignments = []) {
+export function calendarRows(entries, year, assignments = [], kindFilter = '') {
   const prefix = `${year}-`;
   /** @type {Set<string>} */
   const crops = new Set();
   let garden = false;
   for (const entry of entries) {
     if (!entry.date.startsWith(prefix)) continue;
+    if (!matchesKind(entry, kindFilter)) continue;
     if (entry.crop) crops.add(entry.crop);
     else garden = true;
   }
-  for (const assignment of assignments) {
-    const name = typeof assignment.name === 'string' ? assignment.name.trim() : '';
-    if (!name || !occupiesYear(assignment, year)) continue;
-    crops.add(name);
+  if (!kindFilter) {
+    for (const assignment of assignments) {
+      const name = typeof assignment.name === 'string' ? assignment.name.trim() : '';
+      if (!name || !occupiesYear(assignment, year)) continue;
+      crops.add(name);
+    }
   }
   return namedRows(crops, garden);
 }

@@ -40,10 +40,15 @@
   let editSession = $state(0);
 
   const entries = $derived(saved);
-  const rows = $derived(calendarRows(entries, year, plantings));
+  const rows = $derived(calendarRows(entries, year, plantings, kind));
   const marks = $derived(cropMarks(catalogue));
-  const shown = $derived(selectionEntries(entries, selected, year, kind));
-  const recorded = $derived(selectionEntries(entries, selected, year, ''));
+  const shownSelection = $derived.by(() => {
+    if (!selected) return null;
+    if (selected.scope === 'day') return selected;
+    return rows.includes(selected.crop) ? selected : null;
+  });
+  const shown = $derived(selectionEntries(entries, shownSelection, year, kind));
+  const recorded = $derived(selectionEntries(entries, shownSelection, year, ''));
 
   function linkedYear(query: string) {
     const date = new URLSearchParams(query).get('date') ?? '';
@@ -205,10 +210,10 @@
     {entries}
     {kind}
     reveal={linkedDate}
-    selectedDate={selected?.scope === 'cell' ? selected.date : ''}
-    selectedCrop={selected?.scope === 'cell' ? selected.crop : ''}
-    activeDate={selected?.scope === 'day' ? selected.date : ''}
-    activeCrop={selected?.scope === 'crop' ? selected.crop : ''}
+    selectedDate={shownSelection?.scope === 'cell' ? shownSelection.date : ''}
+    selectedCrop={shownSelection?.scope === 'cell' ? shownSelection.crop : ''}
+    activeDate={shownSelection?.scope === 'day' ? shownSelection.date : ''}
+    activeCrop={shownSelection?.scope === 'crop' ? shownSelection.crop : ''}
     {marks}
     onSelect={(day) => (selected = { scope: 'cell', date: day.date, crop: day.crop })}
     onSelectDay={(date) => (selected = { scope: 'day', date })}
@@ -216,9 +221,9 @@
   />
 
   <CalendarDayPanel
-    scope={selected?.scope ?? ''}
-    date={selected && selected.scope !== 'crop' ? selected.date : ''}
-    crop={selected && selected.scope !== 'day' ? selected.crop : ''}
+    scope={shownSelection?.scope ?? ''}
+    date={shownSelection && shownSelection.scope !== 'crop' ? shownSelection.date : ''}
+    crop={shownSelection && shownSelection.scope !== 'day' ? shownSelection.crop : ''}
     {year}
     entries={shown}
     hiddenByFilter={recorded.length > 0 && shown.length === 0}
@@ -238,8 +243,8 @@
     addSession={entrySession}
     {editSession}
     entry={formEntry}
-    selectedDate={selected && selected.scope !== 'crop' ? selected.date : ''}
-    selectedCrop={selected && selected.scope !== 'day' ? selected.crop : ''}
+    selectedDate={shownSelection && shownSelection.scope !== 'crop' ? shownSelection.date : ''}
+    selectedCrop={shownSelection && shownSelection.scope !== 'day' ? shownSelection.crop : ''}
     onSaved={addSowing}
     onScheduleSaved={reloadEntries}
   />
