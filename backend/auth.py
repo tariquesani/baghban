@@ -132,6 +132,33 @@ def api_token() -> str:
     return token
 
 
+def api_token_managed_by_env() -> bool:
+    return _env_nonempty("BAGHBAN_API_TOKEN") is not None
+
+
+def regenerate_api_token_file() -> str:
+    """Write a new api.token beside the database. Refuses when env owns the token."""
+    global _api_token
+    if api_token_managed_by_env():
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "API token is set by BAGHBAN_API_TOKEN. "
+                "Unset that environment variable to regenerate the file token."
+            ),
+        )
+    path = auth_data_dir() / API_TOKEN_FILE
+    value = secrets.token_urlsafe(32)
+    path.write_text(value + "\n", encoding="utf-8")
+    try:
+        path.chmod(0o600)
+    except OSError:
+        pass
+    _api_token = value
+    logger.warning("Regenerated API token at %s", path)
+    return value
+
+
 def create_auth_table(connection) -> None:
     connection.execute(
         """
@@ -354,6 +381,22 @@ def logout() -> Response:
 @router.get("/me")
 def me(auth: dict = Depends(require_auth)) -> dict:
     return {"authenticated": True, "username": auth["username"]}
+
+
+@router.get("/token")
+def read_token(_auth: dict = Depends(require_auth)) -> dict:
+    ensure_ready()
+    return {
+        "token": api_token(),
+        "managedByEnv": api_token_managed_by_env(),
+    }
+
+
+@router.post("/token/regenerate")
+def regenerate_token(_auth: dict = Depends(require_auth)) -> dict:
+    ensure_ready()
+    token = regenerate_api_token_file()
+    return {"token": token, "managedByEnv": False}
 
 
 @router.put("/credentials")

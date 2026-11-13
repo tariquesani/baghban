@@ -87,6 +87,74 @@ def test_logout_clears_session(tmp_path, monkeypatch):
         assert me.status_code == 401
 
 
+def test_read_and_regenerate_api_token(tmp_path, monkeypatch):
+    monkeypatch.setenv("BAGHBAN_DB", str(tmp_path / "baghban.db"))
+    monkeypatch.delenv("BAGHBAN_API_TOKEN", raising=False)
+    reset_auth_secrets_cache()
+
+    with RawTestClient(app) as client:
+        login = client.post(
+            "/api/auth/login",
+            json={"username": "gardener", "password": "secret"},
+        )
+        assert login.status_code == 200
+
+        first = client.get("/api/auth/token")
+        assert first.status_code == 200
+        body = first.json()
+        assert body["managedByEnv"] is False
+        token = body["token"]
+        assert token
+        assert (tmp_path / API_TOKEN_FILE).read_text(encoding="utf-8").strip() == token
+
+        assert client.get(
+            "/api/garden",
+            headers={"Authorization": f"Bearer {token}"},
+        ).status_code == 204
+
+        regenerated = client.post("/api/auth/token/regenerate")
+        assert regenerated.status_code == 200
+        next_body = regenerated.json()
+        assert next_body["managedByEnv"] is False
+        next_token = next_body["token"]
+        assert next_token
+        assert next_token != token
+        assert (tmp_path / API_TOKEN_FILE).read_text(encoding="utf-8").strip() == next_token
+
+        assert client.get(
+            "/api/garden",
+            headers={"Authorization": f"Bearer {token}"},
+        ).status_code == 401
+        assert client.get(
+            "/api/garden",
+            headers={"Authorization": f"Bearer {next_token}"},
+        ).status_code == 204
+
+
+def test_regenerate_api_token_refuses_env_override(tmp_path, monkeypatch):
+    monkeypatch.setenv("BAGHBAN_DB", str(tmp_path / "baghban.db"))
+    monkeypatch.setenv("BAGHBAN_API_TOKEN", "env-owned-token")
+    reset_auth_secrets_cache()
+
+    with RawTestClient(app) as client:
+        login = client.post(
+            "/api/auth/login",
+            json={"username": "gardener", "password": "secret"},
+        )
+        assert login.status_code == 200
+
+        shown = client.get("/api/auth/token")
+        assert shown.status_code == 200
+        assert shown.json() == {
+            "token": "env-owned-token",
+            "managedByEnv": True,
+        }
+
+        refused = client.post("/api/auth/token/regenerate")
+        assert refused.status_code == 400
+        assert "BAGHBAN_API_TOKEN" in refused.json()["detail"]
+
+
 def test_change_credentials(tmp_path, monkeypatch):
     monkeypatch.setenv("BAGHBAN_DB", str(tmp_path / "baghban.db"))
     with RawTestClient(app) as client:

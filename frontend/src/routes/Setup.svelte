@@ -1,5 +1,6 @@
 <script lang="ts">
   import SetupAccount from '../components/setup/SetupAccount.svelte';
+  import SetupApiToken from '../components/setup/SetupApiToken.svelte';
   import SetupName from '../components/setup/SetupName.svelte';
   import SetupOrphans from '../components/setup/SetupOrphans.svelte';
   import SetupPlace from '../components/setup/SetupPlace.svelte';
@@ -7,7 +8,7 @@
   import SetupSize from '../components/setup/SetupSize.svelte';
   import SetupUproot from '../components/setup/SetupUproot.svelte';
   import * as Tabs from '$lib/components/ui/tabs';
-  import { updateCredentials } from '$lib/api/auth.js';
+  import { readApiToken, regenerateApiToken, updateCredentials } from '$lib/api/auth.js';
   import { listOrphanBeds, purgeOrphanBed } from '$lib/api/beds.js';
   import { readGarden, resetGarden, saveGardenSize, saveIdentity, uprootAllPlants } from '$lib/api/garden.js';
   import { toast } from 'svelte-sonner';
@@ -66,6 +67,9 @@
   let sizeError = $state('');
   let orphanError = $state('');
   let accountError = $state('');
+  let apiToken = $state('');
+  let apiTokenManagedByEnv = $state(false);
+  let apiTokenError = $state('');
   let orphans = $state<{ id: number; name: string; kind: string }[]>([]);
 
   let placed = $derived(saved.latitude !== '' || saved.longitude !== '');
@@ -116,6 +120,22 @@
     }
   }
 
+  async function loadApiToken() {
+    try {
+      const payload = await readApiToken() as {
+        token?: string;
+        managedByEnv?: boolean;
+      };
+      apiToken = typeof payload?.token === 'string' ? payload.token : '';
+      apiTokenManagedByEnv = payload?.managedByEnv === true;
+      apiTokenError = '';
+    } catch (err) {
+      apiToken = '';
+      apiTokenManagedByEnv = false;
+      apiTokenError = failure(err, 'Could not load the API token');
+    }
+  }
+
   async function load() {
     try {
       const payload = await readGarden() as GardenPayload | null;
@@ -126,6 +146,7 @@
       loadError = '';
       ready = true;
       void loadOrphans();
+      void loadApiToken();
     } catch (err) {
       loadError = failure(err, 'Could not load setup');
     }
@@ -292,6 +313,26 @@
     }
   }
 
+  async function regenerateToken() {
+    if (busy || apiTokenManagedByEnv) return;
+    busy = 'token';
+    apiTokenError = '';
+    try {
+      const payload = await regenerateApiToken() as {
+        token?: string;
+        managedByEnv?: boolean;
+      };
+      apiToken = typeof payload?.token === 'string' ? payload.token : '';
+      apiTokenManagedByEnv = payload?.managedByEnv === true;
+      toast.success('Regenerated API token');
+    } catch (err) {
+      apiTokenError = failure(err, 'Could not regenerate the API token');
+      void loadApiToken();
+    } finally {
+      busy = '';
+    }
+  }
+
   void load();
 </script>
 
@@ -340,12 +381,19 @@
           onSave={saveSize}
         />
       </Tabs.Content>
-      <Tabs.Content value="account">
+      <Tabs.Content value="account" class="flex flex-col gap-4">
         <SetupAccount
           {username}
           error={accountError}
           busy={busy !== ''}
           onSave={saveAccount}
+        />
+        <SetupApiToken
+          token={apiToken}
+          managedByEnv={apiTokenManagedByEnv}
+          error={apiTokenError}
+          busy={busy !== ''}
+          onRegenerate={regenerateToken}
         />
       </Tabs.Content>
       <Tabs.Content value="orphans">

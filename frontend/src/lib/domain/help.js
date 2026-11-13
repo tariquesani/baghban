@@ -52,6 +52,7 @@ const screens = {
       'Place is a latitude and longitude. The timezone comes from that place',
       'With dimensions as the scale, Size is the width and length in feet',
       'A plan scale is recalibrated from the planner. Settings links you there',
+      'Account holds the login and the API token for scripts (copy or regenerate)',
       'Uproot all plants clears every crop and leaves the layout in place',
       'Start again clears the beds, plants, obstacles, plan photo, and scale. The name and place stay',
     ],

@@ -26,3 +26,11 @@ export function me() {
 export function updateCredentials(body) {
   return api.put('/auth/credentials', body);
 }
+
+export function readApiToken() {
+  return api.get('/auth/token');
+}
+
+export function regenerateApiToken() {
+  return api.post('/auth/token/regenerate', {});
+}
