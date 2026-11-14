@@ -15,7 +15,7 @@ def test_a_new_database_is_stamped_at_the_current_version(tmp_path, monkeypatch)
         pass
 
     connection = sqlite3.connect(db)
-    assert connection.execute("PRAGMA user_version").fetchone()[0] == 7
+    assert connection.execute("PRAGMA user_version").fetchone()[0] == 8
     care = connection.execute(
         "SELECT sql FROM sqlite_master WHERE name = 'care'"
     ).fetchone()[0]
@@ -44,7 +44,7 @@ def test_a_database_already_at_this_version_keeps_its_checks(tmp_path, monkeypat
     db = tmp_path / "baghban.db"
     monkeypatch.setenv("BAGHBAN_DB", str(db))
     connection = sqlite3.connect(db)
-    connection.execute("PRAGMA user_version = 7")
+    connection.execute("PRAGMA user_version = 8")
     connection.execute(
         """
         CREATE TABLE care (
@@ -63,7 +63,7 @@ def test_a_database_already_at_this_version_keeps_its_checks(tmp_path, monkeypat
         pass
 
     connection = sqlite3.connect(db)
-    assert connection.execute("PRAGMA user_version").fetchone()[0] == 7
+    assert connection.execute("PRAGMA user_version").fetchone()[0] == 8
     sql = connection.execute(
         "SELECT sql FROM sqlite_master WHERE name = 'care'"
     ).fetchone()[0]
@@ -92,7 +92,7 @@ def test_a_failed_step_rolls_back_the_version_and_the_change(tmp_path):
     connection.close()
     migrate(db)
     connection = sqlite3.connect(db)
-    assert connection.execute("PRAGMA user_version").fetchone()[0] == 7
+    assert connection.execute("PRAGMA user_version").fetchone()[0] == 8
     connection.close()
 
 
@@ -116,7 +116,7 @@ def test_an_existing_crop_gains_an_empty_icon(tmp_path):
     migrate(db)
 
     connection = sqlite3.connect(db)
-    assert connection.execute("PRAGMA user_version").fetchone()[0] == 7
+    assert connection.execute("PRAGMA user_version").fetchone()[0] == 8
     assert connection.execute("SELECT name, emoji, icon FROM crop").fetchone() == (
         "Mint",
         "🌿",
@@ -181,7 +181,7 @@ def test_calendar_crop_text_becomes_crop_id(tmp_path):
     migrate(db)
 
     connection = sqlite3.connect(db)
-    assert connection.execute("PRAGMA user_version").fetchone()[0] == 7
+    assert connection.execute("PRAGMA user_version").fetchone()[0] == 8
     rows = connection.execute(
         "SELECT id, crop_id FROM calendar_entry ORDER BY id"
     ).fetchall()
@@ -223,7 +223,7 @@ def test_care_recurrence_adds_rule_table_and_rule_id(tmp_path):
     migrate(db)
 
     connection = sqlite3.connect(db)
-    assert connection.execute("PRAGMA user_version").fetchone()[0] == 7
+    assert connection.execute("PRAGMA user_version").fetchone()[0] == 8
     columns = {info[1] for info in connection.execute("PRAGMA table_info(calendar_entry)")}
     assert "rule_id" in columns
     assert (
@@ -271,7 +271,7 @@ def test_allow_tree_kind_rebuilds_bed_check(tmp_path):
     migrate(db)
 
     connection = sqlite3.connect(db)
-    assert connection.execute("PRAGMA user_version").fetchone()[0] == 7
+    assert connection.execute("PRAGMA user_version").fetchone()[0] == 8
     sql = connection.execute(
         "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'bed'"
     ).fetchone()[0]
@@ -325,7 +325,7 @@ def test_allow_uproot_kind_rebuilds_calendar_check(tmp_path):
     migrate(db)
 
     connection = sqlite3.connect(db)
-    assert connection.execute("PRAGMA user_version").fetchone()[0] == 7
+    assert connection.execute("PRAGMA user_version").fetchone()[0] == 8
     sql = connection.execute(
         "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'calendar_entry'"
     ).fetchone()[0]
@@ -346,4 +346,75 @@ def test_allow_uproot_kind_rebuilds_calendar_check(tmp_path):
     ).fetchone()[0]
     assert kind == "uproot"
     connection.close()
+
+
+def test_inventory_drops_homebox_columns(tmp_path, monkeypatch):
+    import json
+
+    import inventory as inventory_mod
+
+    db = tmp_path / "baghban.db"
+    scripts = tmp_path / "scripts"
+    scripts.mkdir()
+    written = {}
+
+    def write_map(mapping):
+        written.update(mapping)
+        path = scripts / "homebox_map.json"
+        path.write_text(json.dumps(mapping, indent=2, sort_keys=True) + "\n")
+
+    monkeypatch.setattr(inventory_mod, "_write_legacy_sync_map", write_map)
+
+    connection = sqlite3.connect(db)
+    connection.execute("PRAGMA user_version = 7")
+    connection.execute(
+        """
+        CREATE TABLE inventory_item (
+            id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+            homebox_id           TEXT NOT NULL UNIQUE,
+            name                 TEXT NOT NULL,
+            description          TEXT NOT NULL DEFAULT '',
+            quantity             REAL NOT NULL DEFAULT 1,
+            manufacturer         TEXT NOT NULL DEFAULT '',
+            model_number         TEXT NOT NULL DEFAULT '',
+            purchase_from        TEXT NOT NULL DEFAULT '',
+            purchase_price       REAL,
+            purchase_date        TEXT,
+            location_path        TEXT NOT NULL DEFAULT '',
+            tags                 TEXT NOT NULL DEFAULT '[]',
+            homebox_image_id     TEXT NOT NULL DEFAULT '',
+            archived             INTEGER NOT NULL DEFAULT 0 CHECK (archived IN (0, 1)),
+            notes                TEXT NOT NULL DEFAULT '',
+            homebox_updated_at   TEXT NOT NULL DEFAULT '',
+            synced_at            TEXT NOT NULL DEFAULT ''
+        )
+        """
+    )
+    connection.execute(
+        """
+        INSERT INTO inventory_item (
+            id, homebox_id, name, description, quantity, tags, notes
+        )
+        VALUES (3, 'hb-abc', 'Benevia', '', 1, '["Pesticides"]', '')
+        """
+    )
+    connection.commit()
+    connection.close()
+
+    migrate(db)
+
+    connection = sqlite3.connect(db)
+    assert connection.execute("PRAGMA user_version").fetchone()[0] == 8
+    columns = {
+        info[1] for info in connection.execute("PRAGMA table_info(inventory_item)")
+    }
+    assert "homebox_id" not in columns
+    assert "synced_at" not in columns
+    assert "name" in columns
+    row = connection.execute(
+        "SELECT id, name, notes FROM inventory_item WHERE id = 3"
+    ).fetchone()
+    assert row == (3, "Benevia", "")
+    connection.close()
+    assert written == {"hb-abc": 3}
 

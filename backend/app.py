@@ -40,6 +40,7 @@ from beds_crops import (
 from calendar_entries import create_calendar_tables, router as calendar_router
 from care_rules import router as care_rules_router
 from crops import create_crop_tables, seed_crops, router as crops_router
+from inventory import create_inventory_tables, router as inventory_router
 from http_util import (
     MAX_JSON_BYTES,
     blank_text,
@@ -165,6 +166,7 @@ def init_db() -> None:
         create_calendar_tables(connection)
         create_crop_tables(connection)
         seed_crops(connection)
+        create_inventory_tables(connection)
         create_beds_crops(connection)
         drop_plant_grid(connection)
         copy_document_plants(connection)
@@ -574,6 +576,7 @@ app.include_router(beds_router, prefix="/api", dependencies=_api_auth)
 app.include_router(calendar_router, prefix="/api", dependencies=_api_auth)
 app.include_router(care_rules_router, prefix="/api", dependencies=_api_auth)
 app.include_router(crops_router, prefix="/api", dependencies=_api_auth)
+app.include_router(inventory_router, prefix="/api", dependencies=_api_auth)
 
 
 @app.get("/api/sky", dependencies=_api_auth)

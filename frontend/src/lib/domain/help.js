@@ -32,6 +32,15 @@ const screens = {
       'Archive hides a crop from the usual list. Open it while archived crops are shown, then restore it',
     ],
   },
+  '/inventory': {
+    title: 'Inventory',
+    tips: [
+      'Add an item, or open a card to edit or delete it',
+      'Filter by tags; choose more than one to narrow the list',
+      'Location can be a full path, for example Outhouse / Almirah',
+      'Tags are comma-separated when you edit an item',
+    ],
+  },
   '/planner': {
     title: 'Planner',
     tips: [

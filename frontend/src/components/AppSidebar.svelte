@@ -46,7 +46,7 @@
     { id: 'crops', label: 'Crops', icon: 'leaf', href: '/crops' },
     { id: 'planner', label: 'Planner', icon: 'map', href: '/planner' },
     { id: 'planter', label: 'Planter', icon: 'layout-grid' },
-    { id: 'inventory', label: 'Inventory', icon: 'package' },
+    { id: 'inventory', label: 'Inventory', icon: 'package', href: '/inventory' },
     { id: 'setup', label: 'Settings', icon: 'settings', href: '/settings' },
     { id: 'help', label: 'Help', icon: 'circle-help' },
   ];

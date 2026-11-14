@@ -9,6 +9,7 @@
   import Calendar from './routes/Calendar.svelte';
   import Crops from './routes/Crops.svelte';
   import Home from './routes/Home.svelte';
+  import Inventory from './routes/Inventory.svelte';
   import Login from './routes/Login.svelte';
   import Planner from './routes/Planner.svelte';
   import Setup from './routes/Setup.svelte';
@@ -19,6 +20,7 @@
     '/planner': Planner,
     '/calendar': Calendar,
     '/crops': Crops,
+    '/inventory': Inventory,
     '/settings': Setup,
   };
 
@@ -59,6 +61,7 @@
   let pageTitle = $derived(
     path === '/calendar' ? 'Calendar'
     : path === '/crops' ? 'Crops'
+    : path === '/inventory' ? 'Inventory'
     : path === '/planner' ? 'Planner'
     : path === '/settings' ? 'Settings'
     : 'Dashboard',
@@ -249,6 +252,8 @@
         <Calendar bind:entryOpen {entrySession} {entryKind} {search} />
       {:else if path === '/crops'}
         <Crops />
+      {:else if path === '/inventory'}
+        <Inventory />
       {:else}
         <Home />
       {/if}
