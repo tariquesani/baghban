@@ -269,6 +269,8 @@ def rule_row_as_dict(row) -> dict:
 
 
 def delete_future_planned(connection, rule_id: int, today: str) -> None:
+    from search import remove_doc
+
     rows = connection.execute(
         """
         SELECT id FROM calendar_entry
@@ -280,6 +282,7 @@ def delete_future_planned(connection, rule_id: int, today: str) -> None:
         entry_id = int(row["id"])
         connection.execute("DELETE FROM care WHERE entry_id = ?", (entry_id,))
         connection.execute("DELETE FROM calendar_entry WHERE id = ?", (entry_id,))
+        remove_doc(connection, "calendar", str(entry_id))
 
 
 def materialize_until(today: date, until: date | None = None) -> date:
@@ -344,6 +347,9 @@ def materialize_rule(
             """,
             (entry_id, rule["action"], rule["product"], rule["amount"], rule["unit"]),
         )
+        from search import index_calendar_entry
+
+        index_calendar_entry(connection, entry_id)
         existing.add(due)
         added += 1
     return added
@@ -481,6 +487,8 @@ def attach_entry(connection, entry_id: int, rule_id: int, rule: dict) -> None:
 
 
 def create_rule(body: dict) -> dict:
+    from search import index_calendar_entry, index_care_rule
+
     rule = parse_rule(body, None)
     entry_id = rule.pop("entry_id", None)
     with closing(connect()) as connection:
@@ -490,8 +498,10 @@ def create_rule(body: dict) -> dict:
             rule_id = insert_rule(connection, rule)
             if entry_id is not None:
                 attach_entry(connection, entry_id, rule_id, rule)
+                index_calendar_entry(connection, entry_id)
             stored = rule_row_as_dict(fetch_rule(connection, rule_id))
             materialize_rule(connection, stored)
+            index_care_rule(connection, rule_id)
             connection.commit()
             return rule_json(fetch_rule(connection, rule_id))
         except HTTPException:
@@ -503,6 +513,8 @@ def create_rule(body: dict) -> dict:
 
 
 def replace_rule(rule_id: int, body: dict) -> dict:
+    from search import index_care_rule
+
     rule = parse_rule(body, rule_id)
     today = date.today().isoformat()
     with closing(connect()) as connection:
@@ -516,6 +528,7 @@ def replace_rule(rule_id: int, body: dict) -> dict:
             delete_future_planned(connection, rule_id, today)
             stored = rule_row_as_dict(fetch_rule(connection, rule_id))
             materialize_rule(connection, stored)
+            index_care_rule(connection, rule_id)
             connection.commit()
             return rule_json(fetch_rule(connection, rule_id))
         except HTTPException:
@@ -527,6 +540,8 @@ def replace_rule(rule_id: int, body: dict) -> dict:
 
 
 def deactivate_rule(rule_id: int) -> dict:
+    from search import index_care_rule
+
     today = date.today().isoformat()
     with closing(connect()) as connection:
         existing = fetch_rule(connection, rule_id)
@@ -535,6 +550,7 @@ def deactivate_rule(rule_id: int) -> dict:
         try:
             connection.execute("UPDATE care_rule SET active = 0 WHERE id = ?", (rule_id,))
             delete_future_planned(connection, rule_id, today)
+            index_care_rule(connection, rule_id)
             connection.commit()
             return rule_json(fetch_rule(connection, rule_id))
         except Exception:

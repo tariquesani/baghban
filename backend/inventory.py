@@ -384,29 +384,38 @@ def get_inventory_item(item_id: str) -> dict:
 
 @router.post("")
 async def post_inventory_item(request: Request) -> dict:
+    from search import index_inventory
+
     body = await read_json_body(request)
     fields = parse_item(body, None)
     with closing(connect()) as connection:
         item = insert_item(connection, fields)
+        index_inventory(connection, int(item["id"]))
         connection.commit()
         return item
 
 
 @router.put("/{item_id}")
 async def put_inventory_item(item_id: str, request: Request) -> dict:
+    from search import index_inventory
+
     key = require_item_id(item_id)
     body = await read_json_body(request)
     fields = parse_item(body, key)
     with closing(connect()) as connection:
         item = update_item(connection, fields)
+        index_inventory(connection, key)
         connection.commit()
         return item
 
 
 @router.delete("/{item_id}")
 def remove_inventory_item(item_id: str) -> Response:
+    from search import remove_doc
+
     key = require_item_id(item_id)
     with closing(connect()) as connection:
         delete_item(connection, key)
+        remove_doc(connection, "inventory", str(key))
         connection.commit()
     return Response(status_code=204)

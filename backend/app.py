@@ -41,6 +41,7 @@ from calendar_entries import create_calendar_tables, router as calendar_router
 from care_rules import router as care_rules_router
 from crops import create_crop_tables, seed_crops, router as crops_router
 from inventory import create_inventory_tables, router as inventory_router
+from search import create_search_tables, reindex_all, router as search_router
 from http_util import (
     MAX_JSON_BYTES,
     blank_text,
@@ -172,6 +173,8 @@ def init_db() -> None:
         copy_document_plants(connection)
         create_auth_table(connection)
         bootstrap_credentials(connection)
+        create_search_tables(connection)
+        reindex_all(connection)
         connection.commit()
     ensure_auth_secrets()
 
@@ -470,6 +473,9 @@ def save_identity(body: dict) -> dict:
                 """,
                 values,
             )
+        from search import index_garden
+
+        index_garden(connection)
         row = fetch_garden(connection)
         payload = assemble(connection, row)
         connection.commit()
@@ -517,6 +523,7 @@ def reset_garden() -> dict | None:
             connection.execute("UPDATE bed SET removed = 1 WHERE id = ?", (bed["id"],))
             archive_bed_crops(connection, int(bed["id"]))
         connection.execute("DELETE FROM obstacle")
+        reindex_all(connection)
         connection.commit()
     discard_plot_photo(plot_id)
     return read_garden()
@@ -577,6 +584,7 @@ app.include_router(calendar_router, prefix="/api", dependencies=_api_auth)
 app.include_router(care_rules_router, prefix="/api", dependencies=_api_auth)
 app.include_router(crops_router, prefix="/api", dependencies=_api_auth)
 app.include_router(inventory_router, prefix="/api", dependencies=_api_auth)
+app.include_router(search_router, prefix="/api", dependencies=_api_auth)
 
 
 @app.get("/api/sky", dependencies=_api_auth)

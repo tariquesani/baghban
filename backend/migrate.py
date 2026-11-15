@@ -18,6 +18,7 @@ from calendar_entries import allow_uproot_kind, calendar_crop_id, drop_care_acti
 from care_rules import care_recurrence
 from crops import add_crop_icon, drop_crop_label_checks
 from inventory import strip_homebox_columns
+from search import install_search_index
 
 
 def drop_label_checks(connection) -> None:
@@ -43,6 +44,7 @@ MIGRATIONS = (
     allow_uproot_kind,
     add_app_auth,
     strip_homebox_columns,
+    install_search_index,
 )
 
 

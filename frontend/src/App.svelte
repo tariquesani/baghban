@@ -3,6 +3,7 @@
   import { Toaster } from '$lib/components/ui/sonner';
   import { ApiError } from '$lib/api/api.js';
   import { login, logout, me } from '$lib/api/auth.js';
+  import AppSearch from './components/AppSearch.svelte';
   import AppSidebar from './components/AppSidebar.svelte';
   import Help from './components/Help.svelte';
   import { helpForPath } from '$lib/domain/help.js';
@@ -242,6 +243,7 @@
         </button>
       {/if}
       <h1>{pageTitle}</h1>
+      <AppSearch />
     </header>
     <div class="page-body">
       {#if path === '/planner'}
@@ -339,6 +341,11 @@
     font-size: 2rem;
     font-weight: 500;
     color: #191d17;
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .page-body {

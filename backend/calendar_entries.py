@@ -609,6 +609,8 @@ def vacate_from_uproot(connection, entry: dict) -> None:
 
 
 def create_entry(body: dict) -> dict:
+    from search import index_calendar_entry
+
     entry = parse_entry(body, None)
     with closing(connect()) as connection:
         require_bed(connection, entry["bed_id"])
@@ -634,6 +636,7 @@ def create_entry(body: dict) -> dict:
             write_children(connection, entry_id, entry)
             occupy_from_sowing(connection, entry)
             vacate_from_uproot(connection, entry)
+            index_calendar_entry(connection, entry_id)
             connection.commit()
             return entry_json(fetch_entry(connection, entry_id))
         except HTTPException:
@@ -645,6 +648,8 @@ def create_entry(body: dict) -> dict:
 
 
 def replace_entry(entry_id: int, body: dict) -> dict:
+    from search import index_calendar_entry
+
     entry = parse_entry(body, entry_id)
     with closing(connect()) as connection:
         existing = connection.execute(
@@ -682,6 +687,7 @@ def replace_entry(entry_id: int, body: dict) -> dict:
             )
             write_children(connection, entry_id, entry)
             vacate_from_uproot(connection, entry)
+            index_calendar_entry(connection, entry_id)
             connection.commit()
             saved = entry_json(fetch_entry(connection, entry_id))
         except HTTPException:
@@ -696,6 +702,8 @@ def replace_entry(entry_id: int, body: dict) -> dict:
 
 
 def remove_entry(entry_id: int) -> None:
+    from search import remove_doc
+
     with closing(connect()) as connection:
         existing = connection.execute(
             "SELECT photo_url FROM calendar_entry WHERE id = ?",
@@ -709,6 +717,7 @@ def remove_entry(entry_id: int) -> None:
             connection.execute("DELETE FROM care WHERE entry_id = ?", (entry_id,))
             connection.execute("DELETE FROM pest WHERE entry_id = ?", (entry_id,))
             connection.execute("DELETE FROM calendar_entry WHERE id = ?", (entry_id,))
+            remove_doc(connection, "calendar", str(entry_id))
             connection.commit()
         except Exception:
             connection.rollback()

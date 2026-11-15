@@ -598,11 +598,14 @@ def update_crop(connection, crop: dict) -> None:
 
 
 def create_crop(body: dict) -> dict:
+    from search import index_crop
+
     crop = parse_crop(body, None)
     with closing(connect()) as connection:
         try:
             ensure_available(connection, crop)
             crop_id = insert_crop(connection, crop)
+            index_crop(connection, crop_id)
             connection.commit()
             row = fetch_crop(connection, crop_id)
             return rows_json(connection, [row])[0]
@@ -615,6 +618,8 @@ def create_crop(body: dict) -> dict:
 
 
 def save_crop(crop_id: int, body: dict) -> dict:
+    from search import index_crop, reindex_calendars_for_crop, reindex_rules_for_crop
+
     crop = parse_crop(body, crop_id)
     with closing(connect()) as connection:
         try:
@@ -622,6 +627,9 @@ def save_crop(crop_id: int, body: dict) -> dict:
                 raise HTTPException(status_code=404, detail="Crop not found")
             ensure_available(connection, crop)
             update_crop(connection, crop)
+            index_crop(connection, crop_id)
+            reindex_calendars_for_crop(connection, crop_id)
+            reindex_rules_for_crop(connection, crop_id)
             connection.commit()
             row = fetch_crop(connection, crop_id)
             return rows_json(connection, [row])[0]
@@ -711,11 +719,14 @@ def read_crop_icon(crop_id: int) -> FileResponse:
 
 
 def archive_crop(crop_id: int) -> None:
+    from search import index_crop
+
     with closing(connect()) as connection:
         row = fetch_crop(connection, crop_id)
         if row is None:
             raise HTTPException(status_code=404, detail="Crop not found")
         connection.execute("UPDATE crop SET archived = 1 WHERE id = ?", (crop_id,))
+        index_crop(connection, crop_id)
         connection.commit()
 
 

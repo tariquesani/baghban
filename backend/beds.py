@@ -513,6 +513,8 @@ def list_beds() -> list[dict]:
 
 
 def create_bed(body: dict) -> dict:
+    from search import index_bed
+
     bed = parse_bed(body, None)
     with closing(connect()) as connection:
         cursor = connection.execute(
@@ -524,12 +526,16 @@ def create_bed(body: dict) -> dict:
             """,
             _bed_values(bed),
         )
-        row = _fetch_bed(connection, cursor.lastrowid)
+        bed_id = cursor.lastrowid
+        index_bed(connection, bed_id)
+        row = _fetch_bed(connection, bed_id)
         connection.commit()
     return bed_scene(row)
 
 
 def update_bed(bed_id: int, body: dict) -> dict:
+    from search import index_bed, reindex_calendars_for_bed, reindex_rules_for_bed
+
     bed = parse_bed(body, bed_id)
     with closing(connect()) as connection:
         cursor = connection.execute(
@@ -554,6 +560,9 @@ def update_bed(bed_id: int, body: dict) -> dict:
         )
         if cursor.rowcount == 0:
             raise HTTPException(status_code=404, detail="Bed not found")
+        index_bed(connection, bed_id)
+        reindex_calendars_for_bed(connection, bed_id)
+        reindex_rules_for_bed(connection, bed_id)
         row = _fetch_bed(connection, bed_id)
         connection.commit()
     return bed_scene(row)
@@ -561,6 +570,7 @@ def update_bed(bed_id: int, body: dict) -> dict:
 
 def hide_bed(bed_id: int) -> None:
     from beds_crops import archive_bed_crops
+    from search import index_bed
 
     with closing(connect()) as connection:
         cursor = connection.execute(
@@ -570,6 +580,7 @@ def hide_bed(bed_id: int) -> None:
         if cursor.rowcount == 0:
             raise HTTPException(status_code=404, detail="Bed not found")
         archive_bed_crops(connection, bed_id)
+        index_bed(connection, bed_id)
         connection.commit()
 
 
@@ -609,6 +620,8 @@ def list_orphan_beds() -> list[dict]:
 
 def purge_orphan_bed(bed_id: int) -> None:
     """Hard-delete a removed bed that has no crop or calendar history."""
+    from search import index_care_rule, remove_doc
+
     with closing(connect()) as connection:
         row = connection.execute(
             f"SELECT id FROM bed WHERE id = ? AND {_orphan_clause()}",
@@ -622,15 +635,27 @@ def purge_orphan_bed(bed_id: int) -> None:
             if found is None:
                 raise HTTPException(status_code=404, detail="Bed not found")
             raise HTTPException(status_code=400, detail="Bed is not an orphan")
+        rule_ids = [
+            int(item["id"])
+            for item in connection.execute(
+                "SELECT id FROM care_rule WHERE bed_id = ?",
+                (bed_id,),
+            )
+        ]
         connection.execute(
             "UPDATE care_rule SET bed_id = NULL WHERE bed_id = ?",
             (bed_id,),
         )
         connection.execute("DELETE FROM bed WHERE id = ?", (bed_id,))
+        remove_doc(connection, "bed", str(bed_id))
+        for rule_id in rule_ids:
+            index_care_rule(connection, rule_id)
         connection.commit()
 
 
 def create_obstacle(body: dict) -> dict:
+    from search import index_obstacle
+
     obstacle = parse_obstacle(body, None)
     with closing(connect()) as connection:
         cursor = connection.execute(
@@ -648,12 +673,16 @@ def create_obstacle(body: dict) -> dict:
                 obstacle["color"],
             ),
         )
-        row = _fetch_obstacle(connection, cursor.lastrowid)
+        obstacle_id = cursor.lastrowid
+        index_obstacle(connection, obstacle_id)
+        row = _fetch_obstacle(connection, obstacle_id)
         connection.commit()
     return obstacle_scene(row)
 
 
 def update_obstacle(obstacle_id: int, body: dict) -> dict:
+    from search import index_obstacle
+
     obstacle = parse_obstacle(body, obstacle_id)
     with closing(connect()) as connection:
         cursor = connection.execute(
@@ -681,12 +710,15 @@ def update_obstacle(obstacle_id: int, body: dict) -> dict:
         )
         if cursor.rowcount == 0:
             raise HTTPException(status_code=404, detail="Obstacle not found")
+        index_obstacle(connection, obstacle_id)
         row = _fetch_obstacle(connection, obstacle_id)
         connection.commit()
     return obstacle_scene(row)
 
 
 def delete_obstacle(obstacle_id: int) -> None:
+    from search import remove_doc
+
     with closing(connect()) as connection:
         cursor = connection.execute(
             "DELETE FROM obstacle WHERE id = ?",
@@ -694,6 +726,7 @@ def delete_obstacle(obstacle_id: int) -> None:
         )
         if cursor.rowcount == 0:
             raise HTTPException(status_code=404, detail="Obstacle not found")
+        remove_doc(connection, "obstacle", str(obstacle_id))
         connection.commit()
 
 
