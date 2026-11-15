@@ -78,7 +78,10 @@ test('23 October tomato is harvest and diary, and a harvest filter fills the squ
   const marks = dayMarks(day, '', peak);
   assert.deepEqual(marks.map((mark) => mark.kind), ['harvest', 'diary']);
   assert.equal(marks[0].shade, 8);
-  assert.equal(dayReading('2026-10-23', 'Tomato', marks), '23 Oct · Tomato · Harvest, Diary');
+  assert.equal(
+    dayReading('2026-10-23', 'Tomato', marks, day),
+    '23 Oct · Tomato · Harvest, Diary · 840 g',
+  );
 
   const harvest = dayMarks(day, 'harvest');
   assert.equal(harvest.length, 1);
