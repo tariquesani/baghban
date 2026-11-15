@@ -613,11 +613,15 @@ export function entryWhere(entry, scope) {
  * @param {string} date
  * @param {string} crop
  * @param {DayMark[]} marks
+ * @param {CalendarEntry[]} [entries]
  */
-export function dayReading(date, crop, marks) {
+export function dayReading(date, crop, marks, entries = []) {
   const label = `${formatDay(date)} · ${cropLabel(crop)}`;
   if (!marks.length) return label;
-  return `${label} · ${marks.map((mark) => kindLabel(mark.kind)).join(', ')}`;
+  const kinds = marks.map((mark) => kindLabel(mark.kind)).join(', ');
+  const grams = harvestGrams(entries);
+  if (grams > 0) return `${label} · ${kinds} · ${grams} g`;
+  return `${label} · ${kinds}`;
 }
 
 /** @param {CalendarEntry[]} entries */

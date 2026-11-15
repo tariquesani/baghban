@@ -158,7 +158,7 @@
             row={rowIndex + 3}
             {marks}
             recorded={cell.length > 0}
-            reading={dayReading(day.date, crop, marks)}
+            reading={dayReading(day.date, crop, marks, cell)}
             selected={selectedDate === day.date && selectedCrop === crop}
             onSelect={() => onSelect({ date: day.date, crop })}
           />

@@ -191,6 +191,20 @@ def index_obstacle(connection, obstacle_id: int) -> None:
     )
 
 
+def _harvest_grams_label(weight) -> str:
+    if weight is None:
+        return ""
+    try:
+        grams = float(weight)
+    except (TypeError, ValueError):
+        return ""
+    if grams <= 0:
+        return ""
+    if grams.is_integer():
+        return f"{int(grams)} g"
+    return f"{grams} g"
+
+
 def index_calendar_entry(connection, entry_id: int) -> None:
     if not _table_exists(connection, "calendar_entry"):
         return
@@ -210,7 +224,9 @@ def index_calendar_entry(connection, entry_id: int) -> None:
             pest.problem AS pest_problem,
             pest.product AS pest_product,
             pest.unit AS pest_unit,
-            harvest.unit AS harvest_unit
+            harvest.quantity AS harvest_quantity,
+            harvest.unit AS harvest_unit,
+            harvest.weight_grams AS weight_grams
         FROM calendar_entry
         LEFT JOIN crop ON crop.id = calendar_entry.crop_id
         LEFT JOIN bed ON bed.id = calendar_entry.bed_id
@@ -225,16 +241,23 @@ def index_calendar_entry(connection, entry_id: int) -> None:
         remove_doc(connection, "calendar", str(entry_id))
         return
     kind = row["kind"] or ""
+    entry_date = row["date"] or ""
     crop_name = row["crop_name"] or ""
     bed_name = row["bed_name"] or ""
     note = row["note"] or ""
-    title_bits = [kind]
+    grams_label = _harvest_grams_label(row["weight_grams"]) if kind == "harvest" else ""
+    title_bits = []
+    if entry_date:
+        title_bits.append(entry_date)
+    title_bits.append(kind)
     if crop_name:
         title_bits.append(crop_name)
     elif bed_name:
         title_bits.append(bed_name)
     elif note:
         title_bits.append(note[:60])
+    if grams_label:
+        title_bits.append(grams_label)
     upsert_doc(
         connection,
         entity="calendar",
@@ -250,10 +273,12 @@ def index_calendar_entry(connection, entry_id: int) -> None:
             row["pest_problem"],
             row["pest_product"],
             row["pest_unit"],
+            str(row["harvest_quantity"] or ""),
             row["harvest_unit"],
+            grams_label,
         ),
-        meta=_join_parts(kind, row["date"], row["status"]),
-        href=f"/calendar?date={row['date']}" if row["date"] else "/calendar",
+        meta=_join_parts(kind, entry_date, row["status"]),
+        href=f"/calendar?date={entry_date}" if entry_date else "/calendar",
         inactive=False,
     )
 
@@ -448,6 +473,18 @@ def fts_match_query(raw: str) -> str | None:
     return " AND ".join(parts)
 
 
+def _calendar_date(href: str, title: str) -> str:
+    """ISO date from a calendar hit href or title prefix."""
+    if "date=" in (href or ""):
+        value = href.split("date=", 1)[1][:10]
+        if len(value) == 10 and value[4] == "-" and value[7] == "-":
+            return value
+    prefix = (title or "")[:10]
+    if len(prefix) == 10 and prefix[4] == "-" and prefix[7] == "-":
+        return prefix
+    return ""
+
+
 def search_docs(query: str, *, limit: int = 20) -> list[dict]:
     match = fts_match_query(query)
     if match is None:
@@ -479,19 +516,25 @@ def search_docs(query: str, *, limit: int = 20) -> list[dict]:
         entity = row["entity"]
         inactive = str(row["inactive"]) == "1"
         snippet = (row["body_snip"] or row["title_snip"] or "").strip()
-        results.append(
-            {
-                "entity": entity,
-                "id": row["entity_id"],
-                "title": row["title"] or "",
-                "snippet": snippet,
-                "href": row["href"] or "/",
-                "inactive": inactive,
-                "inactiveLabel": INACTIVE_LABELS.get(entity, "") if inactive else "",
-                "group": ENTITY_GROUPS.get(entity, entity),
-            }
-        )
-    return results
+        href = row["href"] or "/"
+        title = row["title"] or ""
+        item = {
+            "entity": entity,
+            "id": row["entity_id"],
+            "title": title,
+            "snippet": snippet,
+            "href": href,
+            "inactive": inactive,
+            "inactiveLabel": INACTIVE_LABELS.get(entity, "") if inactive else "",
+            "group": ENTITY_GROUPS.get(entity, entity),
+        }
+        if entity == "calendar":
+            item["date"] = _calendar_date(href, title)
+        results.append(item)
+    others = [item for item in results if item["entity"] != "calendar"]
+    calendar = [item for item in results if item["entity"] == "calendar"]
+    calendar.sort(key=lambda item: item.get("date") or "", reverse=True)
+    return others + calendar
 
 
 @router.get("/search")

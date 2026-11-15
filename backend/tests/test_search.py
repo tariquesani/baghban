@@ -101,3 +101,52 @@ def test_search_index_exists_after_migrate(tmp_path, monkeypatch):
     count = connection.execute("SELECT COUNT(*) FROM search_doc").fetchone()[0]
     assert count > 0
     connection.close()
+
+
+def test_search_harvest_shows_grams_date_and_recency(tmp_path, monkeypatch):
+    fresh(monkeypatch, tmp_path)
+    with TestClient(app) as client:
+        bed = client.put(
+            "/api/beds",
+            json={
+                "name": "Patch",
+                "kind": "bed",
+                "x": 0,
+                "y": 0,
+                "w": 4,
+                "h": 4,
+                "rotation": 0,
+                "color": "#2d6a30",
+                "notes": "",
+            },
+        ).json()
+        tomatoes = crop_named(client, "Tomatoes")
+
+        def harvest(day, grams, note):
+            body = {
+                "kind": "harvest",
+                "date": day,
+                "bedId": bed["id"],
+                "cropId": tomatoes["id"],
+                "status": "done",
+                "note": note,
+                "photoUrl": "",
+                "quantity": 1,
+                "unit": "kg",
+                "weightGrams": grams,
+            }
+            saved = client.post("/api/calendar", json=body)
+            assert saved.status_code == 200
+            return saved.json()
+
+        older = harvest("2026-01-10", 200, "early pick")
+        newer = harvest("2026-10-23", 840, "late pick")
+
+        found = client.get("/api/search", params={"q": "pick"}).json()["results"]
+        calendar = [hit for hit in found if hit["entity"] == "calendar"]
+        assert [hit["id"] for hit in calendar] == [str(newer["id"]), str(older["id"])]
+        assert calendar[0]["date"] == "2026-10-23"
+        assert "2026-10-23" in calendar[0]["title"]
+        assert "840 g" in calendar[0]["title"]
+        assert calendar[1]["date"] == "2026-01-10"
+        assert "200 g" in calendar[1]["title"]
