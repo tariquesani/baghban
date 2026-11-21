@@ -10,7 +10,9 @@
   import { readGarden } from '$lib/api/garden.js';
   import BedField from '../beds/BedField.svelte';
   import CropMark from '../crops/CropMark.svelte';
+  import OfferCareRecipesDialog from '../crops/OfferCareRecipesDialog.svelte';
   import { Button } from '$lib/components/ui/button';
+  import { offerableCareRecipes } from '$lib/domain/careRecipe.js';
   import { Calendar } from '$lib/components/ui/calendar';
   import * as Command from '$lib/components/ui/command';
   import * as Dialog from '$lib/components/ui/dialog';
@@ -148,7 +150,14 @@
     })),
   );
   const chosenCrop = $derived(cropItems.find((item) => item.value === crop));
+  const chosenCropRow = $derived(offeredCrops.find((item) => item.name === crop) ?? null);
   const bedChoices = $derived(sowingBedChoices(bedRows));
+  let offerOpen = $state(false);
+  let offerRecipes = $state.raw<Array<Record<string, unknown>>>([]);
+  let offerCropName = $state('');
+  let offerCropId = $state(0);
+  let offerBedId = $state(0);
+  let offerPlantDate = $state('');
   const cropBeds = $derived(
     recording === 'care' || recording === 'pest' || recording === 'harvest' || recording === 'uproot',
   );
@@ -468,6 +477,7 @@
         photoUrl = stored && typeof stored.url === 'string' ? stored.url : '';
         if (!photoUrl) throw new Error('Could not store the photo.');
       }
+      const creating = !editingId;
       const saved = editingId
         ? await updateCalendarEntry(Number(editingId), {
             ...request.body,
@@ -477,7 +487,27 @@
         : await createCalendarEntry({ ...request.body, photoUrl });
       const bedName = bedChoices.find((choice) => String(choice.id) === bedId)?.name ?? '';
       onSaved(calendarRecord(saved, bedName));
-      open = false;
+      const plantedBedId = Number(bedId);
+      const recipes =
+        creating &&
+        recording === 'sowing' &&
+        status === 'done' &&
+        Number.isInteger(plantedBedId) &&
+        plantedBedId > 0 &&
+        chosenCropRow
+          ? offerableCareRecipes(chosenCropRow)
+          : [];
+      if (recipes.length > 0 && chosenCropRow) {
+        offerRecipes = recipes;
+        offerCropName = chosenCropRow.name;
+        offerCropId = chosenCropRow.id;
+        offerBedId = plantedBedId;
+        offerPlantDate = date;
+        open = false;
+        offerOpen = true;
+      } else {
+        open = false;
+      }
     } catch (error: unknown) {
       if (photoId) {
         try {
@@ -863,6 +893,17 @@
     </form>
   </Dialog.Content>
 </Dialog.Root>
+
+{#if offerCropId && offerRecipes.length && offerBedId}
+  <OfferCareRecipesDialog
+    bind:open={offerOpen}
+    cropName={offerCropName}
+    recipes={offerRecipes}
+    plantDate={offerPlantDate}
+    bedId={offerBedId}
+    cropId={offerCropId}
+  />
+{/if}
 
 <style>
   input[type='file'] {

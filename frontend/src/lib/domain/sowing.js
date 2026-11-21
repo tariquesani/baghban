@@ -44,6 +44,7 @@ export function sowingCropChoices(crops) {
       name: crop.name.trim(),
       emoji: typeof crop.emoji === 'string' ? crop.emoji : '',
       icon: typeof crop.icon === 'string' ? crop.icon : '',
+      careRecipes: Array.isArray(crop.careRecipes) ? crop.careRecipes : [],
     }))
     .sort((left, right) => left.name.localeCompare(right.name));
 }

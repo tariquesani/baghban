@@ -16,7 +16,7 @@ from auth import create_auth_table
 from beds import allow_tree_kind
 from calendar_entries import allow_uproot_kind, calendar_crop_id, drop_care_action_check
 from care_rules import care_recurrence
-from crops import add_crop_icon, drop_crop_label_checks
+from crops import add_crop_care_recipes, add_crop_icon, drop_crop_label_checks
 from inventory import strip_homebox_columns
 from search import install_search_index
 
@@ -45,6 +45,7 @@ MIGRATIONS = (
     add_app_auth,
     strip_homebox_columns,
     install_search_index,
+    add_crop_care_recipes,
 )
 
 

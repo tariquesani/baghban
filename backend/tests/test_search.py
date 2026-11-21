@@ -91,7 +91,7 @@ def test_search_index_exists_after_migrate(tmp_path, monkeypatch):
     with TestClient(app):
         pass
     connection = sqlite3.connect(tmp_path / "baghban.db")
-    assert connection.execute("PRAGMA user_version").fetchone()[0] == 9
+    assert connection.execute("PRAGMA user_version").fetchone()[0] == 10
     assert (
         connection.execute(
             "SELECT 1 FROM sqlite_master WHERE name = 'search_doc'"

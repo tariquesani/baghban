@@ -1,3 +1,5 @@
+import { careRecipesPayload, cloneCareRecipe } from './careRecipe.js';
+
 export { CROP_CATEGORIES, SUNS, WATERS } from './catalogue.js';
 
 /**
@@ -32,6 +34,7 @@ export function emptyCrop() {
     aliases: [],
     companions: [],
     avoid: [],
+    careRecipes: [],
   };
 }
 
@@ -44,6 +47,7 @@ export function cloneCrop(crop) {
     aliases: [...(crop.aliases || [])],
     companions: [...(crop.companions || [])],
     avoid: [...(crop.avoid || [])],
+    careRecipes: (crop.careRecipes || []).map((recipe) => cloneCareRecipe(recipe)),
   };
 }
 
@@ -70,5 +74,6 @@ export function cropPayload(draft) {
     aliases: draft.aliases.map((alias) => alias.trim()).filter(Boolean),
     companions: [...draft.companions],
     avoid: [...draft.avoid],
+    careRecipes: careRecipesPayload(draft.careRecipes || []),
   };
 }

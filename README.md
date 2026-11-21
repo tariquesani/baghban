@@ -8,13 +8,13 @@ Baghban is a personal garden management system  for a vegetable garden. It keeps
 - **Planner** — draw beds, pots, planters, and obstacles on a scaled plot, and assign crops to beds.
 - **Calendar** — record sowing, care, pest control, harvest, uproot, and diary entries, with optional photos and recurring care rules.
 - **Crops** — a catalogue of vegetables, herbs, flowers, and fruit, with spacing, sun, water, and companion notes.
+- **Inventory** — stock of seeds, fertilisers, tools, and other supplies, with quantity, purchase details, location, tags, notes, and archive.
 - **Setup** — garden name, size, latitude and longitude, plot calibration, uproot-all, and reset. The server derives the timezone from that point.
 
 Weather comes from [Yr](https://developer.yr.no/), through the Norwegian Meteorological Institute's location forecast. No API key is required. Sunrise, sunset, and the moon are calculated on the server. The home-page map is a static [OpenStreetMap](https://www.openstreetmap.org/) thumbnail of the saved coordinates.
 
 ## Coming Soon
 
-- **Seed inventory** — variety, supplier, quantity on hand, and how long a packet stays viable.
 - **Succession sowing** — repeated sowings for crops picked over several weeks, such as coriander, radish, and beans.
 - **Crop rotation** — the plant family that grew in each bed, with a warning when the same family returns too soon.
 - **Sun and shade** — full sun, partial shade, and shade marked on the plan.

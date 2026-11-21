@@ -12,6 +12,7 @@
   import * as InputGroup from '$lib/components/ui/input-group';
   import * as Select from '$lib/components/ui/select';
   import { Textarea } from '$lib/components/ui/textarea';
+  import CareRecipesEditor from './CareRecipesEditor.svelte';
   import CropChoiceField from './CropChoiceField.svelte';
 
   type CropDraft = {
@@ -33,6 +34,7 @@
     aliases: string[];
     companions: number[];
     avoid: number[];
+    careRecipes: Array<Record<string, unknown>>;
   };
 
   type NumberKey = 'sqft' | 'spacing' | 'depthIn' | 'sowingDepthMm' | 'daysToMaturity';
@@ -401,6 +403,8 @@
       onAdd={addAvoid}
       onRemove={removeAvoid}
     />
+
+    <CareRecipesEditor bind:recipes={draft.careRecipes} />
 
     {#if formError}<p bind:this={formAlert} class="text-sm text-destructive" role="alert">{formError}</p>{/if}
   </Field.Group>

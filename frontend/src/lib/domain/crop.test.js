@@ -7,4 +7,5 @@ test('saving a crop leaves the icon file alone', () => {
   const body = cropPayload(draft);
   assert.equal(body.name, 'Mint');
   assert.equal(Object.hasOwn(body, 'icon'), false);
+  assert.deepEqual(body.careRecipes, []);
 });

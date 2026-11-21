@@ -47,6 +47,7 @@ def test_init_db_seeds_every_catalogue_plant(tmp_path, monkeypatch):
             assert crop["companions"] == sorted(ids[item] for item in plant["companions"])
             assert crop["avoid"] == sorted(ids[item] for item in plant["avoid"])
             assert crop["aliases"] == []
+            assert crop["careRecipes"] == []
             assert crop["sowingDepthMm"] is None
             assert crop["daysToMaturity"] is None
             assert crop["archived"] is False
@@ -209,6 +210,7 @@ def test_put_rejects_bad_crops(tmp_path, monkeypatch):
         assert body["aliases"] == []
         assert body["companions"] == []
         assert body["avoid"] == []
+        assert body["careRecipes"] == []
         assert crop_named(client, "Bhindi")["id"] == body["id"]
 
         renamed = client.put(
@@ -218,6 +220,70 @@ def test_put_rejects_bad_crops(tmp_path, monkeypatch):
         assert renamed.status_code == 200
         assert renamed.json()["id"] == body["id"]
         assert renamed.json()["name"] == "Okra"
+
+
+def test_care_recipes_round_trip_on_a_crop(tmp_path, monkeypatch):
+    fresh(monkeypatch, tmp_path)
+    with TestClient(app) as client:
+        tomatoes = crop_named(client, "Tomatoes")
+        tomatoes["careRecipes"] = [
+            {
+                "label": "Thin seedlings",
+                "action": "thinning",
+                "product": "",
+                "amount": None,
+                "unit": "",
+                "note": "One strong plant per hole",
+                "freq": "once",
+                "interval": 1,
+                "weekdays": [],
+                "offsetDays": 14,
+                "endsOffsetDays": None,
+                "active": True,
+            },
+            {
+                "label": "Weekly weeding",
+                "action": "weeding",
+                "product": "",
+                "amount": None,
+                "unit": "",
+                "note": "",
+                "freq": "weekly",
+                "interval": 1,
+                "weekdays": [6],
+                "offsetDays": 7,
+                "endsOffsetDays": 55,
+                "active": True,
+            },
+        ]
+        saved = client.put(f"/api/crops/{tomatoes['id']}", json=tomatoes)
+        assert saved.status_code == 200
+        recipes = saved.json()["careRecipes"]
+        assert len(recipes) == 2
+        assert recipes[0]["label"] == "Thin seedlings"
+        assert recipes[0]["freq"] == "once"
+        assert recipes[0]["offsetDays"] == 14
+        assert isinstance(recipes[0]["id"], int)
+        assert recipes[1]["weekdays"] == [6]
+        assert recipes[1]["endsOffsetDays"] == 55
+
+        again = client.get(f"/api/crops/{tomatoes['id']}").json()
+        assert [row["label"] for row in again["careRecipes"]] == [
+            "Thin seedlings",
+            "Weekly weeding",
+        ]
+
+        tomatoes["careRecipes"] = [recipes[1]]
+        trimmed = client.put(f"/api/crops/{tomatoes['id']}", json=tomatoes)
+        assert trimmed.status_code == 200
+        assert [row["label"] for row in trimmed.json()["careRecipes"]] == ["Weekly weeding"]
+
+        omitted = {key: value for key, value in trimmed.json().items() if key != "careRecipes"}
+        omitted["notes"] = "left recipes alone"
+        kept = client.put(f"/api/crops/{tomatoes['id']}", json=omitted)
+        assert kept.status_code == 200
+        assert kept.json()["notes"] == "left recipes alone"
+        assert [row["label"] for row in kept.json()["careRecipes"]] == ["Weekly weeding"]
 
 
 def test_old_crop_checks_follow_the_catalogue(tmp_path, monkeypatch):
@@ -290,7 +356,7 @@ def test_old_crop_checks_follow_the_catalogue(tmp_path, monkeypatch):
     assert "CHECK (sun" not in sql
     assert "CHECK (water" not in sql
     assert "CHECK (trellis" in sql
-    assert connection.execute("PRAGMA user_version").fetchone()[0] == 9
+    assert connection.execute("PRAGMA user_version").fetchone()[0] == 10
     assert connection.execute(
         "SELECT icon FROM crop WHERE name = 'Custard apple'"
     ).fetchone()[0] == ""

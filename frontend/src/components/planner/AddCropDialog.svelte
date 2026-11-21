@@ -10,6 +10,8 @@
   import * as Field from '$lib/components/ui/field';
   import * as Popover from '$lib/components/ui/popover';
   import CropMark from '../crops/CropMark.svelte';
+  import OfferCareRecipesDialog from '../crops/OfferCareRecipesDialog.svelte';
+  import { offerableCareRecipes } from '$lib/domain/careRecipe.js';
   import { addCropConflicts } from '$lib/domain/planting.js';
   import { cropsNotInBed, localDate, sowingRequest } from '$lib/domain/sowing.js';
   import { cn } from '$lib/utils.js';
@@ -21,6 +23,7 @@
     icon: string;
     aliases: string[];
     avoid?: number[];
+    careRecipes?: Array<Record<string, unknown>>;
   };
 
   let {
@@ -46,6 +49,11 @@
   let busy = $state(false);
   let formError = $state('');
   let fieldError = $state('');
+  let offerOpen = $state(false);
+  let offerRecipes = $state.raw<Array<Record<string, unknown>>>([]);
+  let offerCropName = $state('');
+  let offerCropId = $state(0);
+  let offerPlantDate = $state('');
 
   const available = $derived(cropsNotInBed(catalogue, plants));
   const chosenLabel = $derived(chosen ? chosen.name : '');
@@ -107,6 +115,21 @@
     reset();
   }
 
+  function maybeOfferCare(crop: CropChoice, plantDate: string) {
+    const recipes = offerableCareRecipes(crop);
+    if (recipes.length === 0) {
+      close();
+      return;
+    }
+    offerRecipes = recipes;
+    offerCropName = crop.name;
+    offerCropId = crop.id;
+    offerPlantDate = plantDate;
+    open = false;
+    reset();
+    offerOpen = true;
+  }
+
   async function save(event: SubmitEvent) {
     event.preventDefault();
     if (busy || !chosen) return;
@@ -118,36 +141,36 @@
     busy = true;
     const label = chosen.emoji ? `${chosen.emoji} ${chosen.name}` : chosen.name;
     const cropName = chosen.name;
+    const planted = chosen;
+    const plantDate = localDate();
     const recordSowing = sowing;
     try {
       if (!addPlant(label)) {
         close();
         return;
       }
-      if (!recordSowing) {
-        close();
-        return;
+      if (recordSowing) {
+        const request = sowingRequest(
+          {
+            crop: cropName,
+            cropId: planted.id,
+            date: plantDate,
+            status: 'done',
+            bedId: String(bedId),
+            note: '',
+          },
+          [planted],
+        );
+        if (!request.ok) {
+          fieldError = request.field;
+          formError = request.message;
+          return;
+        }
+        fieldError = '';
+        formError = '';
+        await createCalendarEntry(request.body);
       }
-      const request = sowingRequest(
-        {
-          crop: cropName,
-          cropId: chosen.id,
-          date: localDate(),
-          status: 'done',
-          bedId: String(bedId),
-          note: '',
-        },
-        [chosen],
-      );
-      if (!request.ok) {
-        fieldError = request.field;
-        formError = request.message;
-        return;
-      }
-      fieldError = '';
-      formError = '';
-      await createCalendarEntry(request.body);
-      close();
+      maybeOfferCare(planted, plantDate);
     } catch (error: unknown) {
       formError = error instanceof Error ? error.message : 'Could not save the sowing.';
     } finally {
@@ -247,3 +270,14 @@
     </form>
   </Dialog.Content>
 </Dialog.Root>
+
+{#if offerCropId && offerRecipes.length}
+  <OfferCareRecipesDialog
+    bind:open={offerOpen}
+    cropName={offerCropName}
+    recipes={offerRecipes}
+    plantDate={offerPlantDate}
+    bedId={Number(bedId)}
+    cropId={offerCropId}
+  />
+{/if}

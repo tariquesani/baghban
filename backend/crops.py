@@ -12,10 +12,11 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse, Response
 
-from catalogue import CATEGORIES, SUNS, WATERS
+from catalogue import CARE_ACTIONS, CATEGORIES, SUNS, WATERS
 from http_util import json_number, read_json_body, reject_oversized
 from http_util import number_field as read_number
 from http_util import text_field as read_text
+
 FIELDS = {
     "id",
     "name",
@@ -35,7 +36,11 @@ FIELDS = {
     "aliases",
     "companions",
     "avoid",
+    "careRecipes",
 }
+RECIPE_FREQS = ("once", "daily", "weekly", "yearly")
+RECIPE_WEEKDAY_MIN = 0
+RECIPE_WEEKDAY_MAX = 6
 router = APIRouter()
 MAX_ICON_BYTES = 1024 * 1024
 PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
@@ -74,6 +79,38 @@ def display_name(plant: dict) -> str:
     return name
 
 
+def crop_care_recipe_table_sql(name: str = "crop_care_recipe", if_not_exists: bool = False) -> str:
+    clause = "IF NOT EXISTS " if if_not_exists else ""
+    return f"""
+        CREATE TABLE {clause}{name} (
+            id               INTEGER PRIMARY KEY AUTOINCREMENT,
+            crop_id          INTEGER NOT NULL REFERENCES crop(id),
+            sort             INTEGER NOT NULL DEFAULT 0,
+            label            TEXT NOT NULL DEFAULT '',
+            action           TEXT NOT NULL,
+            product          TEXT NOT NULL DEFAULT '',
+            amount           REAL,
+            unit             TEXT NOT NULL DEFAULT '',
+            note             TEXT NOT NULL DEFAULT '',
+            freq             TEXT NOT NULL CHECK (freq IN ('once', 'daily', 'weekly', 'yearly')),
+            interval         INTEGER NOT NULL DEFAULT 1 CHECK (interval >= 1),
+            weekdays         TEXT NOT NULL DEFAULT '[]',
+            offset_days      INTEGER NOT NULL DEFAULT 0 CHECK (offset_days >= 0),
+            ends_offset_days INTEGER,
+            active           INTEGER NOT NULL DEFAULT 1 CHECK (active IN (0, 1))
+        )
+    """
+
+
+def create_crop_care_recipe_table(connection) -> None:
+    connection.execute(crop_care_recipe_table_sql(if_not_exists=True))
+
+
+def add_crop_care_recipes(connection) -> None:
+    """Standing care recipes nested on each crop (relative to planting day)."""
+    create_crop_care_recipe_table(connection)
+
+
 def create_crop_tables(connection) -> None:
     connection.execute(crop_table_sql(if_not_exists=True))
     connection.execute(
@@ -96,6 +133,7 @@ def create_crop_tables(connection) -> None:
         )
         """
     )
+    create_crop_care_recipe_table(connection)
 
 
 def crop_table_sql(name: str = "crop", if_not_exists: bool = False) -> str:
@@ -307,6 +345,122 @@ def choice_field(body: dict, key: str, choices: tuple, label: str) -> str:
     return value
 
 
+def recipe_weekdays(body: dict, freq: str) -> list[int]:
+    raw = body.get("weekdays", [])
+    if raw is None:
+        raw = []
+    if not isinstance(raw, list):
+        raise HTTPException(status_code=400, detail="weekdays must be a list of integers")
+    days: list[int] = []
+    for item in raw:
+        if (
+            isinstance(item, bool)
+            or not isinstance(item, int)
+            or item < RECIPE_WEEKDAY_MIN
+            or item > RECIPE_WEEKDAY_MAX
+        ):
+            raise HTTPException(
+                status_code=400,
+                detail="weekdays must be 0 (Mon) through 6 (Sun)",
+            )
+        if item not in days:
+            days.append(item)
+    days.sort()
+    if freq == "weekly" and not days:
+        raise HTTPException(status_code=400, detail="weekly recipes need at least one weekday")
+    if freq != "weekly" and days:
+        raise HTTPException(status_code=400, detail="weekdays are only for weekly recipes")
+    return days
+
+
+def recipe_interval(body: dict, freq: str) -> int:
+    value = body.get("interval", 1)
+    if value is None:
+        value = 1
+    if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+        raise HTTPException(status_code=400, detail="interval must be a positive integer")
+    if freq in ("once", "yearly") and value != 1:
+        raise HTTPException(status_code=400, detail=f"{freq} interval must be 1")
+    if freq == "weekly" and value > 3:
+        raise HTTPException(status_code=400, detail="weekly interval must be 1, 2, or 3")
+    return value
+
+
+def parse_recipe(body: dict, index: int) -> dict:
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=400, detail="careRecipes entries must be objects")
+    unknown = set(body) - {
+        "id",
+        "sort",
+        "label",
+        "action",
+        "product",
+        "amount",
+        "unit",
+        "note",
+        "freq",
+        "interval",
+        "weekdays",
+        "offsetDays",
+        "endsOffsetDays",
+        "active",
+    }
+    if unknown:
+        name = sorted(unknown)[0]
+        raise HTTPException(status_code=400, detail=f"{name} is not part of a care recipe")
+    freq = body.get("freq")
+    if freq not in RECIPE_FREQS:
+        raise HTTPException(status_code=400, detail="Invalid recipe freq")
+    action = body.get("action")
+    if action not in CARE_ACTIONS:
+        raise HTTPException(status_code=400, detail="Invalid recipe action")
+    offset = number_field(body, "offsetDays", whole=True)
+    if offset is None:
+        offset = 0
+    ends = number_field(body, "endsOffsetDays", whole=True)
+    if ends is not None and ends < offset:
+        raise HTTPException(
+            status_code=400,
+            detail="endsOffsetDays must be on or after offsetDays",
+        )
+    if freq == "once" and ends is not None and ends != offset:
+        raise HTTPException(
+            status_code=400,
+            detail="once recipes end on the same day they start",
+        )
+    sort = number_field(body, "sort", whole=True)
+    if sort is None:
+        sort = index
+    active = bool_field(body, "active") if "active" in body else True
+    return {
+        "sort": int(sort),
+        "label": text_field(body, "label"),
+        "action": action,
+        "product": text_field(body, "product"),
+        "amount": number_field(body, "amount"),
+        "unit": text_field(body, "unit"),
+        "note": text_field(body, "note"),
+        "freq": freq,
+        "interval": recipe_interval(body, freq),
+        "weekdays": recipe_weekdays(body, freq),
+        "offset_days": int(offset),
+        "ends_offset_days": None if ends is None else int(ends),
+        "active": 1 if active else 0,
+    }
+
+
+def parse_care_recipes(body: dict) -> list[dict] | None:
+    """None means leave existing recipes alone (key omitted on update)."""
+    if "careRecipes" not in body:
+        return None
+    value = body["careRecipes"]
+    if value is None:
+        return []
+    if not isinstance(value, list):
+        raise HTTPException(status_code=400, detail="careRecipes must be a list")
+    return [parse_recipe(item, index) for index, item in enumerate(value)]
+
+
 def parse_crop(body: dict, crop_id: int | None) -> dict:
     unknown = set(body) - FIELDS
     if unknown:
@@ -356,10 +510,35 @@ def parse_crop(body: dict, crop_id: int | None) -> dict:
             status_code=400,
             detail="A crop cannot be both a companion and a plant to avoid",
         )
+    crop["care_recipes"] = parse_care_recipes(body)
+    if crop_id is None and crop["care_recipes"] is None:
+        crop["care_recipes"] = []
     return crop
 
 
-def crop_json(row, aliases, companions, avoid) -> dict:
+def recipe_json(row) -> dict:
+    weekdays = json.loads(row["weekdays"] or "[]")
+    return {
+        "id": int(row["id"]),
+        "sort": int(row["sort"]),
+        "label": row["label"] or "",
+        "action": row["action"],
+        "product": row["product"] or "",
+        "amount": json_number(row["amount"]),
+        "unit": row["unit"] or "",
+        "note": row["note"] or "",
+        "freq": row["freq"],
+        "interval": int(row["interval"]),
+        "weekdays": weekdays,
+        "offsetDays": int(row["offset_days"]),
+        "endsOffsetDays": (
+            None if row["ends_offset_days"] is None else int(row["ends_offset_days"])
+        ),
+        "active": bool(row["active"]),
+    }
+
+
+def crop_json(row, aliases, companions, avoid, recipes) -> dict:
     return {
         "id": int(row["id"]),
         "name": row["name"],
@@ -379,12 +558,13 @@ def crop_json(row, aliases, companions, avoid) -> dict:
         "aliases": aliases,
         "companions": companions,
         "avoid": avoid,
+        "careRecipes": recipes,
     }
 
 
-def children_for(connection, crop_ids: list[int]) -> tuple[dict, dict, dict]:
+def children_for(connection, crop_ids: list[int]) -> tuple[dict, dict, dict, dict]:
     if not crop_ids:
-        return {}, {}, {}
+        return {}, {}, {}, {}
     marks = ",".join("?" for _ in crop_ids)
     alias_rows = connection.execute(
         f"SELECT crop_id, alias FROM crop_alias WHERE crop_id IN ({marks}) ORDER BY alias",
@@ -399,26 +579,47 @@ def children_for(connection, crop_ids: list[int]) -> tuple[dict, dict, dict]:
         """,
         crop_ids,
     ).fetchall()
+    recipe_rows = []
+    if connection.execute(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'crop_care_recipe'"
+    ).fetchone():
+        recipe_rows = connection.execute(
+            f"""
+            SELECT * FROM crop_care_recipe
+            WHERE crop_id IN ({marks})
+            ORDER BY sort, id
+            """,
+            crop_ids,
+        ).fetchall()
     aliases = {crop_id: [] for crop_id in crop_ids}
     companions = {crop_id: [] for crop_id in crop_ids}
     avoid = {crop_id: [] for crop_id in crop_ids}
+    recipes = {crop_id: [] for crop_id in crop_ids}
     for row in alias_rows:
         aliases[row["crop_id"]].append(row["alias"])
     for row in link_rows:
         target = companions if row["relation"] == "companion" else avoid
         target[row["crop_id"]].append(int(row["other_id"]))
+    for row in recipe_rows:
+        recipes[row["crop_id"]].append(recipe_json(row))
     for crop_id in crop_ids:
         aliases[crop_id].sort(key=str.casefold)
         companions[crop_id].sort()
         avoid[crop_id].sort()
-    return aliases, companions, avoid
+    return aliases, companions, avoid, recipes
 
 
 def rows_json(connection, rows) -> list[dict]:
     crop_ids = [row["id"] for row in rows]
-    aliases, companions, avoid = children_for(connection, crop_ids)
+    aliases, companions, avoid, recipes = children_for(connection, crop_ids)
     return [
-        crop_json(row, aliases[row["id"]], companions[row["id"]], avoid[row["id"]])
+        crop_json(
+            row,
+            aliases[row["id"]],
+            companions[row["id"]],
+            avoid[row["id"]],
+            recipes[row["id"]],
+        )
         for row in rows
     ]
 
@@ -541,6 +742,35 @@ def insert_crop_row(connection, crop: dict) -> int:
     return cursor.lastrowid
 
 
+def replace_care_recipes(connection, crop_id: int, recipes: list[dict]) -> None:
+    connection.execute("DELETE FROM crop_care_recipe WHERE crop_id = ?", (crop_id,))
+    for recipe in recipes:
+        connection.execute(
+            """
+            INSERT INTO crop_care_recipe (
+                crop_id, sort, label, action, product, amount, unit, note,
+                freq, interval, weekdays, offset_days, ends_offset_days, active
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                crop_id,
+                recipe["sort"],
+                recipe["label"],
+                recipe["action"],
+                recipe["product"],
+                recipe["amount"],
+                recipe["unit"],
+                recipe["note"],
+                recipe["freq"],
+                recipe["interval"],
+                json.dumps(recipe["weekdays"]),
+                recipe["offset_days"],
+                recipe["ends_offset_days"],
+                recipe["active"],
+            ),
+        )
+
+
 def replace_children(connection, crop_id: int, crop: dict) -> None:
     connection.execute("DELETE FROM crop_alias WHERE crop_id = ?", (crop_id,))
     connection.execute("DELETE FROM crop_link WHERE crop_id = ?", (crop_id,))
@@ -565,6 +795,8 @@ def replace_children(connection, crop_id: int, crop: dict) -> None:
             """,
             (crop_id, other_id),
         )
+    if crop.get("care_recipes") is not None:
+        replace_care_recipes(connection, crop_id, crop["care_recipes"])
 
 
 def insert_crop(connection, crop: dict) -> int:
